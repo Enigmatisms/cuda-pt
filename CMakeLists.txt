@@ -26,27 +26,28 @@ project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
 find_package(Threads REQUIRED)
 find_package(PNG REQUIRED)
-include_directories(${PNG_INCLUDE_DIRS})
+include_directories(${PNG_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src)
 add_definitions(${PNG_DEFINITIONS})
 set(LIBRARIES ${LIBRARIES} ${PNG_LIBRARIES})
 
-add_executable(${PROJ_NAME}
-        src/basic_pt.cu
+set(EXEC1_NAME "sphere-pt")
+add_executable(${EXEC1_NAME}
+        app/sphere_pt.cu
         src/ext/lodepng/lodepng.cpp
 )
 
 target_include_directories(
-        ${PROJ_NAME} PRIVATE
+        ${EXEC1_NAME} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
 target_link_libraries(
-        ${PROJ_NAME} PRIVATE
+        ${EXEC1_NAME} PRIVATE
         ${PNG_LIBRARY}
 )
 
 set_target_properties(
-        ${PROJ_NAME} PROPERTIES
+        ${EXEC1_NAME} PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES native
 )
@@ -57,7 +58,7 @@ set_target_properties(
 # https://stackoverflow.com/questions/68223398/how-can-i-get-cmake-to-automatically-detect-the-value-for-cuda-architectures
 
 target_compile_options(
-        ${PROJ_NAME} PRIVATE
+        ${EXEC1_NAME} PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:
         --expt-relaxed-constexpr
         >

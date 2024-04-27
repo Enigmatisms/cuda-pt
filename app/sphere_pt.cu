@@ -4,7 +4,9 @@
 #include <curand_kernel.h>
 
 #include "core/cuda_utils.cuh"
-#include "core/vec.cuh"
+#include "core/ray.cuh"
+#include "core/vec3.cuh"
+#include "useless/sphere_base.cuh"
 #include "ext/lodepng/lodepng.h"
 
 CPT_CPU_GPU
@@ -13,61 +15,6 @@ inline float clamp(float x, float low, float high) {
 }
 
 inline int toInt(float x) { return int(powf(clamp(x, 0, 1), 1 / 2.2) * 255 + .5); }
-
-constexpr float EPSILON = 1e-6f;
-constexpr float SCALER  = 0.00001f;
-
-struct Ray {
-    Vec3f o, d;
-
-    CPT_CPU_GPU
-    Ray(const Vec3f &o_, const Vec3f &d_) : o(o_), d(d_) {}
-};
-
-enum class ReflectionType {
-    diffuse, specular, Refractive
-}; // material types, used in radiance()
-
-struct Sphere {
-    float radius; // radius
-
-    Vec3f position;
-    Vec3f emission;
-    Vec3f color;
-
-    ReflectionType reflection_type;
-
-    void init(const float _radius, const Vec3f _position, const Vec3f _emission, const Vec3f _color,
-              const ReflectionType _reflection_type) {
-        radius = _radius * SCALER;
-        position = _position * SCALER;
-        emission = _emission;
-        color = _color;
-        reflection_type = _reflection_type;
-    }
-
-    CPT_GPU float intersect(const Ray &r) const { // returns distance, 0 if nohit
-        Vec3f op = position - r.o; // Solve t^2*d.d + 2*t*(o-p).d + (o-p).(o-p)-R^2 = 0
-        
-        float b = op.dot(r.d);
-        float determinant = b * b - op.dot(op) + radius * radius;
-        if (determinant < 0) {
-            return 0;
-        }
-
-        determinant = sqrtf(determinant);
-
-        if (float t = b - determinant; t > EPSILON) {
-            return t;
-        }
-
-        if (float t = b + determinant; t > EPSILON) {
-            return t;
-        }
-
-        return 0;
-    }
-};
 
 struct Sampler {
     CPT_GPU Sampler(int seed) {
@@ -131,7 +78,7 @@ Vec3f trace(const Ray &camera_ray, const Sphere *spheres, const int num_spheres,
             throughput *= (1.0f / probability_russian_roulette);
         }
 
-        if (obj.reflection_type == ReflectionType::diffuse) { // Ideal DIFFUSE reflection
+        if (obj.reflection_type == ReflectionType::DIFFUSE) { // Ideal DIFFUSE reflection
             float r1 = 2 * M_PI * sampler.generate();
             float r2 = sampler.generate();
             float r2s = sqrtf(r2);
@@ -144,7 +91,7 @@ Vec3f trace(const Ray &camera_ray, const Sphere *spheres, const int num_spheres,
             continue;
         }
 
-        if (obj.reflection_type == ReflectionType::specular) { // Ideal SPECULAR reflection
+        if (obj.reflection_type == ReflectionType::SPECULAR) { // Ideal SPECULAR reflection
             ray = Ray(hit_point, ray.d - surface_normal * 2 * surface_normal.dot(ray.d));
             continue;
         }
@@ -247,25 +194,25 @@ int main() {
     CUDA_CHECK_RETURN(cudaMallocManaged((void **) &spheres, sizeof(Sphere) * num_spheres));
 
     spheres[0].init(1e5, Vec3f(1e5 + 1, 40.8, 81.6), Vec3f(0, 0, 0), Vec3f(.75, .25, .25),
-                    ReflectionType::diffuse); // Left
+                    ReflectionType::DIFFUSE); // Left
     spheres[1].init(1e5, Vec3f(-1e5 + 99, 40.8, 81.6), Vec3f(0, 0, 0), Vec3f(.25, .25, .75),
-                    ReflectionType::diffuse);  // Right
+                    ReflectionType::DIFFUSE);  // Right
 
     spheres[2].init(1e5, Vec3f(50, 40.8, 1e5), Vec3f(0, 0, 0), Vec3f(.75, .75, .75),
-                    ReflectionType::diffuse); // Back
+                    ReflectionType::DIFFUSE); // Back
 
     spheres[3].init(1e5, Vec3f(50, 40.8, -1e5 + 170), Vec3f(0, 0, 0), Vec3f(0, 0, 0),
-                    ReflectionType::diffuse); // Front
+                    ReflectionType::DIFFUSE); // Front
     spheres[4].init(1e5, Vec3f(50, 1e5, 81.6), Vec3f(0, 0, 0), Vec3f(.75, .75, .75),
-                    ReflectionType::diffuse); // Bottom
+                    ReflectionType::DIFFUSE); // Bottom
     spheres[5].init(1e5, Vec3f(50, -1e5 + 81.6, 81.6), Vec3f(0, 0, 0), Vec3f(.75, .75, .75),
-                    ReflectionType::diffuse); // Top
+                    ReflectionType::DIFFUSE); // Top
     spheres[6].init(16.5, Vec3f(27, 16.5, 47), Vec3f(0, 0, 0), Vec3f(1, 1, 1) * .999,
-                    ReflectionType::specular); // Mirror
+                    ReflectionType::SPECULAR); // Mirror
     spheres[7].init(16.5, Vec3f(73, 16.5, 78), Vec3f(0, 0, 0), Vec3f(1, 1, 1) * .999,
-                    ReflectionType::Refractive); // Glass
+                    ReflectionType::REFRACTIVE); // Glass
     spheres[8].init(600, Vec3f(50, 681.6 - .27, 81.6), Vec3f(12, 12, 12), Vec3f(0, 0, 0),
-                    ReflectionType::diffuse); // Lite
+                    ReflectionType::DIFFUSE); // Lite
 
     TicToc timer;
     timer.tic();
