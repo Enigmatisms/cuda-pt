@@ -30,7 +30,7 @@ public:
     CPT_GPU SphereShape(int _vt_id, int _nm_id, int _uv_id, int _ob_id): 
         vt_id(_vt_id), nm_id(_nm_id), uv_id(_uv_id), ob_id(_ob_id) {}
 
-    CPT_GPU float intersect(
+    CPT_GPU Ty intersect(
         const Ray& ray,
         ConstPrimPtr<Ty> verts, 
         ConstPrimPtr<Ty> materials, 
@@ -38,8 +38,15 @@ public:
         ConstUVPtr<Ty> /* uv (useless) */,
         Ty min_range = 0, Ty max_range = std::numeric_limits<Ty>::infinity()
     ) const {
-
-
+        auto op = verts.x[vt_id] - r.o; 
+        Ty b = op.dot(r.d);
+        Ty determinant = b * b - op.dot(op) + verts.y[vt_id].x;
+        if (determinant >= 0) {
+            determinant = sqrtf(determinant);
+            Ty result = b - determinant > min_range ? b - determinant : 0;
+            result = (result > 0 && b + determinant > min_range) ? b + determinant : result;
+        }
+        return 0;
     }
 };
 
@@ -55,7 +62,7 @@ public:
     CPT_GPU TriangleShape(int _vt_id, int _nm_id, int _uv_id, int _ob_id): 
         vt_id(_vt_id), nm_id(_nm_id), uv_id(_uv_id), ob_id(_ob_id) {}
 
-    CPT_GPU float intersect(
+    CPT_GPU Ty intersect(
         const Ray& ray,
         ConstPrimPtr<Ty> verts, 
         ConstPrimPtr<Ty> materials, 
@@ -63,7 +70,7 @@ public:
         ConstUVPtr<Ty> uvs,
         Ty min_range = 0, Ty max_range = std::numeric_limits<Ty>::infinity()
     ) const {
-
+        // solve a linear equation
 
     }
 };
