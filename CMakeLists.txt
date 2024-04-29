@@ -24,6 +24,8 @@ set(PROJ_NAME "cuda-pt")
 
 project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
+
+
 find_package(Threads REQUIRED)
 find_package(PNG REQUIRED)
 include_directories(${PNG_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src)
@@ -36,11 +38,6 @@ add_executable(${EXEC1_NAME}
         src/ext/lodepng/lodepng.cpp
 )
 
-target_include_directories(
-        ${EXEC1_NAME} PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-)
-
 target_link_libraries(
         ${EXEC1_NAME} PRIVATE
         ${PNG_LIBRARY}
@@ -51,11 +48,6 @@ set_target_properties(
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES native
 )
-# CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate
-# https://developer.nvidia.com/blog/separate-compilation-linking-cuda-device-code/
-
-# CUDA_ARCHITECTURES native: CUDA_ARCHITECTURES is detected automatically
-# https://stackoverflow.com/questions/68223398/how-can-i-get-cmake-to-automatically-detect-the-value-for-cuda-architectures
 
 target_compile_options(
         ${EXEC1_NAME} PRIVATE
@@ -63,3 +55,19 @@ target_compile_options(
         --expt-relaxed-constexpr
         >
 )
+# ========================================= unit-test ===============================================
+set(TEST1_NAME "test_so3")
+add_executable(${TEST1_NAME}
+        test/test_so3.cu
+)
+
+set_target_properties(
+        ${TEST1_NAME} PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_ARCHITECTURES native
+)
+# CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate
+# https://developer.nvidia.com/blog/separate-compilation-linking-cuda-device-code/
+
+# CUDA_ARCHITECTURES native: CUDA_ARCHITECTURES is detected automatically
+# https://stackoverflow.com/questions/68223398/how-can-i-get-cmake-to-automatically-detect-the-value-for-cuda-architectures

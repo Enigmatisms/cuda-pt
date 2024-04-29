@@ -7,7 +7,6 @@
 #include <iostream>
 #include <chrono>
 #include <iomanip>
-#include <curand_kernel.h>
 #include "cuda_utils.cuh"
 
 template <typename Ty>
@@ -17,8 +16,12 @@ struct Vec3 {
     CPT_CPU_GPU
     Vec3() : x(0), y(0), z(0) {}
 
+    template <typename T1, typename T2, typename T3>
     CPT_CPU_GPU
-    Vec3(Ty _x, Ty _y, Ty _z): x(_x), y(_y), z(_z) {}
+    Vec3(T1 _x, T2 _y, T3 _z): 
+        x(static_cast<Ty>(_x)), 
+        y(static_cast<Ty>(_y)), 
+        z(static_cast<Ty>(_z)) {}
 
     CPT_CPU_GPU 
     Ty& operator[](int index) {
@@ -114,6 +117,11 @@ struct Vec3 {
     CPT_CPU_GPU
     Ty min_elem() const noexcept { return min(x, min(y, z)); }
 };
+
+template <typename Ty>
+CPT_CPU_GPU void print_vec3(const Vec3<Ty>& obj) {
+    printf("[%f, %f, %f]\n", obj.x, obj.y, obj.z);
+}
 
 using Vec3f = Vec3<float>;
 using Vec3d = Vec3<double>;

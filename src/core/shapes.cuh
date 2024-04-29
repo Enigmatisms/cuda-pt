@@ -15,7 +15,9 @@
 #pragma once
 #include <limits>
 #include "core/soa.cuh"
+#include "core/so3.cuh"
 #include "core/ray.cuh"
+#include "core/interaction.cuh"
 
 template <typename Ty = float>
 class SphereShape {
@@ -30,12 +32,14 @@ public:
     CPT_GPU SphereShape(int _vt_id, int _nm_id, int _uv_id, int _ob_id): 
         vt_id(_vt_id), nm_id(_nm_id), uv_id(_uv_id), ob_id(_ob_id) {}
 
+    // For sphere, uv coordinates is not supported
     CPT_GPU Ty intersect(
         const Ray& ray,
         ConstPrimPtr<Ty> verts, 
         ConstPrimPtr<Ty> materials, 
         ConstPrimPtr<Ty> /* normal (useless) */, 
         ConstUVPtr<Ty> /* uv (useless) */,
+        Interaction* uv_coord,
         Ty min_range = 0, Ty max_range = std::numeric_limits<Ty>::infinity()
     ) const {
         auto op = verts.x[vt_id] - r.o; 
@@ -52,6 +56,7 @@ public:
 
 template <typename Ty = float>
 class TriangleShape {
+    
 public:
     int vt_id;
     int nm_id;
@@ -68,9 +73,12 @@ public:
         ConstPrimPtr<Ty> materials, 
         ConstPrimPtr<Ty> norms, 
         ConstUVPtr<Ty> uvs,
+        Interaction* uv_coord,
         Ty min_range = 0, Ty max_range = std::numeric_limits<Ty>::infinity()
     ) const {
         // solve a linear equation
-
+        auto anchor = verts.x[vt_id], v1 = verts.y[vt_id] - anchor, v2 = verts.z[vt_id] - anchor;
+        SO3<Ty> M(v1, v2, -ray.d, false);       // column wise input
+        auto solution = M.inverse().rotate(ray.o - anchor);
     }
 };
