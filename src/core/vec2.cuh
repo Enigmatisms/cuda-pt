@@ -4,110 +4,108 @@
  * @date:   4.10.2024
 */
 #pragma once
-#include <iostream>
-#include <chrono>
-#include <iomanip>
-#include <curand_kernel.h>
-#include "cuda_utils.cuh"
+#include "core/cuda_utils.cuh"
 #include "vec3.cuh"
 
-template <typename Ty>
-struct Vec2 {
-    Ty x, y;
-
+class Vec2 {
+private:
+    float2 _data;
+public:
     CPT_CPU_GPU
-    Vec2() : x(0), y(0) {}
-
-    CPT_CPU_GPU
-    Vec2(Ty _x, Ty _y, Ty _z): x(_x), y(_y) {}
+    Vec2(float _x = 0, float _y = 0): 
+        _data(make_float2(_x, _y)) {}
 
     CPT_CPU_GPU 
-    Ty& operator[](int index) {
-        return *((&x) + index);
+    float& operator[](int index) {
+        return *((&_data.x) + index);
     }
 
     CPT_CPU_GPU 
-    Ty operator[](int index) const {
-        return *((&x) + index);
+    float operator[](int index) const {
+        return *((&_data.x) + index);
     }
 
+    CPT_CPU_GPU float& x() { return _data.x; }
+    CPT_CPU_GPU float& y() { return _data.y; }
+
+    CPT_CPU_GPU const float& x() const { return _data.x; }
+    CPT_CPU_GPU const float& y() const { return _data.y; }
+
     CPT_CPU_GPU
-    Vec2<Ty> abs() const noexcept {
-        return Vec2<Ty>(::abs(x), ::abs(y));
+    Vec2 abs() const noexcept {
+        return Vec2(fabs(_data.x), fabs(_data.y));
     }
 
-    CONDITION_TEMPLATE(VecType, Vec2<Ty>)
+    CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU
-    Vec2<Ty> operator+(VecType&& b) const noexcept { return Vec2<Ty>(x + b.x, y + b.y); }
+    Vec2 operator+(VecType&& b) const noexcept { return Vec2(_data.x + b.x(), _data.y + b.y()); }
 
-    CONDITION_TEMPLATE(VecType, Vec2<Ty>)
-    CPT_CPU_GPU
+    CONDITION_TEMPLATE(VecType, Vec2)
     void operator+=(VecType&& b) noexcept {
-        x += b.x;
-        y += b.y;
+        _data.x += b.x();
+        _data.y += b.y();
     }
 
     CPT_CPU_GPU
-    Vec2<Ty> operator-() const noexcept {
-        return Vec2<Ty>(-x, -y);
+    Vec2 operator-() const noexcept {
+        return Vec2(-_data.x, -_data.y);
     }
 
-    CONDITION_TEMPLATE(VecType, Vec2<Ty>)
+    CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU
     void operator-=(VecType&& b) noexcept {
-        x -= b.x;
-        y -= b.y;
+        _data.x -= b.x();
+        _data.y -= b.y();
     }
 
-    CONDITION_TEMPLATE(VecType, Vec2<Ty>)
+    CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU
-    Vec2<Ty> operator-(VecType&& b) const { return Vec2<Ty>(x - b.x, y - b.y); }
+    Vec2 operator-(VecType&& b) const { return Vec2(_data.x - b.x(), _data.y - b.y()); }
 
     CPT_CPU_GPU
-    Vec2<Ty> operator*(Ty b) const noexcept { return Vec2<Ty>(x * b, y * b); }
+    Vec2 operator*(float b) const noexcept { return Vec2(_data.x * b, _data.y * b); }
 
     CPT_CPU_GPU
-    void operator*=(Ty b) noexcept {
-        x *= b;
-        y *= b;
+    void operator*=(float b) noexcept {
+        _data.x *= b;
+        _data.y *= b;
     }
 
-    CONDITION_TEMPLATE(VecType, Vec2<Ty>)
+    CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU
-    Vec2<Ty> operator*(VecType&& b) const noexcept { return Vec2<Ty>(x * b.x, y * b.y); }
+    Vec2 operator*(VecType&& b) const noexcept { return Vec2(_data.x * b.x(), _data.y * b.y(),); }
 
-    CONDITION_TEMPLATE(VecType, Vec2<Ty>)
+    CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU
     void operator*=(VecType&& b) noexcept {
-        x *= b.x;
-        y *= b.y;
+        _data.x *= b.x();
+        _data.y *= b.y();
     }
 
-    CPT_CPU_GPU
-    Vec3<Ty> expand(Ty z = 1) const noexcept { return Vec3<Ty>(x, y, z); }
 
     CPT_CPU_GPU
-    Vec2<Ty> normalized() const { return *this * (1.f / length()); }
+    Vec2 normalized() const { return *this * (1.f / length()); }
 
     CPT_CPU_GPU
     void normalize() { this->operator*=(1.f / length()); }
 
     CPT_CPU_GPU
-    Ty length2() const { return x * x + y * y; }
+    float length2() const { return _data.x * _data.x + _data.y * _data.y; }
 
     CPT_CPU_GPU
-    Ty length() const { return sqrt(length2()); }
+    float length() const { return sqrt(length2()); }
 
-    CONDITION_TEMPLATE(VecType, Vec2<Ty>)
+    CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU
-    Ty dot(VecType&& b) const noexcept { return x * b.x + y * b.y; }
-
-    CPT_CPU_GPU
-    Ty max_elem() const noexcept { return max(x, y); }
+    float dot(VecType&& b) const noexcept { return _data.x * b.x() + _data.y * b.y(); }
 
     CPT_CPU_GPU
-    Ty min_elem() const noexcept { return min(x, y); }
+    float max_elem() const noexcept { return max(_data.x, _data.y); }
+
+    CPT_CPU_GPU
+    float min_elem() const noexcept { return min(_data.x, _data.y); }
 };
 
-using Vec2f = Vec2<float>;
-using Vec2d = Vec2<double>;
+CPT_CPU_GPU void print_vec2(const Vec2& obj) {
+    printf("[%f, %f]\n", obj.x(), obj.y());
+}

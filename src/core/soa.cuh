@@ -33,7 +33,5 @@ public:
 
 template <typename StructType>
 using ConstSoA3Ptr = const SoA3<StructType>* const;
-template <typename Ty>
-using ConstPrimPtr = const SoA3<Vec3<Ty>>* const;
-template <typename Ty>
-using ConstUVPtr   = const SoA3<Vec2<Ty>>* const;
+using ConstPrimPtr = const SoA3<Vec3>* const;
+using ConstUVPtr   = const SoA3<Vec2>* const;
