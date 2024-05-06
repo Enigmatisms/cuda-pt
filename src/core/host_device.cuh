@@ -13,8 +13,6 @@
 
 using Pixel3 = float3;
 
-#define OFFSET(row, col, width) h * width + col
-
 template <typename Ty>
 __global__ void parallel_memset(Ty* dst, Ty value, int length) {
     int num_thread = blockDim.x;
@@ -64,6 +62,9 @@ public:
         throw std::runtime_error("Not implemented yet.");
     }
 
-    int w() const noexcept { return _w; }
-    int h() const noexcept { return _h; }
+    CPT_CPU_GPU Pixel3& operator() (int x, int y) { return image_buffer[y * _w + x]; }
+    CPT_CPU_GPU const Pixel3& operator() (int x, int y) const { return image_buffer[y * _w + x]; }
+
+    CPT_CPU_GPU int w() const noexcept { return _w; }
+    CPT_CPU_GPU int h() const noexcept { return _h; }
 };

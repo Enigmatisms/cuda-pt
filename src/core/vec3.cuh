@@ -45,6 +45,7 @@ public:
     Vec3 operator+(VecType&& b) const noexcept { return Vec3(_data.x + b.x(), _data.y + b.y(), _data.z + b.z()); }
 
     CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU_GPU
     void operator+=(VecType&& b) noexcept {
         _data.x += b.x();
         _data.y += b.y();
@@ -115,11 +116,11 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU
-    float maximize(VecType&& b) const noexcept { return Vec3(max(_data.x, b.x()), max(_data.y, b.y()), max(_data.z, b.z())); }
+    Vec3 maximize(VecType&& b) const noexcept { return Vec3(max(_data.x, b.x()), max(_data.y, b.y()), max(_data.z, b.z())); }
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU
-    float minimize(VecType&& b) const noexcept { return Vec3(min(_data.x, b.x()), min(_data.y, b.y()), min(_data.z, b.z())); }
+    Vec3 minimize(VecType&& b) const noexcept { return Vec3(min(_data.x, b.x()), min(_data.y, b.y()), min(_data.z, b.z())); }
 
     CPT_CPU_GPU
     float max_elem() const noexcept { return max(_data.x, max(_data.y, _data.z)); }

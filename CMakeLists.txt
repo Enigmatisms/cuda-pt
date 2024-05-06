@@ -24,41 +24,44 @@ set(PROJ_NAME "cuda-pt")
 
 project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
-
-
 find_package(Threads REQUIRED)
 find_package(PNG REQUIRED)
-include_directories(${PNG_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src)
+include_directories(${PNG_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
 add_definitions(${PNG_DEFINITIONS})
 set(LIBRARIES ${LIBRARIES} ${PNG_LIBRARIES})
 
-set(EXEC1_NAME "sphere-pt")
-add_executable(${EXEC1_NAME}
-        app/sphere_pt.cu
-        src/ext/lodepng/lodepng.cpp
-)
+# set(EXEC1_NAME "sphere-pt")
+# add_executable(${EXEC1_NAME}
+#         app/sphere_pt.cu
+#         src/ext/lodepng/lodepng.cpp
+# )
 
-target_link_libraries(
-        ${EXEC1_NAME} PRIVATE
-        ${PNG_LIBRARY}
-)
+# target_link_libraries(
+#         ${EXEC1_NAME} PRIVATE
+#         ${PNG_LIBRARY}
+# )
 
-set_target_properties(
-        ${EXEC1_NAME} PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-        CUDA_ARCHITECTURES native
-)
+# set_target_properties(
+#         ${EXEC1_NAME} PROPERTIES
+#         CUDA_SEPARABLE_COMPILATION ON
+#         CUDA_ARCHITECTURES native
+# )
 
-target_compile_options(
-        ${EXEC1_NAME} PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:
-        --expt-relaxed-constexpr
-        >
-)
+# target_compile_options(
+#         ${EXEC1_NAME} PRIVATE
+#         $<$<COMPILE_LANGUAGE:CUDA>:
+#         --expt-relaxed-constexpr
+#         >
+# )
 # ========================================= unit-test ===============================================
 set(TEST1_NAME "test_so3")
 add_executable(${TEST1_NAME}
         test/test_so3.cu
+)
+
+set(TEST2_NAME "variant_test")
+add_executable(${TEST2_NAME}
+        test/variant_test.cu
 )
 
 set_target_properties(

@@ -52,29 +52,27 @@ public:
 
 class SphereShape {
 public:
-    int vt_id;
-    int nm_id;
-    int uv_id;
-    int ob_id;
+    bool    has_norm;           // whether triangle vertices has normal 
+    bool    has_uv;             // whether triangle vertices has uv coords
+    int16_t obj_idx;            // object of the current shape
+    CPT_CPU_GPU SphereShape(): has_norm(false), has_uv(false), obj_idx(-1) {}
 
-    CPT_CPU_GPU SphereShape(): vt_id(-1), nm_id(-1), uv_id(-1), ob_id(-1) {}
-
-    CPT_CPU_GPU SphereShape(int _vt_id, int _nm_id, int _uv_id, int _ob_id): 
-        vt_id(_vt_id), nm_id(_nm_id), uv_id(_uv_id), ob_id(_ob_id) {}
+    CPT_CPU_GPU SphereShape(int _ob_id, bool _hn = false, bool _huv = false): 
+        has_norm(_hn), has_uv(_huv), obj_idx(_ob_id) {}
 
     // For sphere, uv coordinates is not supported
     CPT_CPU_GPU float intersect(
         const Ray& ray,
         ConstPrimPtr verts, 
-        ConstPrimPtr materials, 
         ConstPrimPtr /* normal (useless) */, 
         ConstUVPtr /* uv (useless) */,
         Interaction& it,
+        int index,
         float min_range = epsilon, float max_range = std::numeric_limits<float>::infinity()
     ) const {
-        auto op = verts->x[vt_id] - ray.o; 
+        auto op = verts->x[index] - ray.o; 
         float b = op.dot(ray.d);
-        float determinant = b * b - op.dot(op) + verts->y[vt_id].x(), result = 0;
+        float determinant = b * b - op.dot(op) + verts->y[index].x(), result = 0;
         if (determinant >= 0) {
             determinant = sqrtf(determinant);
             float result = b - determinant > min_range ? b - determinant : 0;
@@ -87,36 +85,35 @@ public:
 class TriangleShape {
     
 public:
-    int vt_id;
-    int nm_id;
-    int uv_id;
-    int ob_id;
-    CPT_CPU_GPU TriangleShape(): vt_id(-1), nm_id(-1), uv_id(-1), ob_id(-1) {}
+    bool    has_norm;           // whether triangle vertices has normal 
+    bool    has_uv;             // whether triangle vertices has uv coords
+    int16_t obj_idx;            // object of the current shape
+    CPT_CPU_GPU TriangleShape(): has_norm(false), has_uv(false), obj_idx(-1) {}
 
-    CPT_CPU_GPU TriangleShape(int _vt_id, int _nm_id, int _uv_id, int _ob_id): 
-        vt_id(_vt_id), nm_id(_nm_id), uv_id(_uv_id), ob_id(_ob_id) {}
+    CPT_CPU_GPU TriangleShape(int _ob_id, bool _hn = false, bool _huv = false): 
+        has_norm(_hn), has_uv(_huv), obj_idx(_ob_id) {}
 
     CPT_CPU_GPU float intersect(
         const Ray& ray,
         ConstPrimPtr verts, 
-        ConstPrimPtr materials, 
         ConstPrimPtr norms, 
         ConstUVPtr uvs,
         Interaction& it,
+        int index,
         float min_range = epsilon, float max_range = std::numeric_limits<float>::infinity()
     ) const {
         // solve a linear equation
-        auto anchor = verts->x[vt_id], v1 = verts->y[vt_id] - anchor, v2 = verts->z[vt_id] - anchor;
+        auto anchor = verts->x[index], v1 = verts->y[index] - anchor, v2 = verts->z[index] - anchor;
         SO3 M(v1, v2, -ray.d, false);       // column wise input
         auto solution = M.inverse().rotate(ray.o - anchor);
         float diff_x = 1.f - solution.x(), diff_y = 1.f - solution.y();
-        auto lerp_normal = norms->x[nm_id] * diff_x * diff_y + \
-                           norms->y[nm_id] * solution.x() * diff_y + \
-                           norms->z[nm_id] * solution.y() * diff_x;
+        auto lerp_normal = norms->x[index] * diff_x * diff_y + \
+                           norms->y[index] * solution.x() * diff_y + \
+                           norms->z[index] * solution.y() * diff_x;
         lerp_normal.normalize();
-        auto uv = uvs->x[nm_id] * diff_x * diff_y + \
-                  uvs->y[nm_id] * solution.x() * diff_y + \
-                  uvs->z[nm_id] * solution.y() * diff_x;
+        auto uv = uvs->x[index] * diff_x * diff_y + \
+                  uvs->y[index] * solution.x() * diff_y + \
+                  uvs->z[index] * solution.y() * diff_x;
 
         it.shading_norm = lerp_normal;
         it.uv_coord     = uv;
