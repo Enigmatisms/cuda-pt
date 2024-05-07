@@ -11,8 +11,6 @@
 #include <device_functions.h>
 #include <device_launch_parameters.h>
 
-using Pixel3 = float3;
-
 template <typename Ty>
 __global__ void parallel_memset(Ty* dst, Ty value, int length) {
     int num_thread = blockDim.x;
@@ -42,28 +40,43 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
 
 class DeviceImage {
 private:
-    Pixel3* image_buffer;
+    Vec3* image_buffer;
+    Vec3* host_buffer;
+    size_t pitch;
     int _w;
     int _h;
 public:
-    DeviceImage(int width = 800, int height = 800): _w(width), _h(height) {
-        cudaExtent extent = make_cudaExtent(width * sizeof(Pixel3), height, 1);
-        Pixel3* image_buffer = nullptr;
-        cudaPitchedPtr d_pitchedPtr;
-        CUDA_CHECK_RETURN(cudaMalloc3D(&d_pitchedPtr, extent));
-        image_buffer = (Pixel3*)d_pitchedPtr.ptr;
+    DeviceImage(int width = 800, int height = 800): pitch(0), _w(width), _h(height) {
+        host_buffer = new Vec3[_w * _h];
+        CUDA_CHECK_RETURN(cudaMallocPitch(&image_buffer, &pitch, width * sizeof(Vec3), height));
+        CUDA_CHECK_RETURN(cudaMemset2D(image_buffer, pitch, 0, width * sizeof(Vec3), height));
     }
 
     ~DeviceImage() {
+        delete [] host_buffer;
         cudaFree(image_buffer);
     }
 
-    void export_cpu() {
-        throw std::runtime_error("Not implemented yet.");
+    // TODO: can be accelerated via multi-threading
+    std::vector<uint8_t> export_cpu() const {
+        std::vector<uint8_t> byte_buffer(_w * _h * 4);
+        size_t copy_pitch = _w * sizeof(Vec3);
+        CUDA_CHECK_RETURN(cudaMemcpy2D(host_buffer, copy_pitch, image_buffer, pitch, copy_pitch, _h, cudaMemcpyDeviceToHost));
+        for (int i = 0; i < _h; i ++) {
+            for (int j = 0; j < _w; j ++) {
+                int pixel_index = i * _w + j;
+                const Vec3& color = host_buffer[pixel_index];
+                byte_buffer[(pixel_index << 2)]     = to_int(color.x());
+                byte_buffer[(pixel_index << 2) + 1] = to_int(color.y());
+                byte_buffer[(pixel_index << 2) + 2] = to_int(color.z());
+                byte_buffer[(pixel_index << 2) + 3] = 255;
+            }
+        }
+        return byte_buffer;
     }
 
-    CPT_CPU_GPU Pixel3& operator() (int x, int y) { return image_buffer[y * _w + x]; }
-    CPT_CPU_GPU const Pixel3& operator() (int x, int y) const { return image_buffer[y * _w + x]; }
+    CPT_CPU_GPU Vec3& operator() (int x, int y) { return image_buffer[y * _w + x]; }
+    CPT_CPU_GPU const Vec3& operator() (int x, int y) const { return image_buffer[y * _w + x]; }
 
     CPT_CPU_GPU int w() const noexcept { return _w; }
     CPT_CPU_GPU int h() const noexcept { return _h; }

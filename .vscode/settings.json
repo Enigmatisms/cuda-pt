@@ -60,6 +60,7 @@
         "thread": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "__config": "cpp"
+        "__config": "cpp",
+        "set": "cpp"
     }
 }

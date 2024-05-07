@@ -5,20 +5,25 @@
 
 struct Type1 {
     int a, b;
+    mutable int result;
 
     __host__ __device__ Type1(int _a = 0, int _b = 0): a(_a), b(_b) {}
 
     __host__ __device__ int operation(int opr1, int opr2) const {
-        return (a + opr1) * (b + opr2);
+        result = (a + opr1) * (b + opr2);
+        return result;
     }
 };
 
 struct Type2 {
     int a, b;
+    mutable int result;
+
     __host__ __device__ Type2(int _a = 0, int _b = 0): a(_a), b(_b) {}
 
     __host__ __device__ int operation(int opr1, int opr2) const {
-        return a * opr1 + b * opr2;
+        result = a * opr1 + b * opr2;
+        return result;
     }
 };
 struct TypeVisitor {
@@ -63,6 +68,8 @@ int main() {
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     for (int i = 0; i < 16; i++)
         printf("%d\n", res_buffer[i]);
+    for (int i = 0; i < 16; i++)
+        printf("var[%d].result = %d\n", i, *((int*)(&vars[i]) + 2));
     CUDA_CHECK_RETURN(cudaFree(vars));
     CUDA_CHECK_RETURN(cudaFree(res_buffer));
     return 0;

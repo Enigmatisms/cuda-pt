@@ -18,8 +18,6 @@ inline float clamp(float x, float low, float high) {
     return x < low ? low : x > high ? high : x;
 }
 
-inline int toInt(float x) { return int(powf(clamp(x, 0, 1), 1 / 2.2) * 255 + .5); }
-
 struct Sampler {
     CPT_GPU Sampler(int seed) {
         curand_init(seed, 0, 0, &rand_state);

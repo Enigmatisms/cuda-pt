@@ -35,7 +35,7 @@ public:
     CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
 
-    CPT_CPU_GPU bool intersect(const Ray& ray) const {
+    CPT_CPU_GPU bool intersect(const Ray& ray, float& t_near) const {
         float tmin = -std::numeric_limits<float>::infinity();
         float tmax = std::numeric_limits<float>::infinity();
         auto invDir = 1.0f / ray.d;
@@ -43,12 +43,13 @@ public:
         auto t1s = (mini - ray.o) * invDir;
         auto t2s = (maxi - ray.o) * invDir;
 
-        tmin = max(tmin, t1s.minimize(t2s));
-        tmax = min(tmax, t1s.maximize(t2s));
-
-        return tmax >= tmin && tmax >= 0;
+        tmin = max(tmin, t1s.minimize(t2s).max_elem());
+        tmax = min(tmax, t1s.maximize(t2s).min_elem());
+        t_near = tmin;
+        return tmax > tmin && tmax > 0;
     }
 };
+using ConstAABBPtr = const AABB* const;
 
 class SphereShape {
 public:
@@ -119,6 +120,40 @@ public:
         it.uv_coord     = uv;
         it.valid        = (solution.x() > 0 && solution.y() > 0 && solution.x() + solution.y() < 1 &&
                             solution.z() > epsilon && solution.z() < max_range);
-        return it.valid - 1 + solution.z() * it.valid;
+        return solution.z() * it.valid;
     }
+};
+
+class ShapeVisitor {
+private:
+    const Ray* ray;
+    ConstPrimPtr verts; 
+    ConstPrimPtr norms; 
+    ConstUVPtr uvs;
+    mutable Interaction* it;        // apply_visitor seems to only work for const member function
+    int index;
+    float min_range;
+    float max_range;
+public:
+    CPT_CPU_GPU ShapeVisitor(
+        ConstPrimPtr _verts, 
+        ConstPrimPtr _norms, 
+        ConstUVPtr _uvs,
+        const Ray* _ray,
+        Interaction* _it,
+        int _index,
+        float _min_range = epsilon, float _max_range = std::numeric_limits<float>::infinity()
+    ): ray(_ray), verts(_verts), norms(_norms), uvs(_uvs), it(_it), 
+       index(_index), min_range(_min_range), max_range(_max_range) {}
+
+    template <typename ShapeType>
+    CPT_CPU_GPU_INLINE float operator()(const ShapeType& shape) const { 
+        return shape.intersect(*ray, verts, norms, uvs, *it, index, min_range, max_range); 
+    }
+
+    CPT_CPU_GPU_INLINE void set_index(int i)        noexcept { this->index = i; }
+    CPT_CPU_GPU_INLINE void set_it(Interaction* it) noexcept { this->it    = it; }
+
+    CPT_CPU_GPU_INLINE void set_min_range(int min_r) noexcept { this->min_range = min_r; }
+    CPT_CPU_GPU_INLINE void set_max_range(int max_r) noexcept { this->max_range = max_r; }
 };

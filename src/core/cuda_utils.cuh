@@ -3,9 +3,11 @@
 #include <chrono>
 #include <random>
 #include <iostream>
+#include <algorithm>
 #include <type_traits>
 
 #define CPT_CPU_GPU __host__ __device__
+#define CPT_CPU_GPU_INLINE __forceinline__ __host__ __device__
 #define CPT_GPU __device__
 #define CPT_CPU __host__
 
@@ -45,3 +47,5 @@ public:
         return static_cast<double>(count) / 1e3;
     }
 };
+
+inline int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.2) * 255 + .5); }
