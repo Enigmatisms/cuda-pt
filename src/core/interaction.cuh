@@ -12,10 +12,10 @@ public:
     Vec2 uv_coord;
     bool valid;
 
-    Interaction(): shading_norm(), uv_coord(), valid(false) {}
+    CPT_CPU_GPU Interaction(): shading_norm(), uv_coord(), valid(false) {}
 
     template <typename Vec3Type, typename Vec2Type>
-    Interaction(Vec3Type&& _n, Vec2Type&& _uv, bool _v = false): 
+    CPT_CPU_GPU Interaction(Vec3Type&& _n, Vec2Type&& _uv, bool _v = false): 
         shading_norm(std::forward<Vec3Type>(_n)), 
         uv_coord(std::forward<Vec2Type>(_uv)), valid(_v) 
     {

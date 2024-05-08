@@ -32,6 +32,11 @@ public:
     CPT_CPU_GPU AABB(V1Type&& _mini, V2Type&& _maxi):
         mini(std::forward<V1Type>(_mini)), maxi(std::forward<V2Type>(_maxi)) {}
 
+    CPT_CPU_GPU AABB(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
+        mini = p1.minimize(p2).minimize(p3);
+        maxi = p1.maximize(p2).maximize(p3);
+    }
+
     CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
 
@@ -53,13 +58,10 @@ using ConstAABBPtr = const AABB* const;
 
 class SphereShape {
 public:
-    bool    has_norm;           // whether triangle vertices has normal 
-    bool    has_uv;             // whether triangle vertices has uv coords
-    int16_t obj_idx;            // object of the current shape
-    CPT_CPU_GPU SphereShape(): has_norm(false), has_uv(false), obj_idx(-1) {}
+    int obj_idx;            // object of the current shape
+    CPT_CPU_GPU SphereShape(): obj_idx(-1) {}
 
-    CPT_CPU_GPU SphereShape(int _ob_id, bool _hn = false, bool _huv = false): 
-        has_norm(_hn), has_uv(_huv), obj_idx(_ob_id) {}
+    CPT_CPU_GPU SphereShape(int _ob_id): obj_idx(_ob_id) {}
 
     // For sphere, uv coordinates is not supported
     CPT_CPU_GPU float intersect(
@@ -86,13 +88,10 @@ public:
 class TriangleShape {
     
 public:
-    bool    has_norm;           // whether triangle vertices has normal 
-    bool    has_uv;             // whether triangle vertices has uv coords
-    int16_t obj_idx;            // object of the current shape
-    CPT_CPU_GPU TriangleShape(): has_norm(false), has_uv(false), obj_idx(-1) {}
+    int obj_idx;            // object of the current shape
+    CPT_CPU_GPU TriangleShape(): obj_idx(-1) {}
 
-    CPT_CPU_GPU TriangleShape(int _ob_id, bool _hn = false, bool _huv = false): 
-        has_norm(_hn), has_uv(_huv), obj_idx(_ob_id) {}
+    CPT_CPU_GPU TriangleShape(int _ob_id): obj_idx(_ob_id) {}
 
     CPT_CPU_GPU float intersect(
         const Ray& ray,

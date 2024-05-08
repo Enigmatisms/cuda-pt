@@ -12,7 +12,7 @@
 #define CPT_CPU __host__
 
 #define CONDITION_TEMPLATE(VecType, TargetType) \
-    template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<TargetType>, TargetType>>>
+    template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>>>
 
 #define CONDITION_TEMPLATE_2(T1, T2, TargetType) \
     template<typename T1, typename T2, typename = \

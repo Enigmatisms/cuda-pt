@@ -67,9 +67,9 @@ __global__ void render_depth_kernel(
 CPT_CPU std::vector<uint8_t> render_depth(
     ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    ConstPrimPtr verts,
-    ConstPrimPtr norms, 
-    ConstUVPtr uvs,
+    const SoA3<Vec3>& verts,
+    const SoA3<Vec3>& norms, 
+    const SoA3<Vec2>& uvs,
     const DeviceCamera& camera,
     int num_prims,
     int width  = 800,
@@ -77,15 +77,22 @@ CPT_CPU std::vector<uint8_t> render_depth(
     int num_iter  = 64,
     int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
 ) {
-    DeviceImage image, *dev_image;
-    CUDA_CHECK_RETURN(cudaMalloc(&dev_image, sizeof(DeviceImage)));
-    CUDA_CHECK_RETURN(cudaMemcpy(dev_image, &image, sizeof(DeviceImage), cudaMemcpyHostToDevice));
+    DeviceImage image(width, height);
+    auto dev_image = to_gpu(image);
+    auto verts_dev = to_gpu(verts);
+    auto norms_dev = to_gpu(norms);
+    auto uvs_dev   = to_gpu(uvs);
 
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         render_depth_kernel<<<dim3(width >> 4, height >> 4), dim3(16, 16)>>>(
-            shapes, aabbs, verts, norms, uvs, camera, *dev_image, num_prims, max_depth); 
+            shapes, aabbs, verts_dev, norms_dev, uvs_dev, camera, *dev_image, num_prims, max_depth); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
+    
+    CUDA_CHECK_RETURN(cudaFree(dev_image));
+    CUDA_CHECK_RETURN(cudaFree(verts_dev));
+    CUDA_CHECK_RETURN(cudaFree(norms_dev));
+    CUDA_CHECK_RETURN(cudaFree(uvs_dev));
     return image.export_cpu();
 }

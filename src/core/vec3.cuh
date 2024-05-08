@@ -13,8 +13,9 @@ class Vec3 {
 private:
     float3 _data;
 public:
+    CPT_CPU_GPU Vec3() {}
     CPT_CPU_GPU
-    Vec3(float _x = 0, float _y = 0, float _z = 0): 
+    Vec3(float _x, float _y, float _z): 
         _data(make_float3(_x, _y, _z)) {}
 
     CPT_CPU_GPU_INLINE 
@@ -46,10 +47,19 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
-    void operator+=(VecType&& b) noexcept {
+    Vec3& operator+=(VecType&& b) noexcept {
         _data.x += b.x();
         _data.y += b.y();
         _data.z += b.z();
+        return *this;
+    }
+
+    CPT_CPU_GPU_INLINE
+    Vec3& operator+=(float v) noexcept {
+        _data.x += v;
+        _data.y += v;
+        _data.z += v;
+        return *this;
     }
 
     CPT_CPU_GPU_INLINE
@@ -59,10 +69,19 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
-    void operator-=(VecType&& b) noexcept {
+    Vec3& operator-=(VecType&& b) noexcept {
         _data.x -= b.x();
         _data.y -= b.y();
         _data.z -= b.z();
+        return *this;
+    }
+
+    CPT_CPU_GPU_INLINE
+    Vec3& operator-=(float v) noexcept {
+        _data.x -= v;
+        _data.y -= v;
+        _data.z -= v;
+        return *this;
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)
@@ -73,10 +92,11 @@ public:
     Vec3 operator*(float b) const noexcept { return Vec3(_data.x * b, _data.y * b, _data.z * b); }
 
     CPT_CPU_GPU_INLINE
-    void operator*=(float b) noexcept {
+    Vec3& operator*=(float b) noexcept {
         _data.x *= b;
         _data.y *= b;
         _data.z *= b;
+        return *this;
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)

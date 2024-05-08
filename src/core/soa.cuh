@@ -48,9 +48,9 @@ public:
     ) {
         cudaStream_t stream[3];
         for (int i = 0; i < 3; i++) {
-            cudaStreamCreate(&stream);
+            cudaStreamCreate(&stream[i]);
             parallel_memset<<<1, 256, 0, stream[i]>>>(&_data[i * size], v1, size);
-            cudaStreamDestroy(stream);
+            cudaStreamDestroy(stream[i]);
         }
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }

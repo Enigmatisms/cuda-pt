@@ -8,8 +8,16 @@
 #include "cuda_utils.cuh"
 #include <vector_types.h>
 #include <cuda_runtime.h>
-#include <device_functions.h>
 #include <device_launch_parameters.h>
+
+template <typename Ty>
+std::decay_t<Ty>* to_gpu(Ty&& object) {
+    using BaseTy = std::decay_t<Ty>;
+    BaseTy* ptr;
+    CUDA_CHECK_RETURN(cudaMalloc(&ptr, sizeof(BaseTy)));
+    CUDA_CHECK_RETURN(cudaMemcpy(ptr, &object, sizeof(BaseTy), cudaMemcpyHostToDevice));
+    return ptr;
+}
 
 template <typename Ty>
 __global__ void parallel_memset(Ty* dst, Ty value, int length) {
@@ -33,7 +41,7 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
     Ty* dev_mem = nullptr;
     size_t bytes = length * sizeof(Ty);
     CUDA_CHECK_RETURN(cudaMallocManaged(&dev_mem, bytes));
-    parallel_memset<<<1, 256>>><Ty>(dev_mem, fill_value, length);
+    parallel_memset<Ty><<<1, 256>>>(dev_mem, fill_value, length);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return dev_mem;
 }

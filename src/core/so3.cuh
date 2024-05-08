@@ -41,11 +41,7 @@ private:
         );
     }
 public:
-    CPT_CPU_GPU SO3() {
-        rows[0] = Vec3();
-        rows[1] = Vec3();
-        rows[2] = Vec3();
-    }
+    CPT_CPU_GPU SO3() {}
 
     template <typename V1, typename V2, typename V3>
     CPT_CPU_GPU SO3(V1&& v1, V2&& v2, V3&& v3, bool row_wise = true) {
@@ -90,7 +86,7 @@ public:
         );
     }
 
-    float determinant() const {
+    CPT_CPU_GPU float determinant() const {
         return rows[0].x() * (rows[1].y() * rows[2].z() - rows[1].z() * rows[2].y()) - \
                rows[0].y() * (rows[1].x() * rows[2].z() - rows[1].z() * rows[2].x()) + \
                rows[0].z() * (rows[1].x() * rows[2].y() - rows[1].y() * rows[2].x());
@@ -112,6 +108,7 @@ public:
         inv_R[2].x() = (rows[1].x() * rows[2].y() - rows[1].y() * rows[2].x()) * inv_det;
         inv_R[2].y() = (rows[0].y() * rows[2].x() - rows[0].x() * rows[2].y()) * inv_det;
         inv_R[2].z() = (rows[0].x() * rows[1].y() - rows[0].y() * rows[1].x()) * inv_det;
+        return inv_R;
     }
 
     friend CPT_CPU_GPU SO3 rotation_between(const Vec3& from, const Vec3& to);
@@ -141,7 +138,7 @@ CPT_CPU_GPU SO3 rotation_between(const Vec3& from, const Vec3& to) {
     if (abs(cos_theta) < 1.f - 1e-5f) {
         auto skew = skew_symmetry(axis);
         auto norm_axis = axis.normalized();
-        R += vec_mul(norm_axis, norm_axis).scale(1.f - cos_theta) + skew_symmetry(axis);
+        R += vec_mul(norm_axis, norm_axis).scale(1.f - cos_theta) + skew;
     }
     return R;
 }

@@ -41,9 +41,10 @@ public:
     Vec2 operator+(VecType&& b) const noexcept { return Vec2(_data.x + b.x(), _data.y + b.y()); }
 
     CONDITION_TEMPLATE(VecType, Vec2)
-    void operator+=(VecType&& b) noexcept {
+    Vec2& operator+=(VecType&& b) noexcept {
         _data.x += b.x();
         _data.y += b.y();
+        return *this;
     }
 
     CPT_CPU_GPU_INLINE
@@ -53,9 +54,10 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE
-    void operator-=(VecType&& b) noexcept {
+    Vec2& operator-=(VecType&& b) noexcept {
         _data.x -= b.x();
         _data.y -= b.y();
+        return *this;
     }
 
     CONDITION_TEMPLATE(VecType, Vec2)
@@ -66,22 +68,23 @@ public:
     Vec2 operator*(float b) const noexcept { return Vec2(_data.x * b, _data.y * b); }
 
     CPT_CPU_GPU_INLINE
-    void operator*=(float b) noexcept {
+    Vec2& operator*=(float b) noexcept {
         _data.x *= b;
         _data.y *= b;
+        return *this;
     }
 
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE
-    Vec2 operator*(VecType&& b) const noexcept { return Vec2(_data.x * b.x(), _data.y * b.y(),); }
+    Vec2 operator*(VecType&& b) const noexcept { return Vec2(_data.x * b.x(), _data.y * b.y()); }
 
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE
-    void operator*=(VecType&& b) noexcept {
+    Vec2& operator*=(VecType&& b) noexcept {
         _data.x *= b.x();
         _data.y *= b.y();
+        return *this;
     }
-
 
     CPT_CPU_GPU_INLINE
     Vec2 normalized() const { return *this * (1.f / length()); }
