@@ -36,9 +36,11 @@ public:
         const std::vector<StructType>& vec2,
         const std::vector<StructType>& vec3
     ) {
-        CUDA_CHECK_RETURN(cudaMemcpy(x, vec1.data(), sizeof(StructType) * std::min(vec1.size(), size), cudaMemcpyHostToDevice));
-        CUDA_CHECK_RETURN(cudaMemcpy(y, vec2.data(), sizeof(StructType) * std::min(vec2.size(), size), cudaMemcpyHostToDevice));
-        CUDA_CHECK_RETURN(cudaMemcpy(z, vec3.data(), sizeof(StructType) * std::min(vec3.size(), size), cudaMemcpyHostToDevice));
+        for (size_t i = 0; i < size; i++) {
+            x[i] = vec1[i];
+            y[i] = vec2[i];
+            z[i] = vec3[i];
+        }
     }
 
     CPT_CPU void fill(

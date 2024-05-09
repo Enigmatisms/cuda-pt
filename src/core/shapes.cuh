@@ -34,22 +34,22 @@ public:
 
     CPT_CPU_GPU AABB(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
         mini = p1.minimize(p2).minimize(p3);
+        mini -= epsilon;
         maxi = p1.maximize(p2).maximize(p3);
+        maxi += epsilon;
     }
 
     CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
 
     CPT_CPU_GPU bool intersect(const Ray& ray, float& t_near) const {
-        float tmin = -std::numeric_limits<float>::infinity();
-        float tmax = std::numeric_limits<float>::infinity();
         auto invDir = 1.0f / ray.d;
 
         auto t1s = (mini - ray.o) * invDir;
         auto t2s = (maxi - ray.o) * invDir;
 
-        tmin = max(tmin, t1s.minimize(t2s).max_elem());
-        tmax = min(tmax, t1s.maximize(t2s).min_elem());
+        float tmin = t1s.minimize(t2s).max_elem();
+        float tmax = t1s.maximize(t2s).min_elem();
         t_near = tmin;
         return tmax > tmin && tmax > 0;
     }
@@ -75,11 +75,11 @@ public:
     ) const {
         auto op = verts->x[index] - ray.o; 
         float b = op.dot(ray.d);
-        float determinant = b * b - op.dot(op) + verts->y[index].x(), result = 0;
+        float determinant = b * b - op.dot(op) + verts->y[index].x() * verts->y[index].x(), result = 0;
         if (determinant >= 0) {
             determinant = sqrtf(determinant);
-            float result = b - determinant > min_range ? b - determinant : 0;
-            result = (result > 0 && b + determinant > min_range) ? b + determinant : result;
+            result = b - determinant > min_range ? b - determinant : 0;
+            result = (result == 0 && b + determinant > min_range) ? b + determinant : result;
         }
         return result;
     }

@@ -1,15 +1,20 @@
 #include "core/soa.cuh"
-#include "renderer/depth.cuh"
 #include "core/camera_model.cuh"
+#include "renderer/depth.cuh"
+#include <ext/lodepng/lodepng.h>
+
 
 __constant__ DeviceCamera dev_cam;
 
 int main() {
-    // down, back, right, left, up
-    int num_prims = 10;
-    std::vector<Vec3> v1s = {{1, -1,  0}, {1, -1, 0}, {1, 1, -1}, {1, 1,  -1}, {1, -1, -1}, {1, -1, -1}, {-1, -1, -1}, {-1, 1, -1}, {-1, 1,  1}, {1, 1, 1}};
-    std::vector<Vec3> v2s = {{-1, 1,  0}, {1, 1,  0}, {1, 1,  1}, {-1, 1,  1}, {1, -1,  1}, {1,  1,  1}, {-1,  1, -1}, {-1, 1,  1}, {1,  1,  1}, {1, -1, 1}};
-    std::vector<Vec3> v3s = {{-1, -1, 0}, {-1, 1, 0}, {-1, 1, 1}, {-1, 1, -1}, {1,  1,  1}, {1,  1, -1}, {-1, -1,  1}, {-1, -1, 1}, {-1, -1, 1}, {-1, -1, 1}};
+    InitProfiler();
+
+    // right, down, back, left, up
+    int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
+    int spp       = 256;
+    std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
+    std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
+    std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
     Vec3 normal_default = {0, 1, 0};
     Vec2 uv_default     = {0.5, 0.5};
 
@@ -21,27 +26,49 @@ int main() {
     uvs_data.fill(uv_default);
 
     // camera setup
-    Vec3 from(0, 0, -3), to(0, 0, 0);
-    int width = 800, height = 800;
-    float fov = 90;
+    Vec3 from(0, -3, 0), to(0, 0, 0);
+    int width = 1024, height = 1024;
+    float fov = 55;
     DeviceCamera camera(from, to, fov, width, height);
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(dev_cam, &camera, sizeof(DeviceCamera)));
 
     // shape setup
     Shape* shapes;
-    CUDA_CHECK_RETURN(cudaMallocManaged(&shapes, sizeof(Shape) * 10));
-    for (int i = 0; i < 5; i++)
+    CUDA_CHECK_RETURN(cudaMallocManaged(&shapes, sizeof(Shape) * num_prims));
+    for (int i = 0; i < num_triangle; i++)
         shapes[i] = TriangleShape(i >> 1);
+    for (int i = num_triangle; i < num_prims; i++)
+        shapes[i] = SphereShape(i >> 1);
     
     // aabb setup
     AABB* aabbs;
-    CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, sizeof(AABB) * 10));
-    for (int i = 0; i < 10; i++)
+    CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, sizeof(AABB) * num_prims));
+    for (int i = 0; i < num_triangle; i++)
         aabbs[i] = AABB(v1s[i], v2s[i], v3s[i]);
+    for (int i = num_triangle; i < num_prims; i++)
+        aabbs[i] = AABB(v1s[i] - v2s[i].x(), v1s[i] + v2s[i].x());
 
-    auto bytes_buffer = render_depth(shapes, aabbs, vert_data, norm_data, uvs_data, dev_cam, num_prims, width, height);
+    auto bytes_buffer = render_depth(shapes, aabbs, vert_data, norm_data, uvs_data, num_prims, width, height, spp);
+
+    std::string file_name = "depth-render.png";
+
+    if (unsigned error = lodepng::encode(file_name, bytes_buffer, width, height); error) {
+        std::cerr << "lodepng::encoder error " << error << ": " << lodepng_error_text(error)
+                  << std::endl;
+        throw std::runtime_error("lodepng::encode() fail");
+    }
+
+    printf("image saved to `%s`\n", file_name.c_str());
 
     CUDA_CHECK_RETURN(cudaFree(shapes));
     CUDA_CHECK_RETURN(cudaFree(aabbs));
+
+    // ReportThreadStats();    
+    // PrintStats(stdout);
+    ReportProfilerResults(stdout);
+
+    // ClearStats();
+    ClearProfiler();
+    CleanupProfiler();
     return 0;
 }

@@ -6,6 +6,11 @@ Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 trait
 This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).
 
 Since I have no intention making this a extensive project (like AdaPT, taking care of all the user-friendly aspect) and I am doing this just to challenge myself for more difficult parallel program design, this repo will not be so user friendly and the scalability will be far worse than that of AdaPT. I will try to keep the chores minimal and focus on heterogeneous program design. 
+
+- [x] Toy CUDA depth renderer with profiling:
+
+![](assets/depth-render.png)
+
 - [ ] Unidirectional path tracing with AABB culling. Full traversal without spatial partition. In this stage, shared memory and constant memory will be made use of. Special kind of `variant` will be of use (since `std::variant` is not supported by CUDA, for `std::visit` will either crash or be rejected by the compiler).
 - [ ] CUDA texture bindings (with normal or UV maps)
 - [ ] GPU side BVH implementation. This will be the most difficult part, since "it is always easy to write your program with parallelism, but difficult to make it fast".

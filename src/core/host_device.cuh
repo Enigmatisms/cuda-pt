@@ -66,7 +66,7 @@ public:
     }
 
     // TODO: can be accelerated via multi-threading
-    std::vector<uint8_t> export_cpu() const {
+    std::vector<uint8_t> export_cpu(float inv_factor = 1) const {
         std::vector<uint8_t> byte_buffer(_w * _h * 4);
         size_t copy_pitch = _w * sizeof(Vec3);
         CUDA_CHECK_RETURN(cudaMemcpy2D(host_buffer, copy_pitch, image_buffer, pitch, copy_pitch, _h, cudaMemcpyDeviceToHost));
@@ -74,17 +74,18 @@ public:
             for (int j = 0; j < _w; j ++) {
                 int pixel_index = i * _w + j;
                 const Vec3& color = host_buffer[pixel_index];
-                byte_buffer[(pixel_index << 2)]     = to_int(color.x());
-                byte_buffer[(pixel_index << 2) + 1] = to_int(color.y());
-                byte_buffer[(pixel_index << 2) + 2] = to_int(color.z());
+                byte_buffer[(pixel_index << 2)]     = to_int(color.x() * inv_factor);
+                byte_buffer[(pixel_index << 2) + 1] = to_int(color.y() * inv_factor);
+                byte_buffer[(pixel_index << 2) + 2] = to_int(color.z() * inv_factor);
                 byte_buffer[(pixel_index << 2) + 3] = 255;
             }
         }
         return byte_buffer;
     }
 
-    CPT_CPU_GPU Vec3& operator() (int x, int y) { return image_buffer[y * _w + x]; }
-    CPT_CPU_GPU const Vec3& operator() (int x, int y) const { return image_buffer[y * _w + x]; }
+    // for cudaMallocPitch (with extra memory alignment), we need to use pitch to access
+    CPT_CPU_GPU Vec3& operator() (int col, int row) {  return ((Vec3*)((char*)image_buffer + row * pitch))[col]; }
+    CPT_CPU_GPU const Vec3& operator() (int col, int row) const { return ((Vec3*)((char*)image_buffer + row * pitch))[col]; }
 
     CPT_CPU_GPU int w() const noexcept { return _w; }
     CPT_CPU_GPU int h() const noexcept { return _h; }

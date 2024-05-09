@@ -32,9 +32,9 @@ public:
     CPT_CPU_GPU_INLINE float& y() { return _data.y; }
     CPT_CPU_GPU_INLINE float& z() { return _data.z; }
 
-    CPT_CPU_GPU_INLINE const float& x() const { return _data.x; }
-    CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
-    CPT_CPU_GPU_INLINE const float& z() const { return _data.z; }
+    CPT_CPU_GPU_INLINE float x() const { return _data.x; }
+    CPT_CPU_GPU_INLINE float y() const { return _data.y; }
+    CPT_CPU_GPU_INLINE float z() const { return _data.z; }
 
     CPT_CPU_GPU_INLINE
     Vec3 abs() const noexcept {
@@ -44,6 +44,9 @@ public:
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
     Vec3 operator+(VecType&& b) const noexcept { return Vec3(_data.x + b.x(), _data.y + b.y(), _data.z + b.z()); }
+
+    CPT_CPU_GPU_INLINE
+    Vec3 operator+(float b) const noexcept { return Vec3(_data.x + b, _data.y + b, _data.z + b); }
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
@@ -66,6 +69,9 @@ public:
     Vec3 operator-() const noexcept {
         return Vec3(-_data.x, -_data.y, -_data.z);
     }
+
+    CPT_CPU_GPU_INLINE
+    Vec3 operator-(float b) const noexcept { return Vec3(_data.x - b, _data.y - b, _data.z - b); }
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE

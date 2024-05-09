@@ -30,10 +30,15 @@ include_directories(${PNG_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CU
 add_definitions(${PNG_DEFINITIONS})
 set(LIBRARIES ${LIBRARIES} ${PNG_LIBRARIES})
 
+aux_source_directory(
+        ${CMAKE_CURRENT_LIST_DIR}/src/impl CUPT_IMPL
+)
+
 set(EXEC1_NAME "depth")
 add_executable(${EXEC1_NAME}
         app/depth_renderer.cu
         src/ext/lodepng/lodepng.cpp
+        ${CUPT_IMPL}
 )
 
 target_link_libraries(
