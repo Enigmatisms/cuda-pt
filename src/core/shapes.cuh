@@ -21,6 +21,9 @@
 
 static constexpr float epsilon = 1e-4;
 
+using SharedVec3Ptr = Vec3 (*)[32];
+using SharedVec2Ptr = Vec2 (*)[32];
+
 class AABB {
 public:
     Vec3 mini;
@@ -66,16 +69,16 @@ public:
     // For sphere, uv coordinates is not supported
     CPT_CPU_GPU float intersect(
         const Ray& ray,
-        ConstPrimPtr verts, 
-        ConstPrimPtr /* normal (useless) */, 
-        ConstUVPtr /* uv (useless) */,
+        SharedVec3Ptr verts, 
+        SharedVec3Ptr /* normal (useless) */, 
+        SharedVec2Ptr /* uv (useless) */,
         Interaction& it,
         int index,
         float min_range = epsilon, float max_range = std::numeric_limits<float>::infinity()
     ) const {
-        auto op = verts->x[index] - ray.o; 
+        auto op = verts[0][index] - ray.o; 
         float b = op.dot(ray.d);
-        float determinant = b * b - op.dot(op) + verts->y[index].x() * verts->y[index].x(), result = 0;
+        float determinant = b * b - op.dot(op) + verts[1][index].x() * verts[1][index].x(), result = 0;
         if (determinant >= 0) {
             determinant = sqrtf(determinant);
             result = b - determinant > min_range ? b - determinant : 0;
@@ -95,25 +98,25 @@ public:
 
     CPT_CPU_GPU float intersect(
         const Ray& ray,
-        ConstPrimPtr verts, 
-        ConstPrimPtr norms, 
-        ConstUVPtr uvs,
+        SharedVec3Ptr verts, 
+        SharedVec3Ptr norms, 
+        SharedVec2Ptr uvs,
         Interaction& it,
         int index,
         float min_range = epsilon, float max_range = std::numeric_limits<float>::infinity()
     ) const {
         // solve a linear equation
-        auto anchor = verts->x[index], v1 = verts->y[index] - anchor, v2 = verts->z[index] - anchor;
+        auto anchor = verts[0][index], v1 = verts[1][index] - anchor, v2 = verts[2][index] - anchor;
         SO3 M(v1, v2, -ray.d, false);       // column wise input
         auto solution = M.inverse().rotate(ray.o - anchor);
         float diff_x = 1.f - solution.x(), diff_y = 1.f - solution.y();
-        auto lerp_normal = norms->x[index] * diff_x * diff_y + \
-                           norms->y[index] * solution.x() * diff_y + \
-                           norms->z[index] * solution.y() * diff_x;
+        auto lerp_normal = norms[0][index] * diff_x * diff_y + \
+                           norms[1][index] * solution.x() * diff_y + \
+                           norms[2][index] * solution.y() * diff_x;
         lerp_normal.normalize();
-        auto uv = uvs->x[index] * diff_x * diff_y + \
-                  uvs->y[index] * solution.x() * diff_y + \
-                  uvs->z[index] * solution.y() * diff_x;
+        auto uv = uvs[0][index] * diff_x * diff_y + \
+                  uvs[1][index] * solution.x() * diff_y + \
+                  uvs[2][index] * solution.y() * diff_x;
 
         it.shading_norm = lerp_normal;
         it.uv_coord     = uv;
@@ -126,18 +129,18 @@ public:
 class ShapeVisitor {
 private:
     const Ray* ray;
-    ConstPrimPtr verts; 
-    ConstPrimPtr norms; 
-    ConstUVPtr uvs;
+    SharedVec3Ptr verts; 
+    SharedVec3Ptr norms; 
+    SharedVec2Ptr uvs;
     mutable Interaction* it;        // apply_visitor seems to only work for const member function
     int index;
     float min_range;
     float max_range;
 public:
     CPT_CPU_GPU ShapeVisitor(
-        ConstPrimPtr _verts, 
-        ConstPrimPtr _norms, 
-        ConstUVPtr _uvs,
+        SharedVec3Ptr _verts, 
+        SharedVec3Ptr _norms, 
+        SharedVec2Ptr _uvs,
         const Ray* _ray,
         Interaction* _it,
         int _index,

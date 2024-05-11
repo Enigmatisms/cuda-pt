@@ -33,19 +33,4 @@ __host__ static void CheckCudaErrorAux (const char *file, unsigned line, const c
 }
 #endif
 
-class TicToc {
-private:
-    std::chrono::system_clock::time_point tp;
-public:
-    void tic() {
-        tp = std::chrono::system_clock::now();
-    }
-
-    double toc() const {
-        auto dur = std::chrono::system_clock::now() - tp;
-        auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
-        return static_cast<double>(count) / 1e3;
-    }
-};
-
 inline int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.2) * 255 + .5); }

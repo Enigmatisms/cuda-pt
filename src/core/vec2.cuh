@@ -11,8 +11,9 @@ class Vec2 {
 private:
     float2 _data;
 public:
+    CPT_CPU_GPU Vec2() {}
     CPT_CPU_GPU
-    Vec2(float _x = 0, float _y = 0): 
+    Vec2(float _x, float _y): 
         _data(make_float2(_x, _y)) {}
 
     CPT_CPU_GPU_INLINE 

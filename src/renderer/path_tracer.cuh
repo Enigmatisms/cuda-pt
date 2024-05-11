@@ -5,19 +5,12 @@
 */
 
 #include <variant/variant.h>
+#include "core/stats.h"
 #include "core/soa.cuh"
 #include "core/shapes.cuh"
 #include "core/camera_model.cuh"
 #include "core/host_device.cuh"
-#include "core/stats.h"
-
-
-extern __constant__ DeviceCamera dev_cam;
-
-namespace {
-    using Shape = variant::variant<SphereShape, TriangleShape>;
-    using ConstShapePtr = const Shape* const;
-}
+#include "renderer/tracer_base.cuh"
 
 static constexpr float MAX_DIST = 1e7;
 
