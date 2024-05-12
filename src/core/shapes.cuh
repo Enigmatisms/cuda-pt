@@ -126,7 +126,7 @@ public:
     }
 };
 
-class ShapeVisitor {
+class ShapeIntersectVisitor {
 private:
     const Ray* ray;
     SharedVec3Ptr verts; 
@@ -137,7 +137,7 @@ private:
     float min_range;
     float max_range;
 public:
-    CPT_CPU_GPU ShapeVisitor(
+    CPT_CPU_GPU ShapeIntersectVisitor(
         SharedVec3Ptr _verts, 
         SharedVec3Ptr _norms, 
         SharedVec2Ptr _uvs,
@@ -158,4 +158,29 @@ public:
 
     CPT_CPU_GPU_INLINE void set_min_range(int min_r) noexcept { this->min_range = min_r; }
     CPT_CPU_GPU_INLINE void set_max_range(int max_r) noexcept { this->max_range = max_r; }
+};
+
+/**
+ * Helper class for simpler Shape -> AABB construction
+*/
+class ShapeAABBVisitor {
+private:
+    const SoA3<Vec3>& verts;
+    mutable AABB* aabb_ptr;
+    int index;
+public:
+    CPT_CPU ShapeAABBVisitor(
+        const SoA3<Vec3>& verts,
+        AABB* aabb
+    ): verts(verts), aabb_ptr(aabb), index(0) {}
+
+    CPT_CPU void operator()(const TriangleShape& shape) const { 
+        aabb_ptr[index] = AABB(verts.x[index], verts.y[index], verts.z[index]);
+    }
+
+    CPT_CPU void operator()(const SphereShape& shape) const { 
+        aabb_ptr[index] = AABB(verts.x[index] - verts.y[index].x(), verts.x[index] + verts.y[index].x());
+    }
+
+    CPT_CPU void set_index(int i)        noexcept { this->index = i; }
 };

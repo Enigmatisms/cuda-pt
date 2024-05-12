@@ -3,7 +3,6 @@
 #include "renderer/depth.cuh"
 #include <ext/lodepng/lodepng.h>
 
-
 __constant__ DeviceCamera dev_cam;
 
 int main() {
@@ -33,22 +32,14 @@ int main() {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(dev_cam, &camera, sizeof(DeviceCamera)));
 
     // shape setup
-    Shape* shapes;
-    CUDA_CHECK_RETURN(cudaMallocManaged(&shapes, sizeof(Shape) * num_prims));
+    std::vector<Shape> shapes(num_prims);
     for (int i = 0; i < num_triangle; i++)
         shapes[i] = TriangleShape(i >> 1);
     for (int i = num_triangle; i < num_prims; i++)
         shapes[i] = SphereShape(i >> 1);
     
-    // aabb setup
-    AABB* aabbs;
-    CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, sizeof(AABB) * num_prims));
-    for (int i = 0; i < num_triangle; i++)
-        aabbs[i] = AABB(v1s[i], v2s[i], v3s[i]);
-    for (int i = num_triangle; i < num_prims; i++)
-        aabbs[i] = AABB(v1s[i] - v2s[i].x(), v1s[i] + v2s[i].x());
-
-    auto bytes_buffer = render_depth(shapes, aabbs, vert_data, norm_data, uvs_data, num_prims, width, height, spp);
+    DepthTracer dtracer(shapes, vert_data, norm_data, uvs_data, width, height);
+    auto bytes_buffer = dtracer.render(spp);
 
     std::string file_name = "depth-render.png";
 
@@ -59,9 +50,6 @@ int main() {
     }
 
     printf("image saved to `%s`\n", file_name.c_str());
-
-    CUDA_CHECK_RETURN(cudaFree(shapes));
-    CUDA_CHECK_RETURN(cudaFree(aabbs));
 
     // ReportThreadStats();    
     // PrintStats(stdout);

@@ -6,6 +6,7 @@
  * Note that CUDA supports Sobol sequence
  * therefore... well, very interesting
 */
+#pragma once
 #include <curand_kernel.h>
 #include "core/cuda_utils.cuh"
 

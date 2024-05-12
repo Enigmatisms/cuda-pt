@@ -3,21 +3,10 @@
  * @date: 5.6.2024
  * @author: Qianyue He
 */
-
-#include <variant/variant.h>
-#include "core/soa.cuh"
-#include "core/shapes.cuh"
-#include "core/camera_model.cuh"
-#include "core/host_device.cuh"
-#include "core/stats.h"
-
+#pragma once
+#include "renderer/tracer_base.cuh"
 
 extern __constant__ DeviceCamera dev_cam;
-
-namespace {
-    using Shape = variant::variant<SphereShape, TriangleShape>;
-    using ConstShapePtr = const Shape* const;
-}
 
 static constexpr float MAX_DIST = 1e7;
 
@@ -30,7 +19,7 @@ static constexpr float MAX_DIST = 1e7;
  * @param num_prims number of primitives (to be intersected with)
  * @param max_depth maximum allowed bounce
 */
-__global__ void render_depth_kernel(
+__global__ static void render_depth_kernel(
     ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
@@ -57,7 +46,7 @@ __global__ void render_depth_kernel(
     __shared__ Vec3 s_norms[3][32];         // normals
     __shared__ Vec2 s_uvs[3][32];           // uv coords
     __shared__ AABB s_aabbs[32];            // aabb
-    ShapeVisitor visitor(&s_verts[0], &s_norms[0], &s_uvs[0], &ray, &it, 0);
+    ShapeIntersectVisitor visitor(&s_verts[0], &s_norms[0], &s_uvs[0], &ray, &it, 0);
 
     int num_copy = (num_prims + 31) / 32;   // round up
     float min_dist = MAX_DIST;
@@ -98,39 +87,50 @@ __global__ void render_depth_kernel(
     image(px, py) += min_dist * (min_dist < MAX_DIST);
 }
 
-CPT_CPU std::vector<uint8_t> render_depth(
-    ConstShapePtr shapes,
-    ConstAABBPtr aabbs,
-    const SoA3<Vec3>& verts,
-    const SoA3<Vec3>& norms, 
-    const SoA3<Vec2>& uvs,
-    int num_prims,
-    int width  = 800,
-    int height = 800,
-    int num_iter  = 64,
-    int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
-) {
-    ProfilePhase _(Prof::DepthRenderingHost);
-    DeviceImage image(width, height);
-    auto dev_image = to_gpu(image);
-    auto verts_dev = to_gpu(verts);
-    auto norms_dev = to_gpu(norms);
-    auto uvs_dev   = to_gpu(uvs);
+class DepthTracer: public TracerBase {
+using TracerBase::shapes;
+using TracerBase::aabbs;
+using TracerBase::verts;
+using TracerBase::norms; 
+using TracerBase::uvs;
+using TracerBase::image;
+using TracerBase::dev_image;
+using TracerBase::num_prims;
+using TracerBase::w;
+using TracerBase::h;
+public:
+    /**
+     * @param shapes    shape information (for ray intersection)
+     * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param uvs       uv coordinates, SoA3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+     * @param camera    GPU camera model (constant memory)
+     * @param image     GPU image buffer
+    */
+    DepthTracer(
+        const std::vector<Shape>& _shapes,
+        const SoA3<Vec3>& _verts,
+        const SoA3<Vec3>& _norms, 
+        const SoA3<Vec2>& _uvs,
+        int width, int height
+    ): TracerBase(_shapes, _verts, _norms, _uvs, width, height) {}
 
-    {
-        ProfilePhase _p(Prof::DepthRenderingDevice);
-        TicToc _timer("render_depth_kernel()", num_iter);
-        for (int i = 0; i < num_iter; i++) {
-            // for more sophisticated renderer (like path tracer), shared_memory should be used
-            render_depth_kernel<<<dim3(width >> 4, height >> 4), dim3(16, 16)>>>(
-                shapes, aabbs, verts_dev, norms_dev, uvs_dev, *dev_image, num_prims, max_depth); 
-            CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    CPT_CPU std::vector<uint8_t> render(
+        int num_iter = 64,
+        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+    ) override {
+        ProfilePhase _(Prof::DepthRenderingHost);
+        {
+            ProfilePhase _p(Prof::DepthRenderingDevice);
+            TicToc _timer("render_kernel()", num_iter);
+            for (int i = 0; i < num_iter; i++) {
+                // for more sophisticated renderer (like path tracer), shared_memory should be used
+                render_depth_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+                        shapes, aabbs, verts, norms, uvs, *dev_image, num_prims, max_depth); 
+                CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+            }
         }
+        return image.export_cpu(1.f / (5.f * num_iter));
     }
-    
-    CUDA_CHECK_RETURN(cudaFree(dev_image));
-    CUDA_CHECK_RETURN(cudaFree(verts_dev));
-    CUDA_CHECK_RETURN(cudaFree(norms_dev));
-    CUDA_CHECK_RETURN(cudaFree(uvs_dev));
-    return image.export_cpu(1.f / (5.f * num_iter));
-}
+};
+
