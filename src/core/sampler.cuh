@@ -9,17 +9,18 @@
 #pragma once
 #include <curand_kernel.h>
 #include "core/cuda_utils.cuh"
+#include "core/vec2.cuh"
 
 class Sampler {
 public:
     CPT_GPU Sampler(int seed) {
         curand_init(seed, 0, 0, &rand_state);
-
     }
 
-    CPT_GPU float rand() { return curand_uniform(&rand_state); }
-    CPT_GPU float randn() { return curand_normal(&rand_state); }
-    CPT_GPU int randint() { return curand(&rand_state); }
+    CPT_GPU Vec2 next2D() { return Vec2(curand_uniform(&rand_state), curand_uniform(&rand_state)); }
+    CPT_GPU float next1D() { return curand_uniform(&rand_state); }
+    CPT_GPU float next1D_n() { return curand_normal(&rand_state); }
+    CPT_GPU int discrete1D() { return curand(&rand_state); }
 private:
     curandState rand_state;
 };

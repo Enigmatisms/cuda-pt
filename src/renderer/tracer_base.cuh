@@ -16,6 +16,43 @@ extern __constant__ DeviceCamera dev_cam;
 using Shape = variant::variant<TriangleShape, SphereShape>;
 using ConstShapePtr = const Shape* const;
 
+/**
+ * Perform ray-intersection test on shared memory primitives
+ * @param ray: the ray for intersection test
+ * @param shapes: scene primitives
+ * @param s_aabbs: scene primitives
+ * @param shape_visitor: encapsulated shape visitor
+ * @param it: interaction info, containing the interacted normal and uv
+ * @param remain_prims: number of primitives to be tested (32 at most)
+ * @param cp_base_5: shared memory address offset
+ * @param min_dist: current minimal distance
+ * 
+ * @return minimum intersection distance
+*/
+CPT_GPU float ray_intersect(
+    const Ray& ray,
+    ConstShapePtr shapes,
+    ConstAABBPtr s_aabbs,
+    ShapeIntersectVisitor& shape_visitor,
+    int& min_index,
+    int remain_prims,
+    int cp_base_5,
+    float min_dist
+) {
+    float aabb_tmin = 0;
+    for (int idx = 0; idx < remain_prims; idx ++) {
+        if (s_aabbs[idx].intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
+            shape_visitor.set_index(idx);
+            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
+            bool valid = dist > EPSILON;
+            min_dist = min(min_dist, dist) * valid + min_dist * (1 - valid);
+            valid &= dist < min_dist;       // whether to update the distance
+            min_index = (cp_base_5 + idx) * valid + min_index * (1 - valid);
+        }
+    }
+    return min_dist;
+}
+
 class TracerBase {
 protected:
     Shape* shapes;

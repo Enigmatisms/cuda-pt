@@ -9,7 +9,9 @@
 #define CPT_CPU_GPU __host__ __device__
 #define CPT_CPU_GPU_INLINE __forceinline__ __host__ __device__
 #define CPT_GPU __device__
+#define CPT_GPU_INLINE __forceinline__ __device__
 #define CPT_CPU __host__
+#define CPT_CPU_INLINE __forceinline__ __host__
 
 #define CONDITION_TEMPLATE(VecType, TargetType) \
     template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>>>

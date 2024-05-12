@@ -111,7 +111,7 @@ public:
         return inv_R;
     }
 
-    friend CPT_CPU_GPU SO3 rotation_between(const Vec3& from, const Vec3& to);
+    friend CPT_CPU_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
 };
 
 CPT_CPU_GPU SO3 skew_symmetry(const Vec3& v) {
@@ -130,7 +130,7 @@ CPT_CPU_GPU SO3 vec_mul(const Vec3& v1, const Vec3& v2) {
     );
 }
 
-CPT_CPU_GPU SO3 rotation_between(const Vec3& from, const Vec3& to) {
+CPT_CPU_GPU SO3 rotation_between(Vec3&& from, const Vec3& to) {
     auto axis = from.cross(to);
     float cos_theta = from.dot(to);
     SO3 R{};
@@ -142,3 +142,9 @@ CPT_CPU_GPU SO3 rotation_between(const Vec3& from, const Vec3& to) {
     }
     return R;
 }
+
+CONDITION_TEMPLATE(VecType, Vec3)
+CPT_CPU_GPU_INLINE Vec3 delocalize_rotate(VecType&& anchor, const Vec3& to, const Vec3& input) {
+    SO3 R = rotation_between(std::move(anchor), to);
+    return R.rotate(input);
+}   

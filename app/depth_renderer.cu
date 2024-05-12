@@ -51,6 +51,10 @@ int main() {
 
     printf("image saved to `%s`\n", file_name.c_str());
 
+    vert_data.destroy();
+    norm_data.destroy();
+    uvs_data.destroy();
+
     // ReportThreadStats();    
     // PrintStats(stdout);
     ReportProfilerResults(stdout);

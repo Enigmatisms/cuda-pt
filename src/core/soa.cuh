@@ -27,9 +27,14 @@ public:
         z = &_data[_size << 1];
     }
 
-    CPT_CPU ~SoA3() {
-        CUDA_CHECK_RETURN(cudaFree(_data));
+    CPT_CPU void destroy() { 
+        size = 0;
+        CUDA_CHECK_RETURN(cudaFree(_data)); 
     }
+
+    // GPU implements SoA constructor very differently
+    CPT_GPU SoA3(StructType* x, StructType* y, StructType* z, size_t size): 
+        _data(x), x(x), y(y), z(z), size(size) {}
 
     CPT_CPU void from_vectors(
         const std::vector<StructType>& vec1,

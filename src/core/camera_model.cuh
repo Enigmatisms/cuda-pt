@@ -34,8 +34,8 @@ public:
      * Sampling ray with stratified sampling
     */
     CPT_GPU Ray generate_ray(int x, int y, Sampler& sampler) const {
-        float x_pos = sampler.rand() + float(x),
-              y_pos = sampler.rand() + float(y);
+        float x_pos = sampler.next1D() + float(x),
+              y_pos = sampler.next1D() + float(y);
         Vec3 ndc_dir((x_pos - _hw) * inv_focal, (y_pos - _hh) * inv_focal, 1.f);
         return Ray(t, R.rotate(ndc_dir.normalized()));
     }

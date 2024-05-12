@@ -8,6 +8,7 @@
 #include <chrono>
 #include <iomanip>
 #include "core/cuda_utils.cuh"
+#include "core/constants.cuh"
 
 class Vec3 {
 private:
