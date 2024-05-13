@@ -106,6 +106,13 @@ __global__ static void render_pt_kernel(
         extract.set_index(min_index);
         auto it = variant::apply_visitor(extract, shapes[min_index]);
 
+
+        // ============= step 3: next event estimation ================
+
+        
+
+
+        // step 4: sample a new ray direction, bounce the 
         float sample_pdf = 0;
         auto local_ray = sample_cosine_hemisphere(sampler.next2D(), sample_pdf);
         ray.o += ray.d * min_dist;
