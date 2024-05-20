@@ -86,6 +86,7 @@ public:
         CUDA_CHECK_RETURN(cudaMallocManaged(&shapes, num_prims * sizeof(Shape)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
         ShapeAABBVisitor aabb_visitor(_verts, aabbs);
+        // calculate AABB for each primitive
         for (int i = 0; i < num_prims; i++) {
             shapes[i] = _shapes[i];
             aabb_visitor.set_index(i);

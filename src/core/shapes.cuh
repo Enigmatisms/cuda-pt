@@ -56,6 +56,21 @@ public:
         t_near = tmin;
         return tmax > tmin && tmax > 0;
     }
+
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU_GPU AABB& operator += (AABBType&& _aabb) noexcept {
+        mini = mini.minimize(_aabb.mini);
+        maxi = maxi.maximize(_aabb.maxi);
+        return *this;
+    }
+
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU_GPU AABB operator+ (AABBType&& _aabb) const noexcept {
+        return AABB(
+            mini.minimize(_aabb.mini),
+            maxi.maximize(_aabb.maxi)
+        );
+    }
 };
 using ConstAABBPtr = const AABB* const;
 
