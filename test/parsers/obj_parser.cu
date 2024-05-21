@@ -133,7 +133,7 @@ class AABB {
     // AABB placeholder
 };
 
-class Object {
+class ObjInfo {
 private:
     AABB _aabb;
 public:
@@ -142,7 +142,7 @@ public:
     int prim_num;           // number of primitives
     uint8_t emitter_id;     // index to the emitter, 0xff means not an emitter
 
-    Object() : bsdf_id(-1), prim_offset(0), prim_num(0), emitter_id(0xff) {}
+    ObjInfo() : bsdf_id(-1), prim_offset(0), prim_num(0), emitter_id(0xff) {}
 };
 
 int getBSDFId(const std::unordered_map<std::string, int>& bsdfIdMap, const std::string& id) {
@@ -156,7 +156,7 @@ int getBSDFId(const std::unordered_map<std::string, int>& bsdfIdMap, const std::
 void parseShape(
     const tinyxml2::XMLElement* shapeElement, 
     const std::unordered_map<std::string, int>& bsdfIdMap,
-    std::vector<Object>& objects, std::vector<SoA3<Vec3>>& verticesList, 
+    std::vector<ObjInfo>& objects, std::vector<SoA3<Vec3>>& verticesList, 
     std::vector<SoA3<Vec3>>& normalsList, std::vector<SoA3<Vec2>>& uvsList, 
     std::string folder_prefix
 ) {
@@ -198,7 +198,7 @@ void parseShape(
         SoA3<Vec3> vertices(num_primitives);
         SoA3<Vec3> normals(num_primitives);
         SoA3<Vec2> uvs(num_primitives);
-        Object object;
+        ObjInfo object;
         object.bsdf_id = bsdf_id;
         object.prim_offset = 0;  //  dummy setting
         object.prim_num = num_primitives;
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
     const tinyxml2::XMLElement* shapeElement = sceneElement->FirstChildElement("shape");
     const tinyxml2::XMLElement* brdfElement = sceneElement->FirstChildElement("brdf");
 
-    std::vector<Object> objects;
+    std::vector<ObjInfo> objects;
     std::vector<SoA3<Vec3>> verticesList;
     std::vector<SoA3<Vec3>> normalsList;
     std::vector<SoA3<Vec2>> uvsList;

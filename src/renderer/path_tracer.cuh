@@ -12,7 +12,7 @@ extern __constant__ DeviceCamera dev_cam;
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
 
-using ConstObjPtr   = const Object* const;
+using ConstObjPtr   = const ObjInfo* const;
 using ConstBSDFPtr  = const BSDF* const;
 using ConstIndexPtr = const int* const;
 
@@ -182,8 +182,8 @@ __global__ static void render_pt_kernel(
         // step 4: sample a new ray direction, bounce the 
         float sample_pdf = 0;
         Vec3 local_th;
-        ray.d = c_material[material_id]->sample_dir(ray.d, it, local_th, sampler.next2D(), sample_pdf);
         ray.o += ray.d * min_dist;
+        ray.d = c_material[material_id]->sample_dir(ray.d, it, local_th, sampler.next2D(), sample_pdf);
         throughput *= local_th * (1.f /  sample_pdf);
 
         // TODO: MIS for emitter
@@ -204,7 +204,7 @@ using TracerBase::num_prims;
 using TracerBase::w;
 using TracerBase::h;
 private:
-    Object* obj_info;
+    ObjInfo* obj_info;
     int*    prim2obj;
     int num_objs;
     int num_emitter;
@@ -221,8 +221,7 @@ public:
      * @todo: initialize objects
     */
     PathTracer(
-        const std::vector<Object>& _objs,
-        const std::vector<BSDF>& _bsdfs,
+        const std::vector<ObjInfo>& _objs,
         const std::vector<Shape>& _shapes,
         const SoA3<Vec3>& _verts,
         const SoA3<Vec3>& _norms, 
@@ -232,7 +231,7 @@ public:
     ): TracerBase(_shapes, _verts, _norms, _uvs, width, height), 
         num_objs(_objs.size()), num_emitter(num_emitter) 
     {
-        CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(Object)));
+        CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
 
         int prim_offset = 0;

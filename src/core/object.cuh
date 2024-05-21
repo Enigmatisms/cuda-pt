@@ -7,7 +7,7 @@
 #include "core/bsdf.cuh"
 #include "core/shapes.cuh"
 
-class Object {
+class ObjInfo {
 private:
     AABB _aabb;
 public:
@@ -21,5 +21,7 @@ public:
     }
 
     CPT_CPU_GPU_INLINE bool is_emitter() const noexcept { return this->emitter_id == 0xff; }
-    CPT_CPU_GPU Object() {}
+    CPT_CPU_GPU ObjInfo(int bsdf_id, int prim_off, int prim_num, uint8_t emitter_id = 0xff):
+        bsdf_id(bsdf_id), prim_offset(prim_off), prim_num(prim_num), emitter_id(emitter_id)
+    {}
 };
