@@ -62,6 +62,12 @@
         "typeinfo": "cpp",
         "__config": "cpp",
         "set": "cpp",
-        "cfloat": "cpp"
+        "cfloat": "cpp",
+        "strstream": "cpp",
+        "bitset": "cpp",
+        "optional": "cpp",
+        "fstream": "cpp",
+        "cfenv": "cpp",
+        "typeindex": "cpp"
     }
 }

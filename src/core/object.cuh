@@ -11,7 +11,7 @@ class Object {
 private:
     AABB _aabb;
 public:
-    int obj_index;          // index pf the current object
+    int bsdf_id;            // index pf the current object
     int prim_offset;        // offset to the start of the primitives
     int prim_num;           // number of primitives
     uint8_t emitter_id;     // index to the emitter, 0xff means not an emitter
@@ -20,5 +20,6 @@ public:
         return _aabb.intersect(ray, t_near);
     }
 
+    CPT_CPU_GPU_INLINE bool is_emitter() const noexcept { return this->emitter_id == 0xff; }
     CPT_CPU_GPU Object() {}
 };

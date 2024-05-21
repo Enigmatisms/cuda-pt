@@ -4,13 +4,13 @@
  * @author: Qianyue He
 */
 #pragma once
-#include "core/sampling.cuh"
 #include "core/emitter.cuh"
 #include "core/object.cuh"
 #include "renderer/tracer_base.cuh"
 
 extern __constant__ DeviceCamera dev_cam;
-extern __constant__ Emitter* emitters[8];
+extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
+extern __constant__ BSDF*    c_material[32];
 
 using ConstObjPtr   = const Object* const;
 using ConstBSDFPtr  = const BSDF* const;
@@ -48,6 +48,19 @@ CPT_GPU bool occlusion_test(
     return true;
 }
 
+CPT_GPU Emitter* sample_emitter(Sampler& sampler, bool& valid, float& pdf, int num, int no_sample) {
+    valid = no_sample < 0 || num > 1;
+    // logic: if no_sample and num > 1, means that there is one emitter than can not be sampled
+    // so we can only choose from num - 1 emitters, the following computation does this (branchless)
+    // if (emit_id >= no_sample && no_sample >= 0) -> we should skip one index (the no_sample), therefore + 1
+    // if invalid (there is only one emitter, and we cannot sample it), return c_emitter[8]
+    num -= no_sample >= 0 && num > 1;
+    int  emit_id = sampler.discrete1D() % num;
+    emit_id += emit_id >= no_sample && no_sample >= 0;
+    pdf = 1.f / float(num);
+    return c_emitter[emit_id * valid + (1 - valid) * 8];
+}
+
 /**
  * @brief this version does not employ object-level culling
  * we use shared memory to accelerate rendering instead, for object-level culling
@@ -55,7 +68,6 @@ CPT_GPU bool occlusion_test(
  * too difficult to control
  * 
  * @param objects   object encapsulation
- * @param material  BSDF encapsulation
  * @param prim2obj  primitive to object index mapping: which object does this primitive come from?
  * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
@@ -67,7 +79,6 @@ CPT_GPU bool occlusion_test(
 */
 __global__ static void render_pt_kernel(
     ConstObjPtr objects,
-    ConstBSDFPtr materials,
     ConstIndexPtr prim2obj,
     ConstShapePtr shapes,
     ConstAABBPtr aabbs,
@@ -106,6 +117,9 @@ __global__ static void render_pt_kernel(
     ShapeIntersectVisitor visitor(s_verts_soa, ray, 0);
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
+    Vec3 throughput(0, 0, 0), radiance(0, 0, 0);
+    float emission_weight = 1.f;
+
     int num_copy = (num_prims + 31) / 32, min_index = -1;   // round up
     for (int b = 0; b < max_depth; b++) {
         float min_dist = MAX_DIST;
@@ -138,33 +152,44 @@ __global__ static void render_pt_kernel(
         // ============= step 3: next event estimation ================
 
         // (1) randomly pick one emitter
-        int object_id = prim2obj[min_index], emitter_id = sampler.discrete1D() % num_emitter;
-        // (2) sample a point on the emitter
+        int object_id   = prim2obj[min_index], material_id = objects[object_id].bsdf_id;
 
-        float direct_pdf = 1;
+        bool valid_sample = false;
+        float direct_pdf = 1, emitter_pdf = 1.f;
+        Emitter* emitter = sample_emitter(sampler, valid_sample, emitter_pdf, num_emitter, objects[object_id].emitter_id);
+        // (2) check if the ray hits an emitter
+        radiance += emission_weight * objects[object_id].is_emitter() * throughput * \
+                    c_emitter[objects[object_id].emitter_id]->eval_le(&ray.d, &it.shading_norm);
+
+        // (3) sample a point on the emitter (we avoid sampling the hit emitter)
         Vec3 hit_pos = ray.o + ray.d * min_dist, shadow_int, emit_dir;
-        emit_dir = emitters[emitter_id]->sample(hit_pos, shadow_int, direct_pdf) - hit_pos;
+        emit_dir = emitter->sample(hit_pos, shadow_int, direct_pdf) - hit_pos;
 
         float emit_length = emit_dir.length();
         emit_dir *= 1.f / emit_length;              // normalized direction
 
-        // (3) NEE scene intersection test
-        if (occlusion_test(ray, objects, shapes, aabbs, *verts, num_objects, emit_length)) {
-            // possible warp divergence, but... nevermind, it seems to be 
+        // (3) NEE scene intersection test (possible warp divergence, but... nevermind, it seems to be )
+        if (valid_sample && occlusion_test(ray, objects, shapes, aabbs, *verts, num_objects, emit_length)) {
+            // MIS for BSDF / light sampling, to achieve better rendering
+            direct_pdf *= emitter_pdf;
+            float mis_w = direct_pdf / (direct_pdf + 
+                c_material[material_id]->pdf(it, emit_dir, ray.d) * emitter->non_delta());
+            // accumulate direct component
+            radiance += throughput * shadow_int * (mis_w / emitter_pdf) * \
+                c_material[material_id]->eval(it, emit_dir, ray.d);
         }
-
-        // (4) evaluate BSDF any
-    
 
         // step 4: sample a new ray direction, bounce the 
         float sample_pdf = 0;
-        auto local_ray = sample_cosine_hemisphere(sampler.next2D(), sample_pdf);
+        Vec3 local_th;
+        ray.d = c_material[material_id]->sample_dir(ray.d, it, local_th, sampler.next2D(), sample_pdf);
         ray.o += ray.d * min_dist;
-        ray.d = delocalize_rotate(Vec3(0, 0, 1), it.shading_norm, local_ray);
+        throughput *= local_th * (1.f /  sample_pdf);
 
+        // TODO: MIS for emitter
     }
     __syncthreads();
-    
+    image(px, py) += radiance;
 }
 
 class PathTracer: public TracerBase {
@@ -180,7 +205,6 @@ using TracerBase::w;
 using TracerBase::h;
 private:
     Object* obj_info;
-    BSDF*   material;
     int*    prim2obj;
     int num_objs;
     int num_emitter;
@@ -209,7 +233,6 @@ public:
         num_objs(_objs.size()), num_emitter(num_emitter) 
     {
         CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(Object)));
-        CUDA_CHECK_RETURN(cudaMallocManaged(&material, _bsdfs.size() * sizeof(BSDF)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
 
         int prim_offset = 0;
@@ -218,14 +241,11 @@ public:
             cudaMemset(prim2obj + prim_offset, i, sizeof(int) * _objs[i].prim_num);
             prim_offset += _objs[i].prim_num;
         }
-
-        for (size_t i = 0; i < _bsdfs.size(); i++)
-            material[i] = _bsdfs[i];
+        // TODO: copy all the material into constant memory
     }
 
     ~PathTracer() {
         CUDA_CHECK_RETURN(cudaFree(obj_info));
-        CUDA_CHECK_RETURN(cudaFree(material));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
     }
 
@@ -241,7 +261,7 @@ public:
             for (int i = 0; i < num_iter; i++) {
                 // for more sophisticated renderer (like path tracer), shared_memory should be used
                 render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                    obj_info, material, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                    obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
                     *dev_image, num_prims, num_objs, num_emitter, max_depth
                 ); 
                 CUDA_CHECK_RETURN(cudaDeviceSynchronize());

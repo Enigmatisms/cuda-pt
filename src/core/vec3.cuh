@@ -118,6 +118,9 @@ public:
         _data.z *= b.z();
     }
 
+    CPT_CPU_GPU_INLINE void fill(float v) noexcept {
+        _data = make_float3(v, v, v);
+    }
 
     CPT_CPU_GPU_INLINE
     Vec3 normalized() const { return *this * (1.f / length()); }

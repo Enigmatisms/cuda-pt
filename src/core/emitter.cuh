@@ -26,11 +26,15 @@ public:
     CPT_CPU_GPU Emitter(VecType&& le, int obj_ref_id = -1):
         Le(std::forward<Vec3>(le), obj_ref_id(obj_ref_id)) {}
 
-    CPT_CPU_GPU virtual Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const = 0;
+    CPT_CPU_GPU virtual Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const {
+        pdf = 1;
+        le.fill(0);
+        return Vec3();
+    }
 
     CPT_CPU_GPU virtual Vec3 eval_le(const Vec3* const inci_dir = nullptr, const Vec3* const normal = nullptr) const noexcept = 0;
-    CPT_CPU_GPU_INLINE bool is_delta_pos() const noexcept {
-        return this->obj_ref_id < 0;
+    CPT_CPU_GPU_INLINE bool non_delta() const noexcept {
+        return this->obj_ref_id >= 0;
     }
 };
 

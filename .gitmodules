@@ -1,6 +1,12 @@
 [submodule "src/ext/lodepng"]
 	path = src/ext/lodepng
-	url = https://github.com/lvandeve/lodepng.git
+	url = git@gitee.com:Enigmatisms/lodepng.git
 [submodule "src/ext/variant"]
 	path = src/ext/variant
-	url = git@github.com:Enigmatisms/variant.git
+	url = git@gitee.com:Enigmatisms/variant.git
+[submodule "src/ext/tinyxml2"]
+	path = src/ext/tinyxml2
+	url = git@gitee.com:Enigmatisms/tinyxml2.git
+[submodule "src/ext/tinyobjloader"]
+	path = src/ext/tinyobjloader
+	url = git@gitee.com:Enigmatisms/tinyobjloader.git

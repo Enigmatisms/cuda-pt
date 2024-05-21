@@ -7,8 +7,10 @@ endif ()
 
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG")
   set(CMAKE_CUDA_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
 ELSE()
   set(CMAKE_CUDA_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
 ENDIF()
 SET(COMPILE_CUDA True)
 
@@ -28,6 +30,10 @@ find_package(Threads REQUIRED)
 find_package(PNG REQUIRED)
 include_directories(${PNG_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
 add_definitions(${PNG_DEFINITIONS})
+
+add_subdirectory(src/ext/tinyxml2)
+add_subdirectory(src/ext/tinyobjloader)
+
 set(LIBRARIES ${LIBRARIES} ${PNG_LIBRARIES})
 
 aux_source_directory(
@@ -74,6 +80,16 @@ set_target_properties(
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES native
 )
+
+add_executable(sensor_test test/parsers/sensor_parse.cc)
+
+target_link_libraries(sensor_test PRIVATE tinyxml2)
+
+add_executable(obj_test test/parsers/obj_parser.cu)
+
+target_link_libraries(obj_test PRIVATE tinyxml2 tinyobjloader)
+
+
 # CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate
 # https://developer.nvidia.com/blog/separate-compilation-linking-cuda-device-code/
 
