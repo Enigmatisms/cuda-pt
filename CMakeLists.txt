@@ -64,6 +64,7 @@ target_compile_options(
         --expt-relaxed-constexpr
         >
 )
+
 # ========================================= unit-test ===============================================
 set(TEST1_NAME "test_so3")
 add_executable(${TEST1_NAME}
@@ -79,6 +80,30 @@ set_target_properties(
         ${TEST1_NAME} PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES native
+)
+
+add_executable(pt_test
+        test/path_tracer_test.cu
+        src/ext/lodepng/lodepng.cpp
+        ${CUPT_IMPL}
+)
+
+target_link_libraries(
+        pt_test PRIVATE
+        ${PNG_LIBRARY}
+)
+
+set_target_properties(
+        pt_test PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_ARCHITECTURES native
+)
+
+target_compile_options(
+        pt_test PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:
+        --expt-relaxed-constexpr
+        >
 )
 
 add_executable(sensor_test test/parsers/sensor_parse.cc)

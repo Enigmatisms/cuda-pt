@@ -3,7 +3,7 @@
 #include "core/object.cuh"
 #include "core/emitter.cuh"
 #include "core/camera_model.cuh"
-#include "renderer/depth.cuh"
+#include "renderer/path_tracer.cuh"
 #include <ext/lodepng/lodepng.h>
 
 __constant__ DeviceCamera dev_cam;
@@ -15,7 +15,7 @@ int main() {
 
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
-    int spp       = 2;
+    int spp       = 1;
     std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
     std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
     std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
@@ -35,18 +35,34 @@ int main() {
     objects.emplace_back(1, 4, 2);
     objects.emplace_back(2, 6, 2);
     objects.emplace_back(1, 8, 2);
-    objects.emplace_back(1, 8, 2);
     objects.emplace_back(3, 10, 1);
     objects.emplace_back(3, 11, 1);
     objects.emplace_back(4, 12, 1);
 
     // TODO: this is not correct
-    std::vector<BSDF*> bsdfs;
-    bsdfs.push_back(new LambertianBSDF(Vec3(1, 0.2, 0.2)));      // right red
-    bsdfs.push_back(new LambertianBSDF(Vec3(1, 0.2, 0.2)));      // white
-    bsdfs.push_back(new LambertianBSDF(Vec3(0.2, 1, 0.2)));      // left green
-    bsdfs.push_back(new SpecularBSDF(Vec3(0.9, 0.9, 0.9)));      // specular
-    bsdfs.push_back(new LambertianBSDF(Vec3(0.8, 0.8, 0.8)));    // ball
+    std::vector<BSDF*> bsdfs(5, nullptr);
+    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[0], sizeof(LambertianBSDF)));
+    bsdfs[0][0] = LambertianBSDF(Vec3(1, 0.2, 0.2));        // right red
+
+    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[1], sizeof(LambertianBSDF)));
+    bsdfs[1][0] = LambertianBSDF(Vec3(0.8, 0.8, 0.8));      // white
+
+    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[2], sizeof(LambertianBSDF)));
+    bsdfs[2][0] = LambertianBSDF(Vec3(0.2, 1, 0.2));        // left green
+
+    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[3], sizeof(SpecularBSDF)));
+    bsdfs[3][0] = SpecularBSDF(Vec3(0.9, 0.9, 0.9));        // specular
+
+    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[4], sizeof(SpecularBSDF)));
+    bsdfs[4][0] = LambertianBSDF(Vec3(0.99, 0.99, 0.99));    // ball
+    // copy material information to CUDA constant memory
+    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, bsdfs.data(), bsdfs.size() * sizeof(BSDF*)));
+
+    Emitter* g_emitter;
+    CUDA_CHECK_RETURN(cudaMallocManaged(&g_emitter, sizeof(PointSource)));
+    g_emitter[0] = PointSource(Vec3(10, 10, 10), Vec3(0, 0, 0.8));
+
+    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, g_emitter, sizeof(Emitter*)));
 
     // camera setup
     Vec3 from(0, -3, 0), to(0, 0, 0);
@@ -62,10 +78,10 @@ int main() {
     for (int i = num_triangle; i < num_prims; i++)
         shapes[i] = SphereShape(i >> 1);
     
-    DepthTracer dtracer(shapes, vert_data, norm_data, uvs_data, width, height);
-    auto bytes_buffer = dtracer.render(spp);
+    PathTracer pt(objects, shapes, vert_data, norm_data, uvs_data, 1, width, height);
+    auto bytes_buffer = pt.render(spp, 4);
 
-    std::string file_name = "depth-render.png";
+    std::string file_name = "render.png";
 
     if (unsigned error = lodepng::encode(file_name, bytes_buffer, width, height); error) {
         std::cerr << "lodepng::encoder error " << error << ": " << lodepng_error_text(error)
@@ -80,8 +96,9 @@ int main() {
     uvs_data.destroy();
 
     for (auto& bsdf: bsdfs) {
-        delete bsdf;
+        CUDA_CHECK_RETURN(cudaFree(bsdf));
     }
+    CUDA_CHECK_RETURN(cudaFree(g_emitter));
 
     // ReportThreadStats();    
     // PrintStats(stdout);

@@ -45,8 +45,8 @@ CPT_GPU float ray_intersect(
             shape_visitor.set_index(idx);
             float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
             bool valid = dist > EPSILON;
-            min_dist = min(min_dist, dist) * valid + min_dist * (1 - valid);
             valid &= dist < min_dist;       // whether to update the distance
+            min_dist = dist * valid + min_dist * (1 - valid);
             min_index = (cp_base_5 + idx) * valid + min_index * (1 - valid);
         }
     }
