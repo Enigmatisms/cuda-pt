@@ -34,9 +34,14 @@ using BSDF::k_d;
 public:
     CPT_CPU_GPU LambertianBSDF(Vec3 _k_d, int kd_id = -1):
         BSDF(_k_d, Vec3(0, 0, 0), Vec3(0, 0, 0), kd_id, -1) {}
+
+    CPT_CPU_GPU LambertianBSDF(Vec3 _k_d, Vec3 _k_s, Vec3 _k_g, int kd_id = -1, int kg_id = -1):
+        BSDF(std::move(_k_d), std::move(_k_s), std::move(_k_g), kd_id, kg_id) {}
     
     CPT_CPU_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override {
-        return it.shading_norm.dot(out) * M_1_PI;
+        // printf("it.norm: %f, %f, %f\n", it.shading_norm.x(), it.shading_norm.y(), it.shading_norm.z());
+        // printf("out: %f, %f, %f\n", out.x(), out.y(), out.z());
+        auto res = it.shading_norm.dot(out) * M_1_PI;
     }
 
     CPT_CPU_GPU Vec3 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
@@ -56,6 +61,9 @@ using BSDF::k_s;
 public:
     CPT_CPU_GPU SpecularBSDF(Vec3 _k_s, int ks_id = -1):
         BSDF(Vec3(0, 0, 0), _k_s, Vec3(0, 0, 0), -1, ks_id) {}
+
+    CPT_CPU_GPU SpecularBSDF(Vec3 _k_d, Vec3 _k_s, Vec3 _k_g, int kd_id = -1, int kg_id = -1):
+        BSDF(std::move(_k_d), std::move(_k_s), std::move(_k_g), kd_id, kg_id) {}
     
     CPT_CPU_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override {
         return 0.f;

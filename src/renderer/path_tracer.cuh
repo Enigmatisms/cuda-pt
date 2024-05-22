@@ -48,16 +48,17 @@ CPT_GPU bool occlusion_test(
 }
 
 CPT_GPU Emitter* sample_emitter(Sampler& sampler, bool& valid, float& pdf, int num, int no_sample) {
-    valid = no_sample < 0 || num > 1;
+    valid = no_sample == 0 || num > 1;
     // logic: if no_sample and num > 1, means that there is one emitter than can not be sampled
     // so we can only choose from num - 1 emitters, the following computation does this (branchless)
     // if (emit_id >= no_sample && no_sample >= 0) -> we should skip one index (the no_sample), therefore + 1
     // if invalid (there is only one emitter, and we cannot sample it), return c_emitter[8]
-    num -= no_sample >= 0 && num > 1;
-    int  emit_id = sampler.discrete1D() % num;
-    emit_id += emit_id >= no_sample && no_sample >= 0;
+    // if no_sample is 0x08, then the ray hits no emitter
+    num -= no_sample > 0 && num > 1;
+    int emit_id = (sampler.discrete1D() % num) + 1;
+    emit_id += emit_id >= no_sample && no_sample > 0;
     pdf = 1.f / float(num);
-    return c_emitter[emit_id * valid + (1 - valid) * 8];
+    return c_emitter[emit_id * valid];
 }
 
 /**
@@ -116,7 +117,7 @@ __global__ static void render_pt_kernel(
     ShapeIntersectVisitor visitor(s_verts_soa, ray, 0);
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
-    Vec3 throughput(0, 0, 0), radiance(0, 0, 0);
+    Vec3 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
 
     int num_copy = (num_prims + 31) / 32, min_index = -1;   // round up
@@ -136,14 +137,13 @@ __global__ static void render_pt_kernel(
                 s_aabbs[tid]  = aabbs[cur_idx];
             }
             __syncthreads();
-
+            // this might not be a good solution
             min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base_5, min_dist);
 
         }
 
         // ============= step 2: local shading for indirect bounces ================
         // currently, I assume Lambertian BSDF
-        // printf("Here.1\n");
         if (min_index >= 0) {
             extract.set_index(min_index);
             auto it = variant::apply_visitor(extract, shapes[min_index]);
@@ -151,42 +151,49 @@ __global__ static void render_pt_kernel(
             // ============= step 3: next event estimation ================
 
             // (1) randomly pick one emitter
-            int object_id   = prim2obj[min_index];
-            printf("Object_id: %d\n", object_id);
-            int material_id = objects[object_id].bsdf_id;
-            printf("Mat_id: %d\n", material_id);
+            int object_id   = prim2obj[min_index],
+                material_id = objects[object_id].bsdf_id,
+                emitter_id  = objects[object_id].emitter_id;
 
-            // bool valid_sample = false;
-            // float direct_pdf = 1, emitter_pdf = 1.f;
-            // Emitter* emitter = sample_emitter(sampler, valid_sample, emitter_pdf, num_emitter, objects[object_id].emitter_id);
-            // // (2) check if the ray hits an emitter
-            // radiance += emission_weight * objects[object_id].is_emitter() * throughput * \
-            //             c_emitter[objects[object_id].emitter_id]->eval_le(&ray.d, &it.shading_norm);
+            bool valid_sample = false, hit_emitter = objects[object_id].is_emitter();
+            float direct_pdf = 1, emitter_pdf = 1.f;
+            // (2) check if the ray hits an emitter
+            emitter_id = hit_emitter * emitter_id;
+            radiance += emission_weight * objects[object_id].is_emitter() * throughput *\
+                        c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
 
-            // // (3) sample a point on the emitter (we avoid sampling the hit emitter)
-            // Vec3 hit_pos = ray.o + ray.d * min_dist, shadow_int, emit_dir;
-            // emit_dir = emitter->sample(hit_pos, shadow_int, direct_pdf) - hit_pos;
+            Emitter* emitter = sample_emitter(sampler, valid_sample, emitter_pdf, num_emitter, emitter_id);
+            // (3) sample a point on the emitter (we avoid sampling the hit emitter)
+            Ray shadow_ray(ray.o + ray.d * min_dist, Vec3());
+            Vec3 shadow_int;
+            shadow_ray.d = emitter->sample(shadow_ray.o, shadow_int, direct_pdf) - shadow_ray.o;
+            
+            float emit_length = shadow_ray.d.length();
+            shadow_ray.d *= 1.f / emit_length;              // normalized direction
 
-            // float emit_length = emit_dir.length();
-            // emit_dir *= 1.f / emit_length;              // normalized direction
+            // (3) NEE scene intersection test (possible warp divergence, but... nevermind, it seems to be )
+            if (valid_sample && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_length)) {
+                // MIS for BSDF / light sampling, to achieve better rendering
+                direct_pdf *= emitter_pdf;
+                float material_pdf = c_material[material_id]->pdf(it, shadow_ray.d, ray.d);
+                float mis_w = direct_pdf / (direct_pdf + 
+                    material_pdf * emitter->non_delta());
+                // accumulate direct component
+                Vec3 direct = throughput * shadow_int * (mis_w / emitter_pdf) * \
+                    c_material[material_id]->eval(it, shadow_ray.d, ray.d);
+                printf("%f, %f, %f, %f, %d\n", shadow_int.x(), mis_w, emitter_pdf, material_pdf, material_id);
+                radiance += direct;
+                if (direct.length2() > 1e-6) {
+                    printf("Direct Radiance: %f, %f, %f\n", direct.x(), direct.y(), direct.z());
+                }
+            }
 
-            // // (3) NEE scene intersection test (possible warp divergence, but... nevermind, it seems to be )
-            // if (valid_sample && occlusion_test(ray, objects, shapes, aabbs, *verts, num_objects, emit_length)) {
-            //     // MIS for BSDF / light sampling, to achieve better rendering
-            //     direct_pdf *= emitter_pdf;
-            //     float mis_w = direct_pdf / (direct_pdf + 
-            //         c_material[material_id]->pdf(it, emit_dir, ray.d) * emitter->non_delta());
-            //     // accumulate direct component
-            //     radiance += throughput * shadow_int * (mis_w / emitter_pdf) * \
-            //         c_material[material_id]->eval(it, emit_dir, ray.d);
-            // }
-
-            // // step 4: sample a new ray direction, bounce the 
-            // float sample_pdf = 0;
-            // Vec3 local_th;
-            // ray.o += ray.d * min_dist;
-            // ray.d = c_material[material_id]->sample_dir(ray.d, it, local_th, sampler.next2D(), sample_pdf);
-            // throughput *= local_th * (1.f /  sample_pdf);
+            // step 4: sample a new ray direction, bounce the 
+            float sample_pdf = 0;
+            Vec3 local_th;
+            ray.o = std::move(shadow_ray.o);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, local_th, sampler.next2D(), sample_pdf);
+            throughput *= local_th * (1.f /  sample_pdf);
         }
 
 
@@ -194,6 +201,9 @@ __global__ static void render_pt_kernel(
     }
     __syncthreads();
     image(px, py) += radiance;
+    if (radiance.length2() > 1e-6) {
+        printf("Radiance: %f, %f, %f\n", radiance.x(), radiance.y(), radiance.z());
+    }
 }
 
 class PathTracer: public TracerBase {
@@ -241,9 +251,11 @@ public:
         int prim_offset = 0;
         for (int i = 0; i < num_objs; i++) {
             obj_info[i] = _objs[i];
-            CUDA_CHECK_RETURN(cudaMemset(prim2obj + prim_offset, i, sizeof(int) * _objs[i].prim_num));
+            int prim_num = _objs[i].prim_num;
+            for (int j = 0; j < prim_num; j++)
+                prim2obj[prim_offset + j] = i;
+            prim_offset += prim_num;
             printf("Set %d of %d starting at %d\n", _objs[i].prim_num, i, prim_offset);
-            prim_offset += _objs[i].prim_num;
         }
         // TODO: copy all the material into constant memory
     }

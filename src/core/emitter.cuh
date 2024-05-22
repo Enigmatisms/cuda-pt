@@ -24,17 +24,24 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU Emitter(VecType&& le, int obj_ref_id = -1):
-        Le(std::forward<Vec3>(le)), obj_ref_id(obj_ref_id) {}
+        Le(std::forward<VecType>(le)), obj_ref_id(obj_ref_id) {}
 
-    CPT_CPU_GPU virtual Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const {
+    CPT_GPU_INLINE virtual Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const {
         pdf = 1;
         le.fill(0);
-        return Vec3();
+        return Vec3(0, 0, 0);
     }
 
-    CPT_CPU_GPU virtual Vec3 eval_le(const Vec3* const inci_dir = nullptr, const Vec3* const normal = nullptr) const noexcept = 0;
-    CPT_CPU_GPU_INLINE bool non_delta() const noexcept {
+    CPT_GPU_INLINE virtual Vec3 eval_le(const Vec3* const inci_dir = nullptr, const Vec3* const normal = nullptr) const {
+        return Vec3(0, 0, 0);
+    }
+
+    CPT_GPU_INLINE bool non_delta() const noexcept {
         return this->obj_ref_id >= 0;
+    }
+
+    CPT_GPU_INLINE Vec3 get_le() const noexcept {
+        return Le;
     }
 };
 
@@ -48,13 +55,13 @@ public:
     CPT_CPU_GPU PointSource(VType1&& le, VType2&& pos): 
         Emitter(std::forward<VType1>(le)), pos(std::forward<VType2>(pos)) {}
 
-    CPT_CPU_GPU Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const override {
+    CPT_GPU_INLINE Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const override {
         le = this->Le * distance_attenuate(pos - hit_pos);
         pdf = 1.f;
         return this->pos;
     }
 
-    CPT_CPU_GPU virtual Vec3 eval_le(const Vec3* const, const Vec3* const) const noexcept override {
+    CPT_GPU_INLINE virtual Vec3 eval_le(const Vec3* const , const Vec3* const ) const override {
         return Vec3(0, 0, 0);
     }
 };
@@ -63,20 +70,18 @@ public:
  * TODO: Object <---> mesh relationship is not fully implemented
 */
 class AreaSource: public Emitter {
-protected:
-    Vec3 pos;
 public:
     CPT_CPU_GPU AreaSource() {}
 
-    CONDITION_TEMPLATE_2(VType1, VType2, Vec3)
-    CPT_CPU_GPU AreaSource(VType1&& le, VType2&& pos, int obj_ref_id): 
-        Emitter(std::forward<VType1>(le), obj_ref_id), pos(std::forward<VType2>(pos)) {}
+    CONDITION_TEMPLATE(VType, Vec3)
+    CPT_CPU_GPU AreaSource(VType&& le, int obj_ref_id): 
+        Emitter(std::forward<VType>(le), obj_ref_id) {}
 
-    CPT_CPU_GPU Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const override {
-        return this->pos;
+    CPT_GPU Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const override {
+        return Vec3(0, 0, 0);
     }
 
-    CPT_CPU_GPU virtual Vec3 eval_le(const Vec3* const, const Vec3* const) const noexcept override {
+    CPT_GPU virtual Vec3 eval_le(const Vec3* const , const Vec3* const) const override {
         return Vec3(0, 0, 0);
     }
 };

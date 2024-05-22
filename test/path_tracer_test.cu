@@ -3,6 +3,7 @@
 #include "core/object.cuh"
 #include "core/emitter.cuh"
 #include "core/camera_model.cuh"
+#include "core/virtual_funcs.cuh"
 #include "renderer/path_tracer.cuh"
 #include <ext/lodepng/lodepng.h>
 
@@ -10,11 +11,24 @@ __constant__ DeviceCamera dev_cam;
 __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
+
+// Global memory class with virtual functions initialization
+template <typename Ty>
+__global__ void init_inheritance(const Ty* const gmem, Ty* pure_gmem) {
+    pure_gmem[threadIdx.x] = new Ty(gmem[threadIdx.x]);
+}
+
+template <typename Ty>
+__global__ void destroy_inheritance(const Ty* const gmem, Ty* pure_gmem) {
+    delete pure_gmem[threadIdx.x];
+}
+
 int main() {
     InitProfiler();
 
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
+    int num_material = 5, num_emitters = 1;
     int spp       = 1;
     std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
     std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
@@ -40,30 +54,24 @@ int main() {
     objects.emplace_back(4, 12, 1);
 
     // TODO: this is not correct
-    std::vector<BSDF*> bsdfs(5, nullptr);
-    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[0], sizeof(LambertianBSDF)));
-    bsdfs[0][0] = LambertianBSDF(Vec3(1, 0.2, 0.2));        // right red
+    BSDF** pure_bsdfs;
+    CUDA_CHECK_RETURN(cudaMalloc(&pure_bsdfs, sizeof(BSDF*) * num_material));
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[0], Vec3(1, 0.2, 0.2), Vec3(), Vec3());
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[1], Vec3(0.8, 0.8, 0.8), Vec3(), Vec3());
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[2], Vec3(0.2, 1, 0.2), Vec3(), Vec3());
+    create_bsdf<SpecularBSDF><<<1, 1>>>(pure_bsdfs[3], Vec3(), Vec3(0.9, 0.9, 0.9), Vec3());
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[4], Vec3(0.99, 0.99, 0.99), Vec3(), Vec3());
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[1], sizeof(LambertianBSDF)));
-    bsdfs[1][0] = LambertianBSDF(Vec3(0.8, 0.8, 0.8));      // white
+    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, pure_bsdfs, num_material * sizeof(BSDF*)));
 
-    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[2], sizeof(LambertianBSDF)));
-    bsdfs[2][0] = LambertianBSDF(Vec3(0.2, 1, 0.2));        // left green
-
-    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[3], sizeof(SpecularBSDF)));
-    bsdfs[3][0] = SpecularBSDF(Vec3(0.9, 0.9, 0.9));        // specular
-
-    CUDA_CHECK_RETURN(cudaMallocManaged(&bsdfs[4], sizeof(SpecularBSDF)));
-    bsdfs[4][0] = LambertianBSDF(Vec3(0.99, 0.99, 0.99));    // ball
-    // copy material information to CUDA constant memory
-    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, bsdfs.data(), bsdfs.size() * sizeof(BSDF*)));
-
-    Emitter* g_emitter;
-    CUDA_CHECK_RETURN(cudaMallocManaged(&g_emitter, sizeof(PointSource)));
-    g_emitter[0] = PointSource(Vec3(10, 10, 10), Vec3(0, 0, 0.8));
-
-    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, g_emitter, sizeof(Emitter*)));
-
+    Emitter** pure_emitters; // null_emitter
+    CUDA_CHECK_RETURN(cudaMalloc(&pure_emitters, sizeof(Emitter*) * (num_emitters + 1)));
+    create_abstract_source<<<1, 1>>>(pure_emitters[0]);
+    create_point_source<<<1, 1>>>(pure_emitters[1], Vec3(10, 10, 10), Vec3(0, 0, 0.8));
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, pure_emitters, (num_emitters + 1) * sizeof(Emitter*)));
+    
     // camera setup
     Vec3 from(0, -3, 0), to(0, 0, 0);
     int width = 1024, height = 1024;
@@ -95,10 +103,11 @@ int main() {
     norm_data.destroy();
     uvs_data.destroy();
 
-    for (auto& bsdf: bsdfs) {
-        CUDA_CHECK_RETURN(cudaFree(bsdf));
-    }
-    CUDA_CHECK_RETURN(cudaFree(g_emitter));
+    destroy_gpu_alloc<<<1, num_material>>>(pure_bsdfs);
+    destroy_gpu_alloc<<<1, 2>>>(pure_emitters);
+
+    CUDA_CHECK_RETURN(cudaFree(pure_bsdfs));
+    CUDA_CHECK_RETURN(cudaFree(pure_emitters));
 
     // ReportThreadStats();    
     // PrintStats(stdout);
