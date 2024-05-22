@@ -109,8 +109,8 @@ public:
         auto op = verts.x[index] - ray.o; 
         float b = op.dot(ray.d);
         float determinant = sqrtf(b * b - op.dot(op) + verts.y[index].x() * verts.y[index].x());
-        float result = b - determinant > 0 ? b - determinant : 0;
-        result = (result == 0 && b + determinant > 0) ? b + determinant : result;
+        float result = b - determinant > EPSILON ? b - determinant : 0;
+        result = (result == 0 && b + determinant > EPSILON) ? b + determinant : result;
         return Interaction((ray.d * result - op).normalized(), Vec2(0, 0), true);
     }
 };

@@ -40,7 +40,7 @@ class LambertianBSDF: public BSDF {
 using BSDF::k_d;
 public:
     CPT_CPU_GPU LambertianBSDF(Vec3 _k_d, int kd_id = -1):
-        BSDF(_k_d, Vec3(0, 0, 0), Vec3(0, 0, 0), kd_id, -1) {}
+        BSDF(std::move(_k_d), Vec3(0, 0, 0), Vec3(0, 0, 0), kd_id, -1) {}
 
     CPT_CPU_GPU LambertianBSDF(): BSDF() {}
     
@@ -49,7 +49,7 @@ public:
         // printf("out: %f, %f, %f\n", out.x(), out.y(), out.z());
         float dot_val = it.shading_norm.dot(out);
         if (dot_val < 0)
-            printf("WTF %f: norm -> %f, %f, %f, out: %f, %f, %f\n", dot_val, it.shading_norm.x(), it.shading_norm.y(), it.shading_norm.z(), out.x(), out.y(), out.z());
+            // printf("WTF %f: norm -> %f, %f, %f, out: %f, %f, %f\n", dot_val, it.shading_norm.x(), it.shading_norm.y(), it.shading_norm.z(), out.x(), out.y(), out.z());
         auto res = it.shading_norm.dot(out) * M_1_PI;
     }
 
@@ -70,7 +70,7 @@ class SpecularBSDF: public BSDF {
 using BSDF::k_s;
 public:
     CPT_CPU_GPU SpecularBSDF(Vec3 _k_s, int ks_id = -1):
-        BSDF(Vec3(0, 0, 0), _k_s, Vec3(0, 0, 0), -1, ks_id) {}
+        BSDF(Vec3(0, 0, 0), std::move(_k_s), Vec3(0, 0, 0), -1, ks_id) {}
 
     CPT_CPU_GPU SpecularBSDF(): BSDF() {}
     
@@ -84,8 +84,31 @@ public:
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv, float& sample_pdf) const override {
         sample_pdf = 1;
-        float cosine_term = indir.dot(it.shading_norm);
-        throughput = k_s * max(-cosine_term, 0.f);
+        throughput = k_s * (indir.dot(it.shading_norm) < 0);
+        return indir - 2.f * indir.dot(it.shading_norm) * it.shading_norm;
+    }
+};
+
+
+class TranslucentBSDF: public BSDF {
+using BSDF::k_s;
+public:
+    CPT_CPU_GPU TranslucentBSDF(Vec3 k_s, Vec3 ior, int ex_id):
+        BSDF(std::move(ior), std::move(k_s), Vec3(0, 0, 0), -1, ex_id) {}
+
+    CPT_CPU_GPU TranslucentBSDF(): BSDF() {}
+    
+    CPT_CPU_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override {
+        return 0.f;
+    }
+
+    CPT_CPU_GPU Vec3 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+        return Vec3(0, 0, 0);
+    }
+
+    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv, float& sample_pdf) const override {
+        sample_pdf = 1;
+        throughput = k_s * (indir.dot(it.shading_norm) < 0);
         return indir - 2.f * indir.dot(it.shading_norm) * it.shading_norm;
     }
 };

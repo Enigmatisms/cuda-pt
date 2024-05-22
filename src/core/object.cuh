@@ -5,6 +5,7 @@
 */
 #pragma once
 #include "core/bsdf.cuh"
+#include "core/soa.cuh"
 #include "core/shapes.cuh"
 
 class ObjInfo {
@@ -18,6 +19,24 @@ public:
 public:
     CPT_CPU_GPU_INLINE bool intersect(const Ray& ray, float& t_near) const noexcept {
         return _aabb.intersect(ray, t_near);
+    }
+
+    CPT_CPU_GPU void get_aabb(const SoA3<Vec3>& prims, bool is_polygon = true) {
+        int ub = prim_offset + prim_num;
+        for (int i = prim_offset; i < ub; i++) {
+            if (is_polygon) {
+                _aabb.mini.minimize(prims.x[i]);
+                _aabb.mini.minimize(prims.y[i]);
+                _aabb.mini.minimize(prims.z[i]);
+
+                _aabb.maxi.maximize(prims.x[i]);
+                _aabb.maxi.maximize(prims.y[i]);
+                _aabb.maxi.maximize(prims.z[i]);
+            } else {
+                _aabb.mini = prims.x[i] - prims.y[i].x();
+                _aabb.maxi = prims.x[i] + prims.y[i].x();
+            }
+        }
     }
 
     CPT_CPU_GPU_INLINE bool is_emitter() const noexcept { return this->emitter_id > 0; }

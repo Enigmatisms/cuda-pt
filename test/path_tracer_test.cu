@@ -29,13 +29,12 @@ int main() {
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
     int num_material = 5, num_emitters = 1;
-    int spp       = 1;
+    int spp       = 1024;
     std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
     std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
     std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
     std::vector<Vec3> norms = {{-1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, 1}, {0, -1, 0}, {0, -1, 0}, {1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, -1}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}};
 
-    Vec3 normal_default = {0, 1, 0};
     Vec2 uv_default     = {0.0, 0.0};
 
     // scene setup
@@ -47,18 +46,27 @@ int main() {
 
     std::vector<ObjInfo> objects;
     objects.emplace_back(0, 0, 2);
+    objects.back().get_aabb(vert_data);
     objects.emplace_back(1, 2, 2);
+    objects.back().get_aabb(vert_data);
     objects.emplace_back(1, 4, 2);
+    objects.back().get_aabb(vert_data);
     objects.emplace_back(2, 6, 2);
+    objects.back().get_aabb(vert_data);
     objects.emplace_back(1, 8, 2);
+    objects.back().get_aabb(vert_data);
     objects.emplace_back(3, 10, 1);
+    objects.back().get_aabb(vert_data, false);
     objects.emplace_back(3, 11, 1);
+    objects.back().get_aabb(vert_data, false);
     objects.emplace_back(4, 12, 1);
+    objects.back().get_aabb(vert_data, false);
+
 
     // TODO: this is not correct
     BSDF** pure_bsdfs;
     CUDA_CHECK_RETURN(cudaMalloc(&pure_bsdfs, sizeof(BSDF*) * num_material));
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs, Vec3(1, 0.2, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs, Vec3(1, 0.2, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));     // red right
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 1, Vec3(0.8, 0.8, 0.8), Vec3(0, 0, 0), Vec3(0, 0, 0));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());

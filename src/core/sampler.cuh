@@ -13,8 +13,8 @@
 
 class Sampler {
 public:
-    CPT_GPU Sampler(int seed) {
-        curand_init(seed, 0, 0, &rand_state);
+    CPT_GPU Sampler(int seed, int offset = 0) {
+        curand_init(seed + offset, 0, 0, &rand_state);
     }
 
     CPT_GPU Vec2 next2D() noexcept { return Vec2(curand_uniform(&rand_state), curand_uniform(&rand_state)); }

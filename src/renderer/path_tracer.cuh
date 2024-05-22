@@ -8,6 +8,8 @@
 #include "core/object.cuh"
 #include "renderer/tracer_base.cuh"
 
+static constexpr int SEED_SCALER = 11451;
+
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
 
@@ -28,21 +30,22 @@ CPT_GPU bool occlusion_test(
     float max_dist
 ) {
     float aabb_tmin = 0;
-    ShapeIntersectVisitor shape_visitor(verts, ray, EPSILON, max_dist - EPSILON);
+    ShapeIntersectVisitor shape_visitor(verts, ray, 0, EPSILON, max_dist - EPSILON);
     int prim_id = 0, num_prim = 0;
     for (int obj_id = 0; obj_id < num_objects; obj_id ++) {
+        num_prim = objects[obj_id].prim_num;
         if (objects[obj_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist + EPSILON) {
             // ray intersects the object
-            num_prim = objects[obj_id].prim_num;
-            for (int _i = 0; _i < num_prim; _i ++, prim_id ++) {
-                if (aabbs[prim_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist + EPSILON) {
-                    shape_visitor.set_index(prim_id);
-                    float dist = variant::apply_visitor(shape_visitor, shapes[prim_id]);
-                    if (dist > max_dist - EPSILON) continue;
-                    return false;
+            for (int _i = 0; _i < num_prim; _i ++) {
+                if (aabbs[prim_id + _i].intersect(ray, aabb_tmin) && aabb_tmin < max_dist + EPSILON) {
+                    shape_visitor.set_index(prim_id + _i);
+                    float dist = variant::apply_visitor(shape_visitor, shapes[prim_id + _i]);
+                    if (dist < max_dist - EPSILON && dist > EPSILON)
+                        return false;
                 }
             }
         }
+        prim_id += num_prim;
     }
     return true;
 }
@@ -89,12 +92,13 @@ __global__ static void render_pt_kernel(
     int num_prims,
     int num_objects,
     int num_emitter,
+    int iteration,
     int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 
-    Sampler sampler(px + py * image.w());
+    Sampler sampler(px + py * image.w(), iteration * SEED_SCALER);
     // step 1: generate ray
     Ray ray = dev_cam.generate_ray(px, py, sampler);
 
@@ -181,11 +185,11 @@ __global__ static void render_pt_kernel(
                 // accumulate direct component
                 Vec3 direct = throughput * shadow_int * (mis_w / emitter_pdf) * \
                     c_material[material_id]->eval(it, shadow_ray.d, ray.d);
-                printf("%f, %f, %f, %f, %f, %d\n", shadow_int.x(), throughput.x(), mis_w, emitter_pdf, material_pdf, material_id);
+                // printf("%f, %f, %f, %f, %f, %d\n", shadow_int.x(), throughput.x(), mis_w, emitter_pdf, material_pdf, material_id);
                 radiance += direct;
-                if (direct.length2() > 1e-6) {
-                    printf("Direct Radiance: %f, %f, %f\n", direct.x(), direct.y(), direct.z());
-                }
+                // if (direct.length2() > 1e-6) {
+                    // printf("Direct Radiance: %f, %f, %f\n", direct.x(), direct.y(), direct.z());
+                // }
             }
 
             // step 4: sample a new ray direction, bounce the 
@@ -201,9 +205,9 @@ __global__ static void render_pt_kernel(
     }
     __syncthreads();
     image(px, py) += radiance;
-    if (radiance.length2() > 1e-6) {
-        printf("Radiance: %f, %f, %f\n", radiance.x(), radiance.y(), radiance.z());
-    }
+    // if (radiance.length2() > 1e-6) {
+    //     printf("Radiance: %f, %f, %f\n", radiance.x(), radiance.y(), radiance.z());
+    // }
 }
 
 class PathTracer: public TracerBase {
@@ -278,12 +282,12 @@ public:
                 // for more sophisticated renderer (like path tracer), shared_memory should be used
                 render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
                     obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
-                    *dev_image, num_prims, num_objs, num_emitter, max_depth
+                    *dev_image, num_prims, num_objs, num_emitter, i, max_depth
                 ); 
                 CUDA_CHECK_RETURN(cudaDeviceSynchronize());
             }
         }
-        return image.export_cpu(1.f);
+        return image.export_cpu(0.2f / num_iter);
     }
 };
 
