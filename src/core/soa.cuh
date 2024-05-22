@@ -56,10 +56,14 @@ public:
         cudaStream_t stream[3];
         for (int i = 0; i < 3; i++) {
             cudaStreamCreate(&stream[i]);
-            parallel_memset<<<1, 256, 0, stream[i]>>>(&_data[i * size], v1, size);
+        }
+        parallel_memset<<<1, 256, 0, stream[0]>>>(x, v1, size);
+        parallel_memset<<<1, 256, 0, stream[1]>>>(y, v2, size);
+        parallel_memset<<<1, 256, 0, stream[2]>>>(z, v3, size);
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        for (int i = 0; i < 3; i++) {
             cudaStreamDestroy(stream[i]);
         }
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
 
     CPT_CPU void fill(const StructType& v) {

@@ -33,14 +33,16 @@ int main() {
     std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
     std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
     std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+    std::vector<Vec3> norms = {{-1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, 1}, {0, -1, 0}, {0, -1, 0}, {1, 0, 0}, {1, 0, 0}, {0, 0, -1}, {0, 0, -1}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}};
+
     Vec3 normal_default = {0, 1, 0};
-    Vec2 uv_default     = {0.5, 0.5};
+    Vec2 uv_default     = {0.0, 0.0};
 
     // scene setup
     SoA3<Vec3> vert_data(v1s.size()), norm_data(v1s.size());
     SoA3<Vec2> uvs_data(v1s.size());
     vert_data.from_vectors(v1s, v2s, v3s);
-    norm_data.fill(normal_default);
+    norm_data.from_vectors(norms, norms, norms);
     uvs_data.fill(uv_default);
 
     std::vector<ObjInfo> objects;
@@ -56,11 +58,15 @@ int main() {
     // TODO: this is not correct
     BSDF** pure_bsdfs;
     CUDA_CHECK_RETURN(cudaMalloc(&pure_bsdfs, sizeof(BSDF*) * num_material));
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[0], Vec3(1, 0.2, 0.2), Vec3(), Vec3());
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[1], Vec3(0.8, 0.8, 0.8), Vec3(), Vec3());
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[2], Vec3(0.2, 1, 0.2), Vec3(), Vec3());
-    create_bsdf<SpecularBSDF><<<1, 1>>>(pure_bsdfs[3], Vec3(), Vec3(0.9, 0.9, 0.9), Vec3());
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs[4], Vec3(0.99, 0.99, 0.99), Vec3(), Vec3());
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs, Vec3(1, 0.2, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 1, Vec3(0.8, 0.8, 0.8), Vec3(0, 0, 0), Vec3(0, 0, 0));
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 2, Vec3(0.2, 1, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    create_bsdf<SpecularBSDF><<<1, 1>>>(pure_bsdfs + 3, Vec3(0, 0, 0), Vec3(0.9, 0.9, 0.9), Vec3(0, 0, 0));
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 4, Vec3(0.99, 0.99, 0.99), Vec3(0, 0, 0), Vec3(0, 0, 0));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, pure_bsdfs, num_material * sizeof(BSDF*)));
@@ -68,6 +74,7 @@ int main() {
     Emitter** pure_emitters; // null_emitter
     CUDA_CHECK_RETURN(cudaMalloc(&pure_emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(pure_emitters[0]);
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     create_point_source<<<1, 1>>>(pure_emitters[1], Vec3(10, 10, 10), Vec3(0, 0, 0.8));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, pure_emitters, (num_emitters + 1) * sizeof(Emitter*)));

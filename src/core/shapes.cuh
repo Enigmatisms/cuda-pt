@@ -111,7 +111,7 @@ public:
         float determinant = sqrtf(b * b - op.dot(op) + verts.y[index].x() * verts.y[index].x());
         float result = b - determinant > 0 ? b - determinant : 0;
         result = (result == 0 && b + determinant > 0) ? b + determinant : result;
-        return Interaction(ray.d * result - op, Vec2(0, 0), true);
+        return Interaction((ray.d * result - op).normalized(), Vec2(0, 0), true);
     }
 };
 
@@ -210,7 +210,7 @@ public:
         return shape.intersect_full(ray, verts, norms, uvs, index); 
     }
 
-    CPT_CPU_GPU_INLINE void set_index(int i)        noexcept { this->index = i; }
+    CPT_CPU_GPU_INLINE void set_index(int i) noexcept { this->index = i; }
 };
 
 /**

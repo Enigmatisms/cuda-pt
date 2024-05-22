@@ -181,7 +181,7 @@ __global__ static void render_pt_kernel(
                 // accumulate direct component
                 Vec3 direct = throughput * shadow_int * (mis_w / emitter_pdf) * \
                     c_material[material_id]->eval(it, shadow_ray.d, ray.d);
-                printf("%f, %f, %f, %f, %d\n", shadow_int.x(), mis_w, emitter_pdf, material_pdf, material_id);
+                printf("%f, %f, %f, %f, %f, %d\n", shadow_int.x(), throughput.x(), mis_w, emitter_pdf, material_pdf, material_id);
                 radiance += direct;
                 if (direct.length2() > 1e-6) {
                     printf("Direct Radiance: %f, %f, %f\n", direct.x(), direct.y(), direct.z());
