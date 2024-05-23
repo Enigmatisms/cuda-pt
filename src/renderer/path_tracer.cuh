@@ -147,7 +147,6 @@ __global__ static void render_pt_kernel(
         }
 
         // ============= step 2: local shading for indirect bounces ================
-        // currently, I assume Lambertian BSDF
         if (min_index >= 0) {
             extract.set_index(min_index);
             auto it = variant::apply_visitor(extract, shapes[min_index]);
@@ -183,13 +182,8 @@ __global__ static void render_pt_kernel(
                 float mis_w = direct_pdf / (direct_pdf + 
                     material_pdf * emitter->non_delta());
                 // accumulate direct component
-                Vec3 direct = throughput * shadow_int * (mis_w / emitter_pdf) * \
+                radiance += throughput * shadow_int * (mis_w / direct_pdf) * \
                     c_material[material_id]->eval(it, shadow_ray.d, ray.d);
-                // printf("%f, %f, %f, %f, %f, %d\n", shadow_int.x(), throughput.x(), mis_w, emitter_pdf, material_pdf, material_id);
-                radiance += direct;
-                // if (direct.length2() > 1e-6) {
-                    // printf("Direct Radiance: %f, %f, %f\n", direct.x(), direct.y(), direct.z());
-                // }
             }
 
             // step 4: sample a new ray direction, bounce the 
@@ -200,14 +194,10 @@ __global__ static void render_pt_kernel(
             throughput *= local_th * (1.f /  sample_pdf);
         }
 
-
         // TODO: MIS for emitter
     }
     __syncthreads();
     image(px, py) += radiance;
-    // if (radiance.length2() > 1e-6) {
-    //     printf("Radiance: %f, %f, %f\n", radiance.x(), radiance.y(), radiance.z());
-    // }
 }
 
 class PathTracer: public TracerBase {
@@ -259,7 +249,6 @@ public:
             for (int j = 0; j < prim_num; j++)
                 prim2obj[prim_offset + j] = i;
             prim_offset += prim_num;
-            printf("Set %d of %d starting at %d\n", _objs[i].prim_num, i, prim_offset);
         }
         // TODO: copy all the material into constant memory
     }
@@ -273,10 +262,10 @@ public:
         int num_iter = 64,
         int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
     ) override {
-        ProfilePhase _(Prof::DepthRenderingHost);
+        ProfilePhase _(Prof::PTRenderingHost);
         {
-            ProfilePhase _p(Prof::DepthRenderingDevice);
-            TicToc _timer("render_kernel()", num_iter);
+            ProfilePhase _p(Prof::PTRenderingDevice);
+            TicToc _timer("render_pt_kernel()", num_iter);
             // TODO: stream processing
             for (int i = 0; i < num_iter; i++) {
                 // for more sophisticated renderer (like path tracer), shared_memory should be used
@@ -287,7 +276,7 @@ public:
                 CUDA_CHECK_RETURN(cudaDeviceSynchronize());
             }
         }
-        return image.export_cpu(0.2f / num_iter);
+        return image.export_cpu(1.f / num_iter);
     }
 };
 

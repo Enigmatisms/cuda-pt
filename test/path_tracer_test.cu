@@ -28,8 +28,8 @@ int main() {
 
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
-    int num_material = 5, num_emitters = 1;
-    int spp       = 1024;
+    int num_material = 6, num_emitters = 1;
+    int spp       = 256;
     std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
     std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
     std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
@@ -57,9 +57,9 @@ int main() {
     objects.back().get_aabb(vert_data);
     objects.emplace_back(3, 10, 1);
     objects.back().get_aabb(vert_data, false);
-    objects.emplace_back(3, 11, 1);
+    objects.emplace_back(4, 11, 1);
     objects.back().get_aabb(vert_data, false);
-    objects.emplace_back(4, 12, 1);
+    objects.emplace_back(5, 12, 1);
     objects.back().get_aabb(vert_data, false);
 
 
@@ -67,14 +67,11 @@ int main() {
     BSDF** pure_bsdfs;
     CUDA_CHECK_RETURN(cudaMalloc(&pure_bsdfs, sizeof(BSDF*) * num_material));
     create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs, Vec3(1, 0.2, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));     // red right
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 1, Vec3(0.8, 0.8, 0.8), Vec3(0, 0, 0), Vec3(0, 0, 0));
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 2, Vec3(0.2, 1, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     create_bsdf<SpecularBSDF><<<1, 1>>>(pure_bsdfs + 3, Vec3(0, 0, 0), Vec3(0.9, 0.9, 0.9), Vec3(0, 0, 0));
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 4, Vec3(0.99, 0.99, 0.99), Vec3(0, 0, 0), Vec3(0, 0, 0));
+    create_bsdf<TranslucentBSDF><<<1, 1>>>(pure_bsdfs + 4, Vec3(1.5, 0, 0), Vec3(0.99, 0.99, 0.99), Vec3(0, 0, 0));
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 5, Vec3(0.99, 0.99, 0.99), Vec3(0, 0, 0), Vec3(0, 0, 0));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, pure_bsdfs, num_material * sizeof(BSDF*)));
@@ -82,8 +79,7 @@ int main() {
     Emitter** pure_emitters; // null_emitter
     CUDA_CHECK_RETURN(cudaMalloc(&pure_emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(pure_emitters[0]);
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    create_point_source<<<1, 1>>>(pure_emitters[1], Vec3(10, 10, 10), Vec3(0, 0, 0.8));
+    create_point_source<<<1, 1>>>(pure_emitters[1], Vec3(2, 2, 2), Vec3(0, 0, 0.8));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, pure_emitters, (num_emitters + 1) * sizeof(Emitter*)));
     
@@ -102,7 +98,8 @@ int main() {
         shapes[i] = SphereShape(i >> 1);
     
     PathTracer pt(objects, shapes, vert_data, norm_data, uvs_data, 1, width, height);
-    auto bytes_buffer = pt.render(spp, 4);
+    printf("Prepare to render the scene...\n");
+    auto bytes_buffer = pt.render(spp, 3);
 
     std::string file_name = "render.png";
 

@@ -17,8 +17,6 @@ __global__ void create_bsdf(BSDF** dst, Vec3 k_d, Vec3 k_s, Vec3 k_g, int kd_tex
         (*dst)->set_kg(std::move(k_g));
         (*dst)->set_kd_id(kd_tex_id);
         (*dst)->set_ex_id(ex_tex_id);
-        printf("(1) k_d: %f, %f, %f, k_s: %f, %f, %f\n", (*dst)->k_d.x(), (*dst)->k_d.y(), (*dst)->k_d.z(), (*dst)->k_s.x(), (*dst)->k_s.y(), (*dst)->k_s.z());
-        printf("(2) k_d: %f, %f, %f, k_s: %f, %f, %f\n", k_d.x(), k_d.y(), k_d.z(), k_s.x(), k_s.y(), k_s.z());
     }
 }
 

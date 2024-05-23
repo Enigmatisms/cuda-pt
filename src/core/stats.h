@@ -60,7 +60,7 @@ public:
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
         auto elapsed = static_cast<double>(count) / (1e3 * num);
-        printf("`%s` takes time: %lf.3 ms\n", name.c_str(), elapsed);
+        printf("`%s` takes time: %.3lf ms per iteration (%d its)\n", name.c_str(), elapsed, num);
     }
 };
 
@@ -157,7 +157,9 @@ class StatsAccumulator {
 enum class Prof {
     StartUp,
     DepthRenderingHost,
+    PTRenderingHost,
     DepthRenderingDevice,
+    PTRenderingDevice,
     NumProfCategories
 };
 
@@ -168,8 +170,10 @@ inline uint64_t ProfToBits(Prof p) { return 1ull << (int)p; }
 
 static const char *ProfNames[] = {
     "Program starting up",
-    "render_depth()",
-    "render_depth_kernel()"
+    "(CPU) render_depth()",
+    "(CPU) render_path_tracing()",
+    "(GPU) render_depth_kernel()",
+    "(GPU) render_path_tracing_kernel()"
 };
 
 static_assert((int)Prof::NumProfCategories ==

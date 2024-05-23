@@ -35,4 +35,16 @@ __host__ static void CheckCudaErrorAux (const char *file, unsigned line, const c
 }
 #endif
 
+template <typename T> 
+CPT_CPU_GPU_INLINE T sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
+
+template<typename T1, typename T2>
+CPT_CPU_GPU_INLINE auto select(T1&& v_true, T2&& v_false, bool predicate) {
+    return v_true * predicate + v_false * (1 - predicate);
+}
+
+// inline int to_int(float x) { return int(std::clamp(x, 0.f, 1.f) * 255); }
 inline int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.2) * 255 + .5); }

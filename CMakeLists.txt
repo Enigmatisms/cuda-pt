@@ -1,16 +1,17 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 # CUDA_ARCHITECTURES native is available in CMake since 3.24
 
-if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
-    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
-endif ()
-
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG")
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -g -O0")
+  set(CMAKE_CUDA_FLAGS_DEBUG "-G -g")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
+  message(STATUS "Building project in DEBUG mode.")
+  set(CMAKE_BUILD_TYPE Debug)
 ELSE()
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -O3")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
+  message(STATUS "Building project in RELEASE mode.")
+  set(CMAKE_BUILD_TYPE Release)
 ENDIF()
 SET(COMPILE_CUDA True)
 
