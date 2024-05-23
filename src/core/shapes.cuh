@@ -111,7 +111,7 @@ public:
         float determinant = sqrtf(b * b - op.dot(op) + verts.y[index].x() * verts.y[index].x());
         float result = b - determinant > EPSILON ? b - determinant : 0;
         result = (result == 0 && b + determinant > EPSILON) ? b + determinant : result;
-        return Interaction((ray.d * result - op).normalized(), Vec2(0, 0), true);
+        return Interaction((ray.d * result - op).normalized(), Vec2(0, 0));
     }
 };
 
@@ -150,14 +150,14 @@ public:
         SO3 M(v1, v2, -ray.d, false);       // column wise input
         auto solution = M.inverse().rotate(ray.o - anchor);
         float diff_x = 1.f - solution.x(), diff_y = 1.f - solution.y();
-        auto lerp_normal = norms.x[index] * diff_x * diff_y + \
-                           norms.y[index] * solution.x() * diff_y + \
-                           norms.z[index] * solution.y() * diff_x;
-        lerp_normal.normalize();
-        auto uv = uvs.x[index] * diff_x * diff_y + \
-                  uvs.y[index] * solution.x() * diff_y + \
-                  uvs.z[index] * solution.y() * diff_x;
-        return Interaction(lerp_normal, uv, true);
+        return Interaction((
+            norms.x[index] * diff_x * diff_y + \
+            norms.y[index] * solution.x() * diff_y + \
+            norms.z[index] * solution.y() * diff_x).normalized(),
+            uvs.x[index] * diff_x * diff_y + \
+            uvs.y[index] * solution.x() * diff_y + \
+            uvs.z[index] * solution.y() * diff_x
+        );
     }
 };
 
@@ -166,24 +166,22 @@ private:
     const Ray& ray;
     const SoA3<Vec3>& verts; 
     int index;
-    float min_range;
     float max_range;
 public:
     CPT_CPU_GPU ShapeIntersectVisitor(
         const SoA3<Vec3>& _verts, 
         const Ray& _ray,
         int _index,
-        float _min_range = EPSILON, float _max_range = std::numeric_limits<float>::infinity()
+        float _max_range = std::numeric_limits<float>::infinity()
     ): ray(_ray), verts(_verts), 
-       index(_index), min_range(_min_range), max_range(_max_range) {}
+       index(_index), max_range(_max_range) {}
 
     template <typename ShapeType>
     CPT_CPU_GPU_INLINE float operator()(const ShapeType& shape) const { 
-        return shape.intersect(ray, verts, index, min_range, max_range); 
+        return shape.intersect(ray, verts, index, EPSILON, max_range); 
     }
 
     CPT_CPU_GPU_INLINE void set_index(int i)        noexcept { this->index = i; }
-    CPT_CPU_GPU_INLINE void set_min_range(int min_r) noexcept { this->min_range = min_r; }
     CPT_CPU_GPU_INLINE void set_max_range(int max_r) noexcept { this->max_range = max_r; }
 };
 
@@ -194,8 +192,6 @@ private:
     const SoA3<Vec3>& norms; 
     const SoA3<Vec2>& uvs; 
     int index;
-    float min_range;
-    float max_range;
 public:
     CPT_CPU_GPU ShapeExtractVisitor(
         const SoA3<Vec3>& _verts, 

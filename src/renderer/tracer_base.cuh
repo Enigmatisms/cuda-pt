@@ -40,6 +40,7 @@ CPT_GPU float ray_intersect(
     float min_dist
 ) {
     float aabb_tmin = 0;
+    #pragma unroll
     for (int idx = 0; idx < remain_prims; idx ++) {
         if (s_aabbs[idx].intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
             shape_visitor.set_index(idx);

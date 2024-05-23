@@ -32,7 +32,7 @@ public:
 
     CPT_CPU_GPU virtual Vec3 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const = 0;
 
-    CPT_CPU_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv, float& sample_pdf) const = 0;
+    CPT_CPU_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const = 0;
 };
 
 
@@ -57,9 +57,11 @@ public:
         return k_d * max(0.f, cosine_term) * M_1_PI;
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv, float& sample_pdf) const override {
+    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const override {
+        float sample_pdf = 0;
         auto local_ray = sample_cosine_hemisphere(std::move(uv), sample_pdf);
-        throughput = max(0.f, local_ray.z()) * k_d * M_1_PI;
+        // throughput *= f / pdf
+        throughput *= k_d;
         return delocalize_rotate(Vec3(0, 0, 1), it.shading_norm, local_ray);;
     }
 };
@@ -80,9 +82,9 @@ public:
         return Vec3(0, 0, 0);
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv, float& sample_pdf) const override {
-        sample_pdf = 1;
-        throughput = k_s * (indir.dot(it.shading_norm) < 0);
+    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const override {
+        // throughput *= f / pdf
+        throughput *= k_s * (indir.dot(it.shading_norm) < 0);
         return indir - 2.f * indir.dot(it.shading_norm) * it.shading_norm;
     }
 };
@@ -105,20 +107,19 @@ public:
         return Vec3(0, 0, 0);
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv, float& sample_pdf) const override {
+    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const override {
         float dot_normal = indir.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
-        bool entering_this = dot_normal < 0;
-        float ni = select(1.f, k_d.x(), entering_this);
-        float nr = select(k_d.x(), 1.f, entering_this), cos_r2 = 0;
+        float ni = select(1.f, k_d.x(), dot_normal < 0);
+        float nr = select(k_d.x(), 1.f, dot_normal < 0), cos_r2 = 0;
         Vec3 ret_dir = (indir - 2.f * it.shading_norm * dot_normal).normalized(),
              refra_vec = snell_refraction(indir, it.shading_norm, cos_r2, dot_normal, ni, nr);
-        float reflect_ratio = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
-        bool total_ref = is_total_reflection(dot_normal, ni, nr), reflect = uv.x() < reflect_ratio;
+        bool total_ref = is_total_reflection(dot_normal, ni, nr), reflect = uv.x() < \
+            fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
         ret_dir = select(ret_dir, refra_vec, total_ref || reflect);
-        sample_pdf = select(1.f, select(reflect_ratio, 1.f - reflect_ratio, reflect), total_ref);
-        throughput = sample_pdf * k_s;
+        // throughput *= f / pdf
+        throughput *= k_s;
         return ret_dir;
     }
 
@@ -128,11 +129,11 @@ public:
 
     CPT_CPU_GPU static Vec3 snell_refraction(const Vec3& incid, const Vec3& normal, float& cos_r2, float dot_n, float ni, float nr) {
         /* Refraction vector by Snell's Law, note that an extra flag will be returned */
-        float exiting = sgn(dot_n), ratio = ni / nr;
+        float ratio = ni / nr;
         cos_r2 = 1.f - (ratio * ratio) * (1. - dot_n * dot_n);        // refraction angle cosine
         // for ni > nr situation, there will be total reflection
-        bool refrac_flag = cos_r2 > 0.f;
-        return (ratio * incid - ratio * dot_n * normal + exiting * sqrtf(fabsf(cos_r2)) * normal).normalized() * refrac_flag;
+        // if cos_r2 <= 0.f, then return value will be Vec3(0, 0, 0)
+        return (ratio * incid - ratio * dot_n * normal + sgn(dot_n) * sqrtf(fabsf(cos_r2)) * normal).normalized() * (cos_r2 > 0.f);
     }
 
     CPT_CPU_GPU static float fresnel_equation(float n_in, float n_out, float cos_inc, float cos_ref) {

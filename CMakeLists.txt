@@ -8,7 +8,9 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
   message(STATUS "Building project in DEBUG mode.")
   set(CMAKE_BUILD_TYPE Debug)
 ELSE()
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -O3")
+  # to check register usage, please set "-Xptxas -v"
+  # to cap the register usage to boost occupancy, set ""
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -O3 --maxrregcount=64")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
   message(STATUS "Building project in RELEASE mode.")
   set(CMAKE_BUILD_TYPE Release)

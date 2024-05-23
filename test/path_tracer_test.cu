@@ -23,13 +23,13 @@ __global__ void destroy_inheritance(const Ty* const gmem, Ty* pure_gmem) {
     delete pure_gmem[threadIdx.x];
 }
 
-int main() {
+int main(int argc, char** argv) {
     InitProfiler();
 
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
     int num_material = 6, num_emitters = 1;
-    int spp       = 1;
+    int spp       = argc > 1 ? atoi(argv[1]) : 128;
     std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
     std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
     std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};

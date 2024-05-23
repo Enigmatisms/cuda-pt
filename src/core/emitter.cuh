@@ -57,7 +57,7 @@ public:
 
     CPT_GPU_INLINE Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf) const override {
         le = this->Le * distance_attenuate(pos - hit_pos);
-        pdf = 1.f;
+        pdf *= 1.f;
         return this->pos;
     }
 
