@@ -103,8 +103,6 @@ __global__ static void render_pt_kernel(
     // step 1: generate ray
     Ray ray = dev_cam.generate_ray(px, py, sampler);
 
-    // printf("ray: (%f, %f, %f), (%f, %f, %f)\n", ray.o.x(), ray.o.y(), ray.o.z(), ray.d.x(), ray.d.y(), ray.d.z());
-
     // step 2: bouncing around the scene until the max depth is reached
 
     // A matter of design choice
@@ -158,16 +156,16 @@ __global__ static void render_pt_kernel(
                 material_id = objects[object_id].bsdf_id,
                 emitter_id  = objects[object_id].emitter_id;
 
-            float direct_pdf = 1;
+            float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
             radiance += emission_weight * throughput *\
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
-            Ray shadow_ray(ray.o + ray.d * min_dist, Vec3());
+            Ray shadow_ray(ray.o + ray.d * min_dist, Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
-            shadow_ray.d = emitter->sample(shadow_ray.o, ray.o, direct_pdf) - shadow_ray.o;
+            shadow_ray.d = emitter->sample(shadow_ray.o, ray.o) - shadow_ray.o;
             
             float emit_length = shadow_ray.d.length();
             shadow_ray.d *= 1.f / emit_length;              // normalized direction
