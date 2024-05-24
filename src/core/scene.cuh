@@ -434,7 +434,7 @@ public:
 
         // ------------------------- (4) parse camera & scene config -------------------------
         cam = DeviceCamera::from_xml(sensor_elem);
-        config.from_xml(sensor_elem);
+        config = RenderingConfig::from_xml(sensor_elem);
 
         // ------------------------- (5) initialize shapes -------------------------
         shapes.resize(num_prims);

@@ -15,14 +15,15 @@ struct RenderingConfig {
 
     RenderingConfig() : width(512), height(512), max_depth(16), spp(64) {}
 
-    void from_xml(const tinyxml2::XMLElement *sensor_node) {
+    static RenderingConfig from_xml(const tinyxml2::XMLElement *sensor_node) {
+        RenderingConfig config;
         const tinyxml2::XMLElement *node = sensor_node->FirstChildElement("integer");
         while (node) {
             std::string name = node->Attribute("name");
             if (name == "sample_count")
-                node->QueryIntAttribute("value", &spp);
+                node->QueryIntAttribute("value", &config.spp);
             else if (name == "max_bounce")
-                node->QueryIntAttribute("value", &max_depth);
+                node->QueryIntAttribute("value", &config.max_depth);
             node = node->NextSiblingElement("integer");
         }
 
@@ -32,12 +33,13 @@ struct RenderingConfig {
             while (film_elem) {
                 std::string name = film_elem->Attribute("name");
                 if (name == "width") {
-                    film_elem->QueryIntAttribute("value", &width);
+                    film_elem->QueryIntAttribute("value", &config.width);
                 } else if (name == "height") {
-                    film_elem->QueryIntAttribute("value", &height);
+                    film_elem->QueryIntAttribute("value", &config.height);
                 }
                 film_elem = film_elem->NextSiblingElement("integer");
             }
         }
+        return config;
     }
 };
