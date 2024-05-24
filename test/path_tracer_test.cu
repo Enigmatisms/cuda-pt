@@ -11,18 +11,6 @@ __constant__ DeviceCamera dev_cam;
 __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
-
-// Global memory class with virtual functions initialization
-template <typename Ty>
-__global__ void init_inheritance(const Ty* const gmem, Ty* pure_gmem) {
-    pure_gmem[threadIdx.x] = new Ty(gmem[threadIdx.x]);
-}
-
-template <typename Ty>
-__global__ void destroy_inheritance(const Ty* const gmem, Ty* pure_gmem) {
-    delete pure_gmem[threadIdx.x];
-}
-
 int main(int argc, char** argv) {
     InitProfiler();
 

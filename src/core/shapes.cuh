@@ -14,6 +14,7 @@
 
 #pragma once
 #include <limits>
+#include <variant/variant.h>
 #include "core/soa.cuh"
 #include "core/so3.cuh"
 #include "core/ray.cuh"
@@ -76,6 +77,7 @@ using ConstAABBPtr = const AABB* const;
 
 class SphereShape {
 public:
+    // TODO: this obj_idx might be deprecated in the future
     int obj_idx;            // object of the current shape
     CPT_CPU_GPU SphereShape(): obj_idx(-1) {}
 
@@ -118,6 +120,7 @@ public:
 class TriangleShape {
     
 public:
+    // TODO: this obj_idx might be deprecated in the future
     int obj_idx;            // object of the current shape
     CPT_CPU_GPU TriangleShape(): obj_idx(-1) {}
 
@@ -233,3 +236,6 @@ public:
 
     CPT_CPU void set_index(int i)        noexcept { this->index = i; }
 };
+
+using Shape = variant::variant<TriangleShape, SphereShape>;
+using ConstShapePtr = const Shape* const;

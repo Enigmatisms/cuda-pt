@@ -4,17 +4,13 @@
  * @author: Qianyue He
 */
 #pragma once
-#include <variant/variant.h>
 #include "core/soa.cuh"
-#include "core/shapes.cuh"
-#include "core/camera_model.cuh"
-#include "core/host_device.cuh"
 #include "core/stats.h"
+#include "core/shapes.cuh"
+#include "core/host_device.cuh"
+#include "core/camera_model.cuh"
 
 extern __constant__ DeviceCamera dev_cam;
-
-using Shape = variant::variant<TriangleShape, SphereShape>;
-using ConstShapePtr = const Shape* const;
 
 /**
  * Perform ray-intersection test on shared memory primitives

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 # CUDA_ARCHITECTURES native is available in CMake since 3.24
 
+set(PROJ_NAME "cuda-pt")
+project(${PROJ_NAME} LANGUAGES CUDA CXX)
+
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG")
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -g -O0")
   set(CMAKE_CUDA_FLAGS_DEBUG "-G -g")
@@ -24,10 +27,6 @@ endif ()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-set(PROJ_NAME "cuda-pt")
-
-project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
 find_package(Threads REQUIRED)
 find_package(PNG REQUIRED)
@@ -53,6 +52,7 @@ add_executable(${EXEC1_NAME}
 target_link_libraries(
         ${EXEC1_NAME} PRIVATE
         ${PNG_LIBRARY}
+        tinyxml2 tinyobjloader
 )
 
 set_target_properties(
@@ -63,6 +63,32 @@ set_target_properties(
 
 target_compile_options(
         ${EXEC1_NAME} PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:
+        --expt-relaxed-constexpr
+        >
+)
+
+set(EXEC2_NAME "pt")
+add_executable(${EXEC2_NAME}
+        app/pt_renderer.cu
+        src/ext/lodepng/lodepng.cpp
+        ${CUPT_IMPL}
+)
+
+target_link_libraries(
+        ${EXEC2_NAME} PRIVATE
+        ${PNG_LIBRARY}
+        tinyxml2 tinyobjloader
+)
+
+set_target_properties(
+        ${EXEC2_NAME} PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_ARCHITECTURES native
+)
+
+target_compile_options(
+        ${EXEC2_NAME} PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:
         --expt-relaxed-constexpr
         >
@@ -94,6 +120,7 @@ add_executable(pt_test
 target_link_libraries(
         pt_test PRIVATE
         ${PNG_LIBRARY}
+        tinyxml2 tinyobjloader
 )
 
 set_target_properties(

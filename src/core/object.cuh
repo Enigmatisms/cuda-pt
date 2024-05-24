@@ -39,6 +39,24 @@ public:
         }
     }
 
+    CPT_CPU void get_aabb(const std::array<std::vector<Vec3>, 3>& prims, bool is_polygon = true) {
+        int ub = prim_offset + prim_num;
+        for (int i = prim_offset; i < ub; i++) {
+            if (is_polygon) {
+                _aabb.mini.minimize(prims[0][i]);
+                _aabb.mini.minimize(prims[1][i]);
+                _aabb.mini.minimize(prims[2][i]);
+
+                _aabb.maxi.maximize(prims[0][i]);
+                _aabb.maxi.maximize(prims[1][i]);
+                _aabb.maxi.maximize(prims[2][i]);
+            } else {
+                _aabb.mini = prims[0][i] - prims[1][i].x();
+                _aabb.maxi = prims[0][i] + prims[1][i].x();
+            }
+        }
+    }
+
     CPT_CPU_GPU_INLINE bool is_emitter() const noexcept { return this->emitter_id > 0; }
     CPT_CPU_GPU ObjInfo(int bsdf_id, int prim_off, int prim_num, uint8_t emitter_id = 0):
         bsdf_id(bsdf_id), prim_offset(prim_off), prim_num(prim_num), emitter_id(emitter_id)

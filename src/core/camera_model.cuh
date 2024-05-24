@@ -9,7 +9,7 @@
 #include "core/sampler.cuh"
 #include <sstream>
 #include <curand.h>
-#include <tinyxml2/tinyxml2.h>
+#include <tinyxml2.h>
 
 // convert fov in degree to focal length
 CPT_CPU_GPU float fov2focal(float fov, float img_size) {
@@ -63,7 +63,6 @@ public:
         int width = 512, height = 512;
         Vec3 lookat_target;
         Vec3 lookat_origin;
-        Vec3 __lookat_up;
         const tinyxml2::XMLElement* element = nullptr;
 
         // Read float and integer values
@@ -84,7 +83,6 @@ public:
             if (lookatElement) {
                 lookat_target = parseVec3(lookatElement->Attribute("target"));
                 lookat_origin = parseVec3(lookatElement->Attribute("origin"));
-                __lookat_up   = parseVec3(lookatElement->Attribute("up"));
             }
         }
 
@@ -102,7 +100,7 @@ public:
                 filmElement = filmElement->NextSiblingElement("integer");
             }
         }
-
+        printf("from: %f, %f, %f, to: %f, %f, %f\n", lookat_origin.x(), lookat_origin.y(), lookat_origin.z(), lookat_target.x(), lookat_target.y(), lookat_target.z());
         return DeviceCamera(lookat_origin, lookat_target, fov, width, height);
     }
 };

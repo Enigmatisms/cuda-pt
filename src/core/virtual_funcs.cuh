@@ -22,6 +22,7 @@ __global__ void create_bsdf(BSDF** dst, Vec3 k_d, Vec3 k_s, Vec3 k_g, int kd_tex
 
 __global__ void create_point_source(Emitter* &dst, Vec3 le, Vec3 pos) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
+        printf("Creating point source: %f, %f, %f, pos: %f, %f, %f\n", le.x(), le.y(), le.z(), pos.x(), pos.y(), pos.z());
         dst = new PointSource(std::move(le), std::move(pos));
     }
 }
