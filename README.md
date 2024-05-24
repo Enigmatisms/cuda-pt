@@ -9,9 +9,14 @@ Since I have no intention making this a extensive project (like AdaPT, taking ca
 
 - [x] Toy CUDA depth renderer with profiling:
 
-![](assets/depth-render.png)
 
-- [ ] Unidirectional path tracing with AABB culling. Full traversal without spatial partition. In this stage, shared memory and constant memory will be made use of. Special kind of `variant` will be of use (since `std::variant` is not supported by CUDA, for `std::visit` will either crash or be rejected by the compiler).
+
+- [x] Unidirectional path tracing with AABB culling. Full traversal without spatial partition. In this stage, shared memory and constant memory will be made use of. Special kind of `variant` will be of use (since `std::variant` is not supported by CUDA, for `std::visit` will either crash or be rejected by the compiler). This version of UDPT can be 3-8x faster than my [AdaPT](https://github.com/Enigmatisms/AdaPT) renderer (Taichi lang, JIT CUDA backend).
+
+|Depth Renderer|Unidirection PT|
+|:--:|:--:|
+|![](assets/depth-render.png)|![](assets/pt-render.png)|
+
 - [ ] CUDA texture bindings (with normal or UV maps)
 - [ ] GPU side BVH implementation. This will be the most difficult part, since "it is always easy to write your program with parallelism, but difficult to make it fast".
 
