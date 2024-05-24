@@ -32,7 +32,7 @@ public:
 
     CPT_CPU_GPU virtual Vec3 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const = 0;
 
-    CPT_CPU_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const = 0;
+    CPT_CPU_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, float&, Vec2&& uv) const = 0;
 };
 
 
@@ -57,10 +57,9 @@ public:
         return k_d * max(0.f, cosine_term) * M_1_PI;
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const override {
-        float sample_pdf = 0;
-        auto local_ray = sample_cosine_hemisphere(std::move(uv), sample_pdf);
-        // throughput *= f / pdf
+    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, float& pdf, Vec2&& uv) const override {
+        auto local_ray = sample_cosine_hemisphere(std::move(uv), pdf);
+        // throughput *= f / pdf --> k_d * cos / pi / (pdf = cos / pi) == k_d
         throughput *= k_d;
         return delocalize_rotate(Vec3(0, 0, 1), it.shading_norm, local_ray);;
     }
@@ -82,8 +81,9 @@ public:
         return Vec3(0, 0, 0);
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const override {
+    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, float& pdf, Vec2&& uv) const override {
         // throughput *= f / pdf
+        pdf = 1.f;
         throughput *= k_s * (indir.dot(it.shading_norm) < 0);
         return indir - 2.f * indir.dot(it.shading_norm) * it.shading_norm;
     }
@@ -107,7 +107,7 @@ public:
         return Vec3(0, 0, 0);
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, Vec2&& uv) const override {
+    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, float& pdf, Vec2&& uv) const override {
         float dot_normal = indir.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
@@ -115,9 +115,10 @@ public:
         float nr = select(k_d.x(), 1.f, dot_normal < 0), cos_r2 = 0;
         Vec3 ret_dir = (indir - 2.f * it.shading_norm * dot_normal).normalized(),
              refra_vec = snell_refraction(indir, it.shading_norm, cos_r2, dot_normal, ni, nr);
-        bool total_ref = is_total_reflection(dot_normal, ni, nr), reflect = uv.x() < \
-            fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
-        ret_dir = select(ret_dir, refra_vec, total_ref || reflect);
+        bool total_ref = is_total_reflection(dot_normal, ni, nr);
+        nr = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
+        ret_dir = select(ret_dir, refra_vec, total_ref || uv.x() < nr);
+        pdf     = select(1.f, select(nr, 1.f - nr, uv.x() < nr), total_ref);
         // throughput *= f / pdf
         throughput *= k_s;
         return ret_dir;

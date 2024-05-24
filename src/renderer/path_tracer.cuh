@@ -57,7 +57,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
     // if invalid (there is only one emitter, and we cannot sample it), return c_emitter[8]
     // if no_sample is 0x08, then the ray hits no emitter
     num -= no_sample > 0 && num > 1;
-    int emit_id = (sampler.discrete1D() % num) + 1;
+    uint32_t emit_id = (sampler.discrete1D() % uint32_t(num)) + 1;
     emit_id += emit_id >= no_sample && no_sample > 0;
     pdf = 1.f / float(num);
     // when no_sample == 0 (means, we do not intersect any emitter) or num > 1 (there are more than 1 emitters)
@@ -124,6 +124,7 @@ __global__ static void render_pt_kernel(
     float emission_weight = 1.f;
 
     int num_copy = (num_prims + 31) / 32, min_index = -1;   // round up
+    bool hit_emitter = false;
     for (int b = 0; b < max_depth; b++) {
         float min_dist = MAX_DIST;
         min_index = -1;
@@ -155,6 +156,11 @@ __global__ static void render_pt_kernel(
             int object_id   = prim2obj[min_index],
                 material_id = objects[object_id].bsdf_id,
                 emitter_id  = objects[object_id].emitter_id;
+            hit_emitter = emitter_id > 0;
+
+            // emitter MIS
+            emission_weight = emission_weight / (emission_weight + 
+                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * hit_emitter);
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
@@ -163,9 +169,10 @@ __global__ static void render_pt_kernel(
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
+            emitter_id = objects[object_id].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
             Ray shadow_ray(ray.o + ray.d * min_dist, Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
-            shadow_ray.d = emitter->sample(shadow_ray.o, ray.o) - shadow_ray.o;
+            shadow_ray.d = emitter->sample(shadow_ray.o, ray.o, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
             
             float emit_length = shadow_ray.d.length();
             shadow_ray.d *= 1.f / emit_length;              // normalized direction
@@ -173,8 +180,6 @@ __global__ static void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind, it seems to be )
             if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_length)) {
                 // MIS for BSDF / light sampling, to achieve better rendering
-                float mis_w = direct_pdf / (direct_pdf + 
-                    c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta());
                 // accumulate direct component
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
                 radiance += throughput * ray.o * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
@@ -183,7 +188,7 @@ __global__ static void render_pt_kernel(
 
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, sampler.next2D());
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler.next2D());
         }
 
         // TODO: MIS for emitter

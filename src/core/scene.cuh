@@ -186,6 +186,18 @@ void parseEmitter(
             element = element->NextSiblingElement("point");
         }
         // create Spot source
+    } else if (type == "area") {
+        element = emitter_elem->FirstChildElement("string");
+        std::string attr_name = element->Attribute("name");
+        if (!element || attr_name != "bind_type") {
+            std::cerr << "Bound primitive is not specified for area source '" << id << "', name: "<< element->Attribute("name") << std::endl;
+            throw std::runtime_error("Bound primitive is not specified for area source");
+        }
+        EmitterBinding bound_type = TRIANGLE;
+        if (element->Attribute("value") == "sphere") {
+            bound_type = SPHERE;
+        }
+        create_area_source<<<1, 1>>>(emitters[index], emission * scaler, bound_type);
     }
 }
 
@@ -245,7 +257,7 @@ void parseSphereShape(
     }
 
     objects.emplace_back(bsdf_id, prim_offset, 1, emitter_id);
-    objects.back().get_aabb(verts_list, false);
+    objects.back().setup(verts_list, false);
     ++ prim_offset;
 }
 
@@ -339,7 +351,7 @@ void parseObjShape(
             }
         }
 
-        object.get_aabb(verts_list);
+        object.setup(verts_list);
         objects.push_back(object);
     }
 }

@@ -20,7 +20,7 @@ public:
     CPT_GPU Vec2 next2D() noexcept { return Vec2(curand_uniform(&rand_state), curand_uniform(&rand_state)); }
     CPT_GPU float next1D() noexcept { return curand_uniform(&rand_state); }
     CPT_GPU float next1D_n() noexcept { return curand_normal(&rand_state); }
-    CPT_GPU int discrete1D() noexcept { return curand(&rand_state); }
+    CPT_GPU uint32_t discrete1D() noexcept { return curand(&rand_state); }
 private:
     curandState rand_state;
 };

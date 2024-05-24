@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/build_debug/pt",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build_debug/",
-            "args": ["../scene/xml/cbox-point.xml"],
+            "args": ["../scene/xml/balls-mono.xml"],
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",

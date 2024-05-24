@@ -34,21 +34,21 @@ int main(int argc, char** argv) {
 
     std::vector<ObjInfo> objects;
     objects.emplace_back(0, 0, 2);
-    objects.back().get_aabb(vert_data);
+    objects.back().setup(vert_data);
     objects.emplace_back(1, 2, 2);
-    objects.back().get_aabb(vert_data);
+    objects.back().setup(vert_data);
     objects.emplace_back(1, 4, 2);
-    objects.back().get_aabb(vert_data);
+    objects.back().setup(vert_data);
     objects.emplace_back(2, 6, 2);
-    objects.back().get_aabb(vert_data);
+    objects.back().setup(vert_data);
     objects.emplace_back(1, 8, 2);
-    objects.back().get_aabb(vert_data);
+    objects.back().setup(vert_data);
     objects.emplace_back(3, 10, 1);
-    objects.back().get_aabb(vert_data, false);
+    objects.back().setup(vert_data, false);
     objects.emplace_back(4, 11, 1);
-    objects.back().get_aabb(vert_data, false);
+    objects.back().setup(vert_data, false);
     objects.emplace_back(5, 12, 1);
-    objects.back().get_aabb(vert_data, false);
+    objects.back().setup(vert_data, false);
 
 
     // TODO: this is not correct

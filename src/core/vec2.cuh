@@ -38,8 +38,9 @@ public:
     }
 
     CONDITION_TEMPLATE(VecType, Vec2)
-    CPT_CPU_GPU_INLINE
-    Vec2 operator+(VecType&& b) const noexcept { return Vec2(_data.x + b.x(), _data.y + b.y()); }
+    CPT_CPU_GPU_INLINE Vec2 operator+(VecType&& b) const noexcept { return Vec2(_data.x + b.x(), _data.y + b.y()); }
+
+    CPT_CPU_GPU_INLINE Vec2 operator+(float b) const noexcept { return Vec2(_data.x + b, _data.y + b); }
 
     CONDITION_TEMPLATE(VecType, Vec2)
     Vec2& operator+=(VecType&& b) noexcept {
@@ -64,6 +65,8 @@ public:
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE
     Vec2 operator-(VecType&& b) const { return Vec2(_data.x - b.x(), _data.y - b.y()); }
+
+    CPT_CPU_GPU_INLINE Vec2 operator-(float b) const { return Vec2(_data.x - b, _data.y - b); }
 
     CPT_CPU_GPU_INLINE
     Vec2 operator*(float b) const noexcept { return Vec2(_data.x * b, _data.y * b); }

@@ -55,10 +55,16 @@
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
 
-	<emitter type="point" id="point">
+	<!-- <emitter type="point" id="point">
 		<rgb name="emission" value="2, 2, 2"/>
 		<rgb name="scaler" value="1"/>
 		<point name="center" x="0" y="0" z="0.8"/>
+	</emitter> -->
+
+	<emitter type="area" id="area">
+		<rgb name="emission" value="4, 4, 4"/>
+		<rgb name="scaler" value="10"/>
+		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<shape type="obj">
@@ -84,6 +90,12 @@
 	<shape type="obj">
 		<string name="filename" value="../meshes/cupt/front.obj"/>
 		<ref type="material" id="green"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cupt/light.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="area"/>
 	</shape>
 
 	<shape type="sphere">
