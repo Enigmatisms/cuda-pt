@@ -86,20 +86,23 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
     }
 }
 
-int getBSDFId(const std::unordered_map<std::string, int>& bsdf_map, const std::string& id) {
-    auto it = bsdf_map.find(id);
-    if (it != bsdf_map.end()) {
+int get_map_id(const std::unordered_map<std::string, int>& map, const std::string& id) {
+    auto it = map.find(id);
+    if (it != map.end()) {
         return it->second;
+    } else {
+        std::cerr << "Map has no key: '" << id << "'\n";
+        throw std::runtime_error("Map has no key: '" + id + "'");
     }
-    return -1;
+    return 0;
 }
 
 void parseShape(
     const tinyxml2::XMLElement* shapeElement, 
     const std::unordered_map<std::string, int>& bsdf_map,
-    std::vector<ObjInfo>& objects, std::vector<SoA3<Vec3>>& verticesList, 
-    std::vector<SoA3<Vec3>>& normalsList, std::vector<SoA3<Vec2>>& uvsList, 
-    std::string folder_prefix
+    std::vector<ObjInfo>& objects, std::array<Vec3Arr, 3>& verticesList, 
+    std::array<Vec3Arr, 3>& normalsList, std::array<Vec2Arr, 3>& uvsList, 
+    int prim_offset, std::string folder_prefix
 ) {
     std::string filename;
     int bsdf_id = -1;
@@ -119,6 +122,8 @@ void parseShape(
         std::string id = element->Attribute("id");
         if (type == "material") {
             bsdf_id = getBSDFId(bsdf_map, id);
+        } else if (type == "emitter") {
+
         }
         element = element->NextSiblingElement("ref");
     }
@@ -139,7 +144,7 @@ void parseShape(
         SoA3<Vec3> vertices(num_primitives);
         SoA3<Vec3> normals(num_primitives);
         SoA3<Vec2> uvs(num_primitives);
-        ObjInfo object;
+        ObjInfo object(bsdf_id, prim_offset, num_primitives, );
         object.bsdf_id = bsdf_id;
         object.prim_offset = 0;  //  dummy setting
         object.prim_num = num_primitives;
