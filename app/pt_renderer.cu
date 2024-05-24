@@ -23,7 +23,6 @@ int main(int argc, char** argv) {
     SoA3<Vec2> uvs_data(scene.num_prims);
 
     scene.export_soa(vert_data, norm_data, uvs_data);
-    scene.clear_vector();
 
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));

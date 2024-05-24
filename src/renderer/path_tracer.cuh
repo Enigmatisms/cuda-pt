@@ -103,6 +103,8 @@ __global__ static void render_pt_kernel(
     // step 1: generate ray
     Ray ray = dev_cam.generate_ray(px, py, sampler);
 
+    // printf("ray: (%f, %f, %f), (%f, %f, %f)\n", ray.o.x(), ray.o.y(), ray.o.z(), ray.d.x(), ray.d.y(), ray.d.z());
+
     // step 2: bouncing around the scene until the max depth is reached
 
     // A matter of design choice

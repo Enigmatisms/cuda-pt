@@ -70,7 +70,6 @@ public:
         while (element) {
             std::string name = element->Attribute("name");
             if (name == "fov") {
-                float fov = 0;
                 element->QueryFloatAttribute("value", &fov);
             }
             element = element->NextSiblingElement("float");
@@ -100,7 +99,6 @@ public:
                 filmElement = filmElement->NextSiblingElement("integer");
             }
         }
-        printf("from: %f, %f, %f, to: %f, %f, %f\n", lookat_origin.x(), lookat_origin.y(), lookat_origin.z(), lookat_target.x(), lookat_target.y(), lookat_target.z());
         return DeviceCamera(lookat_origin, lookat_target, fov, width, height);
     }
 };

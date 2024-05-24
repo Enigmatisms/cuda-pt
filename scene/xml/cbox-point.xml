@@ -38,9 +38,9 @@
 	</brdf>
 
 	<brdf type="specular" id="mirror">
-		<rgb name="k_d" value="0.9, 0.9, 0.9"/>
-		<rgb name="k_g" value="1.0"/>
-		<rgb name="k_s" value="0.0"/>
+		<rgb name="k_d" value="0"/>
+		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
+		<rgb name="k_g" value="0"/>
 	</brdf>
 
 	<brdf type="det-refraction" id="glass">
@@ -63,12 +63,12 @@
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/cupt/right.obj"/>
-		<ref type="material" id="red"/>
+		<ref type="material" id="grey"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/cupt/back.obj"/>
-		<ref type="material" id="grey"/>
+		<ref type="material" id="red"/>
 	</shape>
 
 	<shape type="obj">
@@ -78,28 +78,28 @@
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/cupt/left.obj"/>
-		<ref type="material" id="green"/>
-	</shape>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cupt/down.obj"/>
 		<ref type="material" id="grey"/>
 	</shape>
 
+	<shape type="obj">
+		<string name="filename" value="../meshes/cupt/front.obj"/>
+		<ref type="material" id="green"/>
+	</shape>
+
 	<shape type="sphere">
-		<point name="center" x="-0.5" y="0.0" z="0.7"/>
+		<point name="center" x="0.5" y="0.0" z="-0.7"/>
 		<float name="radius" value="0.3"/>
 		<ref type="material" id="mirror"/>
 	</shape>
 
 	<shape type="sphere">
-		<point name="center" x="0.4" y="0.4" z="0.5"/>
+		<point name="center" x="-0.4" y="0.4" z="-0.5"/>
 		<float name="radius" value="0.5"/>
 		<ref type="material" id="glass"/>
 	</shape>
 
 	<shape type="sphere">
-		<point name="center" x="0.5" y="-0.5" z="0.7"/>
+		<point name="center" x="-0.5" y="-0.5" z="-0.7"/>
 		<float name="radius" value="0.3"/>
 		<ref type="material" id="white"/>
 	</shape>

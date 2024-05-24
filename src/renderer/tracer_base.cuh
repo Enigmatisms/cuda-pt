@@ -45,6 +45,7 @@ CPT_GPU float ray_intersect(
             valid &= dist < min_dist;       // whether to update the distance
             min_dist = dist * valid + min_dist * (1 - valid);
             min_index = (cp_base_5 + idx) * valid + min_index * (1 - valid);
+            // printf("AABB intersect (%d): %f, %f, ray: (%f, %f, %f), (%f, %f, %f)\n", remain_prims, dist, min_dist, ray.o.x(), ray.o.y(), ray.o.z(), ray.d.x(), ray.d.y(), ray.d.z());
         }
     }
     return min_dist;

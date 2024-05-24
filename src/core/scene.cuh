@@ -172,10 +172,6 @@ void parseEmitter(
         std::string name = element->Attribute("name");
         if (name == "center" || name == "pos")
             pos = parsePoint(element);
-        printf("Emission: ");
-        print_vec3(emission);
-        printf("Scaler: ");
-        print_vec3(scaler);
         create_point_source<<<1, 1>>>(emitters[index], emission * scaler, pos);
     } else if (type == "spot") {
         element = emitter_elem->FirstChildElement("point");
@@ -241,7 +237,7 @@ void parseSphereShape(
     }
     verts_list[0].emplace_back(std::move(center));
     verts_list[1].emplace_back(Vec3(radius, radius, radius));
-    verts_list[2].emplace_back(Vec3());
+    verts_list[2].emplace_back(Vec3(0, 0, 0));
 
     for (int i = 0; i < 3; i++) {
         norms_list[i].emplace_back(0, 1, 0);
@@ -249,7 +245,7 @@ void parseSphereShape(
     }
 
     objects.emplace_back(bsdf_id, prim_offset, 1, emitter_id);
-    objects.back().get_aabb(verts_list, true);
+    objects.back().get_aabb(verts_list, false);
     ++ prim_offset;
 }
 
@@ -319,7 +315,6 @@ void parseObjShape(
             for (int j = 0; j < 3; ++j) {
                 const tinyobj::index_t& idx = shape.mesh.indices[prim_base + j];
                 int index = idx.vertex_index * 3;
-                printf("Primitive %lu (%d / 3): %f, %f, %f\n", i, j + 1, attrib.vertices[index], attrib.vertices[index + 1], attrib.vertices[index + 2]);
                 verts_list[j].emplace_back(attrib.vertices[index], attrib.vertices[index + 1], attrib.vertices[index + 2]);
 
                 if (idx.normal_index >= 0) {
@@ -344,8 +339,8 @@ void parseObjShape(
             }
         }
 
+        object.get_aabb(verts_list);
         objects.push_back(object);
-        objects.back().get_aabb(verts_list);
     }
 }
 
@@ -438,7 +433,7 @@ public:
         num_prims = prim_offset;
 
         // ------------------------- (4) parse camera & scene config -------------------------
-        cam.from_xml(sensor_elem);
+        cam = DeviceCamera::from_xml(sensor_elem);
         config.from_xml(sensor_elem);
 
         // ------------------------- (5) initialize shapes -------------------------
@@ -446,9 +441,8 @@ public:
         prim_offset = 0;
         for (int obj_id = 0; obj_id < num_objects; obj_id ++) {
             prim_offset += objects[obj_id].prim_num;
-            printf("%d: %d, %d, %d, %d\n", obj_id, objects[obj_id].prim_num, objects[obj_id].prim_offset, prim_offset, num_prims);
             for (int i = objects[obj_id].prim_offset; i < prim_offset; i++) {
-                if (!sphere_objs[i]) {
+                if (!sphere_objs[obj_id]) {
                     shapes[i] = TriangleShape(obj_id);
                 } else {
                     shapes[i] = SphereShape(obj_id);
