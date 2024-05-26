@@ -140,16 +140,27 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
     }
 }
 
+void parseEmitterNames(
+    const tinyxml2::XMLElement* emitter_elem, 
+    std::unordered_map<std::string, int>& emitter_map
+) {
+    int idx = 0;
+    while (emitter_elem) {
+        std::string id = emitter_elem->Attribute("id");
+        emitter_map[id] = idx++;
+        emitter_elem = emitter_elem->NextSiblingElement("emitter");
+    }
+}
+
 void parseEmitter(
     const tinyxml2::XMLElement* emitter_elem, 
-    std::unordered_map<std::string, int>& emitter_map, 
+    std::unordered_map<std::string, int>& emitter_obj_map,      // key emitter name, value object_id
     std::vector<std::string> obj_ref_names,
     Emitter** emitters, int index
 ) {
     std::string type = emitter_elem->Attribute("type");
     std::string id = emitter_elem->Attribute("id");
 
-    emitter_map[id] = index;
     obj_ref_names.push_back(id);
     Vec3 emission(0, 0, 0), scaler(0, 0, 0);
 
@@ -193,11 +204,8 @@ void parseEmitter(
             std::cerr << "Bound primitive is not specified for area source '" << id << "', name: "<< element->Attribute("name") << std::endl;
             throw std::runtime_error("Bound primitive is not specified for area source");
         }
-        EmitterBinding bound_type = TRIANGLE;
-        if (element->Attribute("value") == "sphere") {
-            bound_type = SPHERE;
-        }
-        create_area_source<<<1, 1>>>(emitters[index], emission * scaler, bound_type);
+        bool spherical_bound = element->Attribute("value") == "sphere";
+        create_area_source<<<1, 1>>>(emitters[index], emission * scaler, emitter_obj_map[id], spherical_bound);
     }
 }
 
@@ -216,9 +224,10 @@ void parseSphereShape(
     const tinyxml2::XMLElement* shapeElement, 
     const std::unordered_map<std::string, int>& bsdf_map,
     const std::unordered_map<std::string, int>& emitter_map,
+    std::unordered_map<std::string, int>& emitter_obj_map,
     std::vector<ObjInfo>& objects, std::array<Vec3Arr, 3>& verts_list, 
     std::array<Vec3Arr, 3>& norms_list, std::array<Vec2Arr, 3>& uvs_list, 
-    int& prim_offset, std::string folder_prefix
+    int& prim_offset, std::string folder_prefix, int index
 ) {
     int bsdf_id = -1, emitter_id = 0;
 
@@ -231,6 +240,7 @@ void parseSphereShape(
             bsdf_id = get_map_id(bsdf_map, id);
         } else if (type == "emitter") {
             emitter_id = get_map_id(emitter_map, id);
+            emitter_obj_map[id] = index;
         }
         element = element->NextSiblingElement("ref");
     }
@@ -265,9 +275,10 @@ void parseObjShape(
     const tinyxml2::XMLElement* shapeElement, 
     const std::unordered_map<std::string, int>& bsdf_map,
     const std::unordered_map<std::string, int>& emitter_map,
+    std::unordered_map<std::string, int>& emitter_obj_map,
     std::vector<ObjInfo>& objects, std::array<Vec3Arr, 3>& verts_list, 
     std::array<Vec3Arr, 3>& norms_list, std::array<Vec2Arr, 3>& uvs_list, 
-    int& prim_offset, std::string folder_prefix
+    int& prim_offset, std::string folder_prefix, int index
 ) {
     std::string filename, name;
     int bsdf_id = -1, emitter_id = 0;
@@ -289,6 +300,7 @@ void parseObjShape(
             bsdf_id = get_map_id(bsdf_map, id);
         } else if (type == "emitter") {
             emitter_id = get_map_id(emitter_map, id);
+            emitter_obj_map[id] = index;
         }
         element = element->NextSiblingElement("ref");
     }
@@ -388,7 +400,7 @@ public:
                                    *emitter_elem = scene_elem->FirstChildElement("emitter"),
                                    *sensor_elem  = scene_elem->FirstChildElement("sensor"), *ptr = nullptr;
 
-        std::unordered_map<std::string, int> bsdf_map, emitter_map;
+        std::unordered_map<std::string, int> bsdf_map, emitter_map, emitter_obj_map;
         std::vector<std::string> emitter_names;
         emitter_names.reserve(9);
         emitter_map.reserve(9);
@@ -406,17 +418,9 @@ public:
         }
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-        //  ------------------------- (2) parse all emitters --------------------------
-        ptr = emitter_elem;
-        for (; ptr != nullptr; ++ num_emitters)
-            ptr = ptr->NextSiblingElement("emitter");
-        CUDA_CHECK_RETURN(cudaMalloc(&emitters, sizeof(Emitter*) * (num_emitters + 1)));
-        create_abstract_source<<<1, 1>>>(emitters[0]);
-        for (int i = 1; i <= num_emitters; i++) {
-            parseEmitter(emitter_elem, emitter_map, emitter_names, emitters, i);
-            emitter_elem = emitter_elem->NextSiblingElement("emitter");
-        }
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
+        // ------------------------- (2) parse emitter names -------------------------
+        parseEmitterNames(emitter_elem, emitter_map);
 
         // ------------------------- (3) parse all objects -------------------------
         ptr = shape_elem;
@@ -436,19 +440,34 @@ public:
         for (int i = 0; i < num_objects; i++) {
             std::string type = shape_elem->Attribute("type");
             if (type == "obj")
-                parseObjShape(shape_elem, bsdf_map, emitter_map, objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix);
+                parseObjShape(shape_elem, bsdf_map, emitter_map, emitter_obj_map, objects, 
+                            verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
             else if (type == "sphere")
-                parseSphereShape(shape_elem, bsdf_map, emitter_map, objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix);
+                parseSphereShape(shape_elem, bsdf_map, emitter_map, emitter_obj_map, objects, 
+                            verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
             sphere_objs[i] = type == "sphere";
             shape_elem = shape_elem->NextSiblingElement("shape");
         }
         num_prims = prim_offset;
 
-        // ------------------------- (4) parse camera & scene config -------------------------
+
+        //  ------------------------- (4) parse all emitters --------------------------
+        ptr = emitter_elem;
+        for (; ptr != nullptr; ++ num_emitters)
+            ptr = ptr->NextSiblingElement("emitter");
+        CUDA_CHECK_RETURN(cudaMalloc(&emitters, sizeof(Emitter*) * (num_emitters + 1)));
+        create_abstract_source<<<1, 1>>>(emitters[0]);
+        for (int i = 1; i <= num_emitters; i++) {
+            parseEmitter(emitter_elem, emitter_obj_map, emitter_names, emitters, i);
+            emitter_elem = emitter_elem->NextSiblingElement("emitter");
+        }
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
+        // ------------------------- (5) parse camera & scene config -------------------------
         cam = DeviceCamera::from_xml(sensor_elem);
         config = RenderingConfig::from_xml(sensor_elem);
 
-        // ------------------------- (5) initialize shapes -------------------------
+        // ------------------------- (6) initialize shapes -------------------------
         shapes.resize(num_prims);
         prim_offset = 0;
         for (int obj_id = 0; obj_id < num_objects; obj_id ++) {

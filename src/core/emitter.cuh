@@ -13,16 +13,11 @@ CPT_CPU_GPU_INLINE float distance_attenuate(Vec3&& diff) {
     return min(1.f / max(diff.length2(), 1e-5f), 1.f);
 }
 
-enum EmitterBinding: uint8_t {
-    POINT    = 0x00,
-    TRIANGLE = 0x01,
-    SPHERE   = 0x02
-};
-
 class Emitter {
 protected:
     Vec3 Le;
-    EmitterBinding obj_ref_id;         // index pointing to object, -1 means the emitter is delta_pos
+    int obj_ref_id;
+    bool is_sphere;         // whether the emitter binds to a sphere
 public:
     /**
      * Sample a point on the emitter (useful for non-infinitesimal emitters)
@@ -30,8 +25,8 @@ public:
     CPT_CPU_GPU Emitter() {}
 
     CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_CPU_GPU Emitter(VecType&& le, EmitterBinding obj_ref_id = POINT):
-        Le(std::forward<VecType>(le)), obj_ref_id(obj_ref_id) {}
+    CPT_CPU_GPU Emitter(VecType&& le, int obj_ref = -1, bool is_sphere = false):
+        Le(std::forward<VecType>(le)), obj_ref_id(obj_ref), is_sphere(is_sphere) {}
 
     CPT_GPU_INLINE virtual Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf, Vec2&&, ConstPrimPtr, ConstPrimPtr, int) const {
         pdf = 1;
@@ -44,11 +39,15 @@ public:
     }
 
     CPT_GPU_INLINE bool non_delta() const noexcept {
-        return this->obj_ref_id;
+        return this->is_sphere;
     }
 
     CPT_GPU_INLINE Vec3 get_le() const noexcept {
         return Le;
+    }
+
+    CPT_CPU_GPU int get_obj_ref() const noexcept {
+        return obj_ref_id * (obj_ref_id >= 0);
     }
 };
 
@@ -80,8 +79,8 @@ public:
     CPT_CPU_GPU AreaSource() {}
 
     CONDITION_TEMPLATE(VType, Vec3)
-    CPT_CPU_GPU AreaSource(VType&& le, EmitterBinding obj_ref_id = TRIANGLE): 
-        Emitter(std::forward<VType>(le), obj_ref_id) {}
+    CPT_CPU_GPU AreaSource(VType&& le, int obj_ref, bool is_sphere = false): 
+        Emitter(std::forward<VType>(le), obj_ref, is_sphere) {}
 
     CPT_GPU_INLINE Vec3 sample(
         const Vec3& hit_pos, Vec3& le, float& pdf, 
@@ -90,27 +89,31 @@ public:
         float sample_sum = uv.x() + uv.y();
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
         float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y();
-        Vec3 sampled = uv.x() * prims->y[sampled_index] + uv.y() * prims->z[sampled_index] - (uv.x() + uv.y()) * prims->x[sampled_index];
+        Vec3 sampled = uv.x() * prims->y[sampled_index] + uv.y() * prims->z[sampled_index] - (uv.x() + uv.y() - 1) * prims->x[sampled_index];
         Vec3 normal = (norms->x[sampled_index] * diff_x * diff_y + \
             norms->y[sampled_index] * uv.x() * diff_y + \
             norms->z[sampled_index] * uv.y() * diff_x).normalized();
-        Vec3 sphere_normal = sample_uniform_sphere(std::move(uv), sample_sum);
+        // if (sampled_index == 10 || sampled_index == 11)
+        //     printf("Normal (%d): %f, %f, %f\n", sampled_index, normal.x(), normal.y(), normal.z());
+        Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
         sampled = select(
             sampled, sphere_normal * prims->y[sampled_index].x() + prims->x[sampled_index],
-            obj_ref_id == TRIANGLE
+            is_sphere == false
         );
-        normal = select(normal, sphere_normal, obj_ref_id == TRIANGLE);
+        normal = select(normal, sphere_normal, is_sphere == false);
         // normal needs special calculation
         sphere_normal = hit_pos - sampled;
         pdf *= sphere_normal.length2();
         sphere_normal.normalize();
         sample_sum = normal.dot(sphere_normal);           // dot_light
+        // printf("Sampled sum: %f\n", sample_sum);
         pdf *= float(sample_sum > 0) / sample_sum;
         le = Le * float(sample_sum > 0);
         return sampled;
     }
 
     CPT_GPU virtual Vec3 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
-        return select(Le, Vec3(0, 0, 0), inci_dir->dot(*normal) < 0);
+        printf("valid: %d\n", int(inci_dir->dot(*normal) < 0));
+        return select(this->Le, Vec3(0, 0, 0), inci_dir->dot(*normal) < 0);
     }
 };

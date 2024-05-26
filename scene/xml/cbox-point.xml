@@ -57,13 +57,13 @@
 
 	<!-- <emitter type="point" id="point">
 		<rgb name="emission" value="2, 2, 2"/>
-		<rgb name="scaler" value="1"/>
+		<rgb name="scaler" value="0.2"/>
 		<point name="center" x="0" y="0" z="0.8"/>
 	</emitter> -->
 
 	<emitter type="area" id="area">
 		<rgb name="emission" value="4, 4, 4"/>
-		<rgb name="scaler" value="10"/>
+		<rgb name="scaler" value="0.25"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 

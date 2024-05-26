@@ -62,7 +62,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
     pdf = 1.f / float(num);
     // when no_sample == 0 (means, we do not intersect any emitter) or num > 1 (there are more than 1 emitters)
     // the sample will be valid
-    return c_emitter[emit_id * (no_sample == 0 || num > 1)];
+    return c_emitter[emit_id * uint32_t(no_sample == 0 || num > 1)];
 }
 
 /**
@@ -169,7 +169,11 @@ __global__ static void render_pt_kernel(
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
-            emitter_id = objects[object_id].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
+            // printf("Num of emitters: %d, %x, %x, %x, %d\n", num_emitter, int(c_emitter[0]), int(c_emitter[1]), int(emitter), int(hit_emitter));
+            
+            emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
+            // if (objects[object_id].emitter_id)
+            //     printf("Object id: %d, sampled id: %d, emitter: %d\n", object_id, emitter_id, objects[object_id].emitter_id);
             Ray shadow_ray(ray.o + ray.d * min_dist, Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
             shadow_ray.d = emitter->sample(shadow_ray.o, ray.o, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;

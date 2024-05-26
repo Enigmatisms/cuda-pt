@@ -26,15 +26,15 @@ __global__ void create_point_source(Emitter* &dst, Vec3 le, Vec3 pos) {
     }
 }
 
-__global__ void create_area_source(Emitter* &dst, Vec3 le, EmitterBinding obj_ref) {
+__global__ void create_area_source(Emitter* &dst, Vec3 le, int obj_ref, bool is_sphere) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        dst = new AreaSource(std::move(le), obj_ref);
+        dst = new AreaSource(std::move(le), obj_ref, is_sphere);
     }
 }
 
 __global__ void create_abstract_source(Emitter* &dst) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        dst = new Emitter(Vec3(0, 0, 0), POINT);
+        dst = new Emitter(Vec3(0, 0, 0));
     }
 }
 
