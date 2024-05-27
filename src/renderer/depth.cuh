@@ -96,7 +96,8 @@ public:
 
     CPT_CPU std::vector<uint8_t> render(
         int num_iter = 64,
-        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+        int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
+        bool gamma_correction = true
     ) override {
         ProfilePhase _(Prof::DepthRenderingHost);
         {
@@ -109,7 +110,7 @@ public:
                 CUDA_CHECK_RETURN(cudaDeviceSynchronize());
             }
         }
-        return image.export_cpu(1.f / (5.f * num_iter));
+        return image.export_cpu(1.f / (5.f * num_iter), gamma_correction);
     }
 };
 

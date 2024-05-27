@@ -46,5 +46,5 @@ CPT_CPU_GPU_INLINE auto select(T1&& v_true, T2&& v_false, bool predicate) {
     return v_true * predicate + v_false * (1 - predicate);
 }
 
-// inline int to_int(float x) { return int(std::clamp(x, 0.f, 1.f) * 255); }
+inline int to_int_linear(float x) { return int(std::clamp(x, 0.f, 1.f) * 255); }
 inline int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.2) * 255 + .5); }

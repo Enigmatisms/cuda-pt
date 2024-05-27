@@ -93,8 +93,6 @@ public:
         Vec3 normal = (norms->x[sampled_index] * diff_x * diff_y + \
             norms->y[sampled_index] * uv.x() * diff_y + \
             norms->z[sampled_index] * uv.y() * diff_x).normalized();
-        // if (sampled_index == 10 || sampled_index == 11)
-        //     printf("Normal (%d): %f, %f, %f\n", sampled_index, normal.x(), normal.y(), normal.z());
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
         sampled = select(
             sampled, sphere_normal * prims->y[sampled_index].x() + prims->x[sampled_index],
@@ -106,14 +104,12 @@ public:
         pdf *= sphere_normal.length2();
         sphere_normal.normalize();
         sample_sum = normal.dot(sphere_normal);           // dot_light
-        // printf("Sampled sum: %f\n", sample_sum);
         pdf *= float(sample_sum > 0) / sample_sum;
         le = Le * float(sample_sum > 0);
         return sampled;
     }
 
     CPT_GPU virtual Vec3 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
-        printf("valid: %d\n", int(inci_dir->dot(*normal) < 0));
         return select(this->Le, Vec3(0, 0, 0), inci_dir->dot(*normal) < 0);
     }
 };

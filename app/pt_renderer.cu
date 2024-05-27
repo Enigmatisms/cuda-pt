@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
 
     PathTracer pt(scene.objects, scene.shapes, vert_data, norm_data, uvs_data, 1, scene.config.width, scene.config.height);
     printf("Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.max_depth, scene.config.spp);
-    auto bytes_buffer = pt.render(scene.config.spp, scene.config.max_depth);
+    auto bytes_buffer = pt.render(scene.config.spp, scene.config.max_depth, scene.config.gamma_correction);
 
     std::string file_name = "render.png";
 

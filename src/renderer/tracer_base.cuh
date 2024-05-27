@@ -109,7 +109,8 @@ public:
 
     CPT_CPU virtual std::vector<uint8_t> render(
         int num_iter  = 64,
-        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+        int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
+        bool gamma_correction = true
     ) {
         throw std::runtime_error("Not implemented.\n");
         return {};

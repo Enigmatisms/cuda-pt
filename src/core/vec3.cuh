@@ -7,6 +7,7 @@
 #include <iostream>
 #include <chrono>
 #include <iomanip>
+#include <cuda_runtime_api.h>
 #include "core/cuda_utils.cuh"
 #include "core/constants.cuh"
 
@@ -120,6 +121,12 @@ public:
 
     CPT_CPU_GPU_INLINE void fill(float v) noexcept {
         _data = make_float3(v, v, v);
+    }
+
+    CPT_CPU_GPU_INLINE
+    bool numeric_err() const noexcept {
+        return isnan(_data.x) || isnan(_data.y) || isnan(_data.z) || \
+               isinf(_data.x) || isinf(_data.y) || isinf(_data.z);
     }
 
     CPT_CPU_GPU_INLINE

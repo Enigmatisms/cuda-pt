@@ -4,6 +4,7 @@
  * @author: Qianyue He
 */
 #pragma once
+#include "core/progress.h"
 #include "core/emitter.cuh"
 #include "core/object.cuh"
 #include "renderer/tracer_base.cuh"
@@ -160,42 +161,41 @@ __global__ static void render_pt_kernel(
 
             // emitter MIS
             emission_weight = emission_weight / (emission_weight + 
-                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * hit_emitter);
+                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * hit_emitter * (b > 0));
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
-            radiance += emission_weight * throughput *\
+            Vec3 direct_comp = throughput *\
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
+            radiance += direct_comp;
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
-            // printf("Num of emitters: %d, %x, %x, %x, %d\n", num_emitter, int(c_emitter[0]), int(c_emitter[1]), int(emitter), int(hit_emitter));
-            
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
-            // if (objects[object_id].emitter_id)
-            //     printf("Object id: %d, sampled id: %d, emitter: %d\n", object_id, emitter_id, objects[object_id].emitter_id);
             Ray shadow_ray(ray.o + ray.d * min_dist, Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
             shadow_ray.d = emitter->sample(shadow_ray.o, ray.o, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
             
-            float emit_length = shadow_ray.d.length();
-            shadow_ray.d *= 1.f / emit_length;              // normalized direction
+            float emit_len_mis = shadow_ray.d.length();
+            shadow_ray.d *= 1.f / emit_len_mis;              // normalized direction
 
-            // (3) NEE scene intersection test (possible warp divergence, but... nevermind, it seems to be )
-            if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_length)) {
+            // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
+            if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis)) {
                 // MIS for BSDF / light sampling, to achieve better rendering
-                // accumulate direct component
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
+                emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
                 radiance += throughput * ray.o * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
-                    (1.f / (direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta()));
+                    (float(emit_len_mis > EPSILON) / select(1.f, emit_len_mis, emit_len_mis < EPSILON));
+                // numerical guard, in case emit_len_mis is 0
             }
 
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
             ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler.next2D());
-        }
 
-        // TODO: MIS for emitter
+            if (radiance.numeric_err())
+                radiance.fill(0);
+        }
     }
     __syncthreads();
     image(px, py) += radiance;
@@ -261,23 +261,26 @@ public:
 
     CPT_CPU std::vector<uint8_t> render(
         int num_iter = 64,
-        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+        int max_depth = 4,
+        bool gamma_correction = true
     ) override {
         ProfilePhase _(Prof::PTRenderingHost);
-        {
-            ProfilePhase _p(Prof::PTRenderingDevice);
             TicToc _timer("render_pt_kernel()", num_iter);
             // TODO: stream processing
             for (int i = 0; i < num_iter; i++) {
                 // for more sophisticated renderer (like path tracer), shared_memory should be used
-                render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                    obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
-                    *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth
-                ); 
-                CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+                {
+                    ProfilePhase _p(Prof::PTRenderingDevice);
+                    render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+                        obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                        *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth
+                    ); 
+                    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+                }
+                printProgress(i, num_iter);
             }
-        }
-        return image.export_cpu(1.f / num_iter);
+            printf("\n");
+        return image.export_cpu(1.f / num_iter, gamma_correction);
     }
 };
 

@@ -16,6 +16,7 @@ Since I have no intention making this a extensive project (like AdaPT, taking ca
 |Depth Renderer|Unidirection PT|
 |:--:|:--:|
 |![](assets/depth-render.png)|![](assets/pt-render.png)|
+|![](assets/render-balls.png)|![](assets/render-bunny.png)|
 
 - [ ] CUDA texture bindings (with normal or UV maps)
 - [ ] GPU side BVH implementation. This will be the most difficult part, since "it is always easy to write your program with parallelism, but difficult to make it fast".

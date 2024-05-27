@@ -39,11 +39,12 @@ private:
     Vec3 t, dir;        // camera translation (world frame) and orientation
     float inv_focal;    // focal length
     float _hw, _hh;     // pixel plane 
+    Vec2 signs;
 public:
     CPT_CPU_GPU DeviceCamera() {}
 
-    CPT_CPU_GPU DeviceCamera(const Vec3& from, const Vec3& lookat, float fov, float w, float h): 
-        t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f) {
+    CPT_CPU_GPU DeviceCamera(const Vec3& from, const Vec3& lookat, float fov, float w, float h, float hsign = 1, float vsign = 1): 
+        t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f), signs(hsign, vsign) {
         dir = (lookat - from).normalized();
         R   = rotation_between(Vec3(0, 0, 1), dir);      
     }
@@ -54,12 +55,12 @@ public:
     CPT_GPU Ray generate_ray(int x, int y, Sampler& sampler) const {
         float x_pos = sampler.next1D() + float(x),
               y_pos = sampler.next1D() + float(y);
-        Vec3 ndc_dir((x_pos - _hw) * inv_focal, (y_pos - _hh) * inv_focal, 1.f);
+        Vec3 ndc_dir((x_pos - _hw) * inv_focal * signs.x(), (y_pos - _hh) * inv_focal * signs.y(), 1.f);
         return Ray(t, R.rotate(ndc_dir.normalized()));
     }
 
     CPT_CPU static DeviceCamera from_xml(const tinyxml2::XMLElement* sensorElement) {
-        float fov = 0;
+        float fov = 0, hsign = 1, vsign = 1;
         int width = 512, height = 512;
         Vec3 lookat_target;
         Vec3 lookat_origin;
@@ -85,6 +86,18 @@ public:
             }
         }
 
+        element = sensorElement->FirstChildElement("bool");
+        while (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            if(name == "vflip") {
+                if (value == "true") vsign = -vsign;
+            } else if (name == "hflip") {
+                if (value == "true") hsign = -hsign;
+            }
+            element = element->NextSiblingElement("bool");
+        }
+
         // Read film values
         element = sensorElement->FirstChildElement("film");
         if (element) {
@@ -99,6 +112,6 @@ public:
                 filmElement = filmElement->NextSiblingElement("integer");
             }
         }
-        return DeviceCamera(lookat_origin, lookat_target, fov, width, height);
+        return DeviceCamera(lookat_origin, lookat_target, fov, width, height, hsign, vsign);
     }
 };
