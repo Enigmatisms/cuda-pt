@@ -7,8 +7,6 @@ __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
 int main(int argc, char** argv) {
-    InitProfiler();
-
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
         exit(1);
@@ -46,10 +44,6 @@ int main(int argc, char** argv) {
     vert_data.destroy();
     norm_data.destroy();
     uvs_data.destroy();
-
-    ReportProfilerResults(stdout);
-    ClearProfiler();
-    CleanupProfiler();
 
     return 0;
 }

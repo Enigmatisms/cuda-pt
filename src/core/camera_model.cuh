@@ -13,7 +13,7 @@
 
 // convert fov in degree to focal length
 CPT_CPU_GPU float fov2focal(float fov, float img_size) {
-    fov = fov / 180.f * M_PI;
+    fov = fov / 180.f * M_Pi;
     return 0.5f * img_size / std::tan(.5f * fov);
 }
 

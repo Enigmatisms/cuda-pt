@@ -48,13 +48,13 @@ public:
         // printf("it.norm: %f, %f, %f\n", it.shading_norm.x(), it.shading_norm.y(), it.shading_norm.z());
         // printf("out: %f, %f, %f\n", out.x(), out.y(), out.z());
         float dot_val = it.shading_norm.dot(out);
-        return max(it.shading_norm.dot(out), 0.f) * M_1_PI;
+        return max(it.shading_norm.dot(out), 0.f) * M_1_Pi;
     }
 
     CPT_CPU_GPU Vec3 eval(const Interaction& it, const Vec3& out, const Vec3& /*in */, bool is_mi = false) const override {
         float cosine_term = it.shading_norm.dot(out);
         // printf("%f, k_d: %f, %f, %f\n", cosine_term, k_d.x(), k_d.y(), k_d.z());
-        return k_d * max(0.f, cosine_term) * M_1_PI;
+        return k_d * max(0.f, cosine_term) * M_1_Pi;
     }
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, float& pdf, Vec2&& uv) const override {

@@ -7,6 +7,7 @@
 #include "core/progress.h"
 #include "core/emitter.cuh"
 #include "core/object.cuh"
+#include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
 static constexpr int SEED_SCALER = 11451;
@@ -264,22 +265,18 @@ public:
         int max_depth = 4,
         bool gamma_correction = true
     ) override {
-        ProfilePhase _(Prof::PTRenderingHost);
-            TicToc _timer("render_pt_kernel()", num_iter);
-            // TODO: stream processing
-            for (int i = 0; i < num_iter; i++) {
-                // for more sophisticated renderer (like path tracer), shared_memory should be used
-                {
-                    ProfilePhase _p(Prof::PTRenderingDevice);
-                    render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                        obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
-                        *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth
-                    ); 
-                    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-                }
-                printProgress(i, num_iter);
-            }
-            printf("\n");
+        TicToc _timer("render_pt_kernel()", num_iter);
+        // TODO: stream processing
+        for (int i = 0; i < num_iter; i++) {
+            // for more sophisticated renderer (like path tracer), shared_memory should be used
+            render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth
+            ); 
+            CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+            printProgress(i, num_iter);
+        }
+        printf("\n");
         return image.export_cpu(1.f / num_iter, gamma_correction);
     }
 };

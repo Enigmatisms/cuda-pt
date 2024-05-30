@@ -4,6 +4,7 @@
  * @author: Qianyue He
 */
 #pragma once
+#include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
 extern __constant__ DeviceCamera dev_cam;
@@ -99,16 +100,12 @@ public:
         int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
         bool gamma_correction = true
     ) override {
-        ProfilePhase _(Prof::DepthRenderingHost);
-        {
-            ProfilePhase _p(Prof::DepthRenderingDevice);
-            TicToc _timer("render_kernel()", num_iter);
-            for (int i = 0; i < num_iter; i++) {
-                // for more sophisticated renderer (like path tracer), shared_memory should be used
-                render_depth_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                        shapes, aabbs, verts, norms, uvs, *dev_image, num_prims, max_depth); 
-                CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-            }
+        TicToc _timer("render_kernel()", num_iter);
+        for (int i = 0; i < num_iter; i++) {
+            // for more sophisticated renderer (like path tracer), shared_memory should be used
+            render_depth_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+                    shapes, aabbs, verts, norms, uvs, *dev_image, num_prims, max_depth); 
+            CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         return image.export_cpu(1.f / (5.f * num_iter), gamma_correction);
     }

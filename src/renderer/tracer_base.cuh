@@ -5,7 +5,6 @@
 */
 #pragma once
 #include "core/soa.cuh"
-#include "core/stats.h"
 #include "core/shapes.cuh"
 #include "core/host_device.cuh"
 #include "core/camera_model.cuh"
