@@ -46,10 +46,6 @@ For a scene with complex geometries, BVH (or KD-tree) should be implemented to a
 
 ---
 
-### Current State
+### Misc
 
-This repo originated from: [w3ntao/smallpt-megakernel](https://github.com/w3ntao/smallpt-megakernel). I answered [his question on stackexchange computer graphics](https://computergraphics.stackexchange.com/questions/14000/why-is-my-ray-tracer-not-accelerated-by-cuda/14003#14003) and tweaked his code, so I thought to myself... why not base on this repo and try to make it better (though, I won't call it small-pt, since it definitely won't be small after I heavily optimize the code). After solving the problems in his code, I am able to render around 20x faster than CPU (don't remember how many threads I used, GPU is RTX TITAN, though):
-
-![](https://i.stack.imgur.com/j06DC.jpg)
-
-For detailed analysis, please refer to my answer post given in the above link.
+This repo originated from: [w3ntao/smallpt-megakernel](https://github.com/w3ntao/smallpt-megakernel), but now it is very different from it. I answered [his question on stackexchange computer graphics](https://computergraphics.stackexchange.com/questions/14000/why-is-my-ray-tracer-not-accelerated-by-cuda/14003#14003) and tweaked his code, so I thought to myself... why not base on this repo and try to make it better (though, I won't call it small-pt, since it definitely won't be small after I heavily optimize the code).
