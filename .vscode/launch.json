@@ -23,5 +23,26 @@
                 }
             ]
         },
+        {
+            "name": "(gdb) mem-checking",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build_debug/pt",
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build_debug/",
+            "args": ["../scene/xml/bunny.xml"],
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/local/cuda-11.8/bin/cuda-gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+
     ]
 }

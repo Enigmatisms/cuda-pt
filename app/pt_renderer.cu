@@ -7,8 +7,6 @@ __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
 int main(int argc, char** argv) {
-    InitProfiler();
-
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
         exit(1);
@@ -30,7 +28,7 @@ int main(int argc, char** argv) {
 
     PathTracer pt(scene.objects, scene.shapes, vert_data, norm_data, uvs_data, 1, scene.config.width, scene.config.height);
     printf("Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.max_depth, scene.config.spp);
-    auto bytes_buffer = pt.render(scene.config.spp, scene.config.max_depth);
+    auto bytes_buffer = pt.render(scene.config.spp, scene.config.max_depth, scene.config.gamma_correction);
 
     std::string file_name = "render.png";
 
@@ -46,10 +44,6 @@ int main(int argc, char** argv) {
     vert_data.destroy();
     norm_data.destroy();
     uvs_data.destroy();
-
-    ReportProfilerResults(stdout);
-    ClearProfiler();
-    CleanupProfiler();
 
     return 0;
 }

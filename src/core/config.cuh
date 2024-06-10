@@ -12,8 +12,9 @@ struct RenderingConfig {
     int height;
     int max_depth;
     int spp;
+    bool gamma_correction;
 
-    RenderingConfig() : width(512), height(512), max_depth(16), spp(64) {}
+    RenderingConfig() : width(512), height(512), max_depth(16), spp(64), gamma_correction(true) {}
 
     static RenderingConfig from_xml(const tinyxml2::XMLElement *sensor_node) {
         RenderingConfig config;
@@ -38,6 +39,13 @@ struct RenderingConfig {
                     film_elem->QueryIntAttribute("value", &config.height);
                 }
                 film_elem = film_elem->NextSiblingElement("integer");
+            }
+            film_elem = node->FirstChildElement("bool");
+            if (film_elem) {
+                std::string name = film_elem->Attribute("name");
+                if (name == "gamma_correction") {
+                    film_elem->QueryBoolAttribute("value", &config.gamma_correction);
+                }
             }
         }
         return config;

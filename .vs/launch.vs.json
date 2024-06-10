@@ -1,0 +1,16 @@
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "default",
+      "project": "CMakeLists.txt",
+      "projectTarget": "pt.exe (Release\\pt.exe)",
+      "name": "pt.exe (Release\\pt.exe)",
+      "args": [
+        "../../scene/xml/bunny.xml"
+      ],
+      "cwd": "$(ProjectDir)"
+    }
+  ]
+}

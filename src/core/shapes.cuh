@@ -28,7 +28,9 @@ using ConstSharedVec2Ptr = const Vec2 (*)[32];
 class AABB {
 public:
     Vec3 mini;
+    CUDA_PT_PADDING(1, 1)
     Vec3 maxi;
+    CUDA_PT_PADDING(1, 2)
 public:
     CPT_CPU_GPU AABB(): mini(), maxi() {}
 
@@ -71,6 +73,11 @@ public:
             mini.minimize(_aabb.mini),
             maxi.maximize(_aabb.maxi)
         );
+    }
+
+    CPT_GPU_INLINE void copy_from(const AABB& other) {
+        FLOAT4(mini) = CONST_FLOAT4(other.mini);
+        FLOAT4(maxi) = CONST_FLOAT4(other.maxi); // Load last two elements of second Vec3
     }
 };
 using ConstAABBPtr = const AABB* const;
@@ -169,7 +176,7 @@ private:
     const Ray& ray;
     const SoA3<Vec3>& verts; 
     int index;
-    float max_range;
+    float max_range;    
 public:
     CPT_CPU_GPU ShapeIntersectVisitor(
         const SoA3<Vec3>& _verts, 

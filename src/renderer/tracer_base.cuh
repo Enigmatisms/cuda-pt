@@ -5,7 +5,6 @@
 */
 #pragma once
 #include "core/soa.cuh"
-#include "core/stats.h"
 #include "core/shapes.cuh"
 #include "core/host_device.cuh"
 #include "core/camera_model.cuh"
@@ -31,8 +30,8 @@ CPT_GPU float ray_intersect(
     ConstAABBPtr s_aabbs,
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
-    int remain_prims,
-    int cp_base_5,
+    const int remain_prims,
+    const int cp_base_5,
     float min_dist
 ) {
     float aabb_tmin = 0;
@@ -41,11 +40,9 @@ CPT_GPU float ray_intersect(
         if (s_aabbs[idx].intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
             shape_visitor.set_index(idx);
             float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
-            bool valid = dist > EPSILON;
-            valid &= dist < min_dist;       // whether to update the distance
-            min_dist = dist * valid + min_dist * (1 - valid);
-            min_index = (cp_base_5 + idx) * valid + min_index * (1 - valid);
-            // printf("AABB intersect (%d): %f, %f, ray: (%f, %f, %f), (%f, %f, %f)\n", remain_prims, dist, min_dist, ray.o.x(), ray.o.y(), ray.o.z(), ray.d.x(), ray.d.y(), ray.d.z());
+            bool valid = dist > EPSILON && dist < min_dist;
+            min_dist = valid ? dist : min_dist;
+            min_index = valid ? cp_base_5 + idx : min_index;
         }
     }
     return min_dist;
@@ -109,7 +106,8 @@ public:
 
     CPT_CPU virtual std::vector<uint8_t> render(
         int num_iter  = 64,
-        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+        int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
+        bool gamma_correction = true
     ) {
         throw std::runtime_error("Not implemented.\n");
         return {};

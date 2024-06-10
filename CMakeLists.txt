@@ -5,7 +5,7 @@ set(PROJ_NAME "cuda-pt")
 project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG")
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -g -O0")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -g -G -O0")
   set(CMAKE_CUDA_FLAGS_DEBUG "-G -g")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
   message(STATUS "Building project in DEBUG mode.")
@@ -13,30 +13,21 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
 ELSE()
   # to check register usage, please set "-Xptxas -v"
   # to cap the register usage to boost occupancy, set ""
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -O3 --maxrregcount=64")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --maxrregcount=64 -lineinfo")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
   message(STATUS "Building project in RELEASE mode.")
   set(CMAKE_BUILD_TYPE Release)
 ENDIF()
 SET(COMPILE_CUDA True)
 
-if (NOT CMAKE_CUDA_COMPILER)
-    set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
-    # required by CLion
-endif ()
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Threads REQUIRED)
-find_package(PNG REQUIRED)
-include_directories(${PNG_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
-add_definitions(${PNG_DEFINITIONS})
+include_directories(${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
 
 add_subdirectory(src/ext/tinyxml2)
 add_subdirectory(src/ext/tinyobjloader)
-
-set(LIBRARIES ${LIBRARIES} ${PNG_LIBRARIES})
 
 aux_source_directory(
         ${CMAKE_CURRENT_LIST_DIR}/src/impl CUPT_IMPL
@@ -51,7 +42,6 @@ add_executable(${EXEC1_NAME}
 
 target_link_libraries(
         ${EXEC1_NAME} PRIVATE
-        ${PNG_LIBRARY}
         tinyxml2 tinyobjloader
 )
 
@@ -77,7 +67,6 @@ add_executable(${EXEC2_NAME}
 
 target_link_libraries(
         ${EXEC2_NAME} PRIVATE
-        ${PNG_LIBRARY}
         tinyxml2 tinyobjloader
 )
 
@@ -119,7 +108,6 @@ add_executable(pt_test
 
 target_link_libraries(
         pt_test PRIVATE
-        ${PNG_LIBRARY}
         tinyxml2 tinyobjloader
 )
 

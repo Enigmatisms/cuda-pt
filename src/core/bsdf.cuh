@@ -48,13 +48,13 @@ public:
         // printf("it.norm: %f, %f, %f\n", it.shading_norm.x(), it.shading_norm.y(), it.shading_norm.z());
         // printf("out: %f, %f, %f\n", out.x(), out.y(), out.z());
         float dot_val = it.shading_norm.dot(out);
-        return max(it.shading_norm.dot(out), 0.f) * M_1_PI;
+        return max(it.shading_norm.dot(out), 0.f) * M_1_Pi;
     }
 
     CPT_CPU_GPU Vec3 eval(const Interaction& it, const Vec3& out, const Vec3& /*in */, bool is_mi = false) const override {
         float cosine_term = it.shading_norm.dot(out);
         // printf("%f, k_d: %f, %f, %f\n", cosine_term, k_d.x(), k_d.y(), k_d.z());
-        return k_d * max(0.f, cosine_term) * M_1_PI;
+        return k_d * max(0.f, cosine_term) * M_1_Pi;
     }
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec3& throughput, float& pdf, Vec2&& uv) const override {
@@ -111,14 +111,14 @@ public:
         float dot_normal = indir.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
-        float ni = select(1.f, k_d.x(), dot_normal < 0);
-        float nr = select(k_d.x(), 1.f, dot_normal < 0), cos_r2 = 0;
-        Vec3 ret_dir = (indir - 2.f * it.shading_norm * dot_normal).normalized(),
+        float ni = dot_normal < 0 ? 1.f : k_d.x();
+        float nr = dot_normal < 0 ? k_d.x() : 1.f, cos_r2 = 0;
+        Vec3 ret_dir = indir.advance(it.shading_norm, -2.f * dot_normal).normalized(),
              refra_vec = snell_refraction(indir, it.shading_norm, cos_r2, dot_normal, ni, nr);
         bool total_ref = is_total_reflection(dot_normal, ni, nr);
         nr = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
         ret_dir = select(ret_dir, refra_vec, total_ref || uv.x() < nr);
-        pdf     = select(1.f, select(nr, 1.f - nr, uv.x() < nr), total_ref);
+        pdf     = total_ref ? 1.f : (uv.x() < nr ? nr : 1.f - nr);
         // throughput *= f / pdf
         throughput *= k_s;
         return ret_dir;

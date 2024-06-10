@@ -12,8 +12,6 @@ __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
 int main(int argc, char** argv) {
-    InitProfiler();
-
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
     int num_material = 6, num_emitters = 1;
@@ -108,14 +106,6 @@ int main(int argc, char** argv) {
 
     CUDA_CHECK_RETURN(cudaFree(pure_bsdfs));
     CUDA_CHECK_RETURN(cudaFree(pure_emitters));
-
-    // ReportThreadStats();    
-    // PrintStats(stdout);
-    ReportProfilerResults(stdout);
-
-    // ClearStats();
-    ClearProfiler();
-    CleanupProfiler();
 
     return 0;
 }

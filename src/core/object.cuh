@@ -37,7 +37,7 @@ public:
             } else {
                 _aabb.mini = prims.x[i] - prims.y[i].x();
                 _aabb.maxi = prims.x[i] + prims.y[i].x();
-                inv_area = static_cast<float>(4.f * M_PI) * prims.y[i].x() * prims.y[i].x();
+                inv_area = static_cast<float>(4.f * M_Pi) * prims.y[i].x() * prims.y[i].x();
             }
         }
         if (is_polygon)
@@ -60,7 +60,7 @@ public:
             } else {
                 _aabb.mini = prims[0][i] - prims[1][i].x();
                 _aabb.maxi = prims[0][i] + prims[1][i].x();
-                inv_area = static_cast<float>(4.f * M_PI) * prims[1][i].x() * prims[1][i].x();
+                inv_area = static_cast<float>(4.f * M_Pi) * prims[1][i].x() * prims[1][i].x();
             }
         }
         if (is_polygon)

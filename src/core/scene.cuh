@@ -144,7 +144,7 @@ void parseEmitterNames(
     const tinyxml2::XMLElement* emitter_elem, 
     std::unordered_map<std::string, int>& emitter_map
 ) {
-    int idx = 0;
+    int idx = 1;
     while (emitter_elem) {
         std::string id = emitter_elem->Attribute("id");
         emitter_map[id] = idx++;
@@ -204,7 +204,7 @@ void parseEmitter(
             std::cerr << "Bound primitive is not specified for area source '" << id << "', name: "<< element->Attribute("name") << std::endl;
             throw std::runtime_error("Bound primitive is not specified for area source");
         }
-        bool spherical_bound = element->Attribute("value") == "sphere";
+        bool spherical_bound = element->Attribute("value") == std::string("sphere");
         create_area_source<<<1, 1>>>(emitters[index], emission * scaler, emitter_obj_map[id], spherical_bound);
     }
 }
@@ -520,6 +520,7 @@ public:
         std::cout << "\tConfig: height:\t\t" << config.height << std::endl;
         std::cout << "\tConfig: max depth:\t" << config.max_depth << std::endl;
         std::cout << "\tConfig: SPP:\t\t" << config.spp << std::endl;
+        std::cout << "\tConfig: Gamma corr:\t" << config.gamma_correction << std::endl;
         std::cout << std::endl;
     }
 };
