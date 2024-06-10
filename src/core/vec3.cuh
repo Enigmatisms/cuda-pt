@@ -12,9 +12,8 @@
 #include "core/constants.cuh"
 
 class Vec3 {
-private:
-    float3 _data;
 public:
+    float3 _data;
     CPT_CPU_GPU Vec3() {}
     CPT_CPU_GPU
     Vec3(float _x, float _y, float _z): 
@@ -34,9 +33,9 @@ public:
     CPT_CPU_GPU_INLINE float& y() { return _data.y; }
     CPT_CPU_GPU_INLINE float& z() { return _data.z; }
 
-    CPT_CPU_GPU_INLINE float x() const { return _data.x; }
-    CPT_CPU_GPU_INLINE float y() const { return _data.y; }
-    CPT_CPU_GPU_INLINE float z() const { return _data.z; }
+    CPT_CPU_GPU_INLINE const float& x() const { return _data.x; }
+    CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
+    CPT_CPU_GPU_INLINE const float& z() const { return _data.z; }
 
     CPT_CPU_GPU_INLINE
     Vec3 abs() const noexcept {
@@ -129,6 +128,13 @@ public:
                isinf(_data.x) || isinf(_data.y) || isinf(_data.z);
     }
 
+
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU_GPU_INLINE
+    Vec3 advance(VecType&& d, float t) const noexcept {
+        return Vec3(fmaf(d.x(), t, _data.x), fmaf(d.y(), t, _data.y), fmaf(d.z(), t, _data.z));
+    } 
+
     CPT_CPU_GPU_INLINE
     Vec3 normalized() const { return *this * (1.f / length()); }
 
@@ -136,19 +142,23 @@ public:
     void normalize() { this->operator*=(1.f / length()); }
 
     CPT_CPU_GPU_INLINE
-    float length2() const { return _data.x * _data.x + _data.y * _data.y + _data.z * _data.z; }
+    float length2() const { return fmaf(_data.x, _data.x, fmaf(_data.y, _data.y, _data.z * _data.z)); }
 
     CPT_CPU_GPU_INLINE
     float length() const { return sqrt(length2()); }
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
-    float dot(VecType&& b) const noexcept { return _data.x * b.x() + _data.y * b.y() + _data.z * b.z(); }
+    float dot(VecType&& b) const noexcept { return fmaf(_data.x, b.x(), fmaf(_data.y, b.y(), _data.z * b.z()));}
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
     Vec3 cross(VecType&& b) const noexcept {
-        return Vec3(_data.y * b.z() - _data.z * b.y(), _data.z * b.x() - _data.x * b.z(), _data.x * b.y() - _data.y * b.x());
+        return Vec3(
+            fmaf(_data.y, b.z(), - _data.z * b.y()),
+            fmaf(_data.z, b.x(), - _data.x * b.z()),
+            fmaf(_data.x, b.y(), - _data.y * b.x())
+        );
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)

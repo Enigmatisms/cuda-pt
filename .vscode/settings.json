@@ -71,6 +71,7 @@
         "typeindex": "cpp",
         "forward_list": "cpp",
         "unordered_set": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "pipeline": "cpp"
     }
 }

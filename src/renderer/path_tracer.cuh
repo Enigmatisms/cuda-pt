@@ -4,6 +4,7 @@
  * @author: Qianyue He
 */
 #pragma once
+#include <cuda/pipeline>
 #include "core/progress.h"
 #include "core/emitter.cuh"
 #include "core/object.cuh"
@@ -111,8 +112,8 @@ __global__ static void render_pt_kernel(
     // optimization: copy at most 32 prims from global memory to shared memory
 
     // this kinda resembles deferred rendering
-    __shared__ Vec3 s_verts[3][32];         // vertex info
-    __shared__ AABB s_aabbs[32];            // aabb
+    __shared__ __align__(32) Vec3 s_verts[3][32];         // vertex info
+    __shared__ __align__(32) AABB s_aabbs[32];            // aabb
 
     SoA3<Vec3> s_verts_soa(
         reinterpret_cast<Vec3*>(&s_verts[0]),
@@ -136,13 +137,16 @@ __global__ static void render_pt_kernel(
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
             // memory copy to shared memory
             int cur_idx = (cp_base << 5) + tid, remain_prims = min(num_prims - (cp_base << 5), 32);
+            cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
             if (tid < 32 && cur_idx < num_prims) {        // copy from gmem to smem
-                s_verts[0][tid] = verts->x[cur_idx];
-                s_verts[1][tid] = verts->y[cur_idx];
-                s_verts[2][tid] = verts->z[cur_idx];
+                cuda::memcpy_async(&s_verts[0][tid], &verts->x[cur_idx], sizeof(Vec3), pipe);
+                cuda::memcpy_async(&s_verts[1][tid], &verts->y[cur_idx], sizeof(Vec3), pipe);
+                cuda::memcpy_async(&s_verts[2][tid], &verts->z[cur_idx], sizeof(Vec3), pipe);
 
-                s_aabbs[tid]  = aabbs[cur_idx];
+                s_aabbs[tid].copy_from(aabbs[cur_idx]);
             }
+            pipe.producer_commit();
+            pipe.consumer_wait();
             __syncthreads();
             // this might not be a good solution
             min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << 5, min_dist);
@@ -173,12 +177,12 @@ __global__ static void render_pt_kernel(
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
-            Ray shadow_ray(ray.o + ray.d * min_dist, Vec3(0, 0, 0));
+            Ray shadow_ray(ray.o.advance(ray.d, min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
             shadow_ray.d = emitter->sample(shadow_ray.o, ray.o, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
             
             float emit_len_mis = shadow_ray.d.length();
-            shadow_ray.d *= 1.f / emit_len_mis;              // normalized direction
+            shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
 
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis)) {
@@ -186,7 +190,7 @@ __global__ static void render_pt_kernel(
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
                 emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
                 radiance += throughput * ray.o * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
-                    (float(emit_len_mis > EPSILON) / select(1.f, emit_len_mis, emit_len_mis < EPSILON));
+                    (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
                 // numerical guard, in case emit_len_mis is 0
             }
 

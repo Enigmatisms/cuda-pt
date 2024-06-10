@@ -6,8 +6,6 @@
 __constant__ DeviceCamera dev_cam;
 
 int main() {
-    InitProfiler();
-
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
     int spp       = 2;
@@ -54,13 +52,5 @@ int main() {
     vert_data.destroy();
     norm_data.destroy();
     uvs_data.destroy();
-
-    // ReportThreadStats();    
-    // PrintStats(stdout);
-    ReportProfilerResults(stdout);
-
-    // ClearStats();
-    ClearProfiler();
-    CleanupProfiler();
     return 0;
 }

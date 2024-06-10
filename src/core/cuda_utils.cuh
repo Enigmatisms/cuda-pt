@@ -12,6 +12,12 @@
 #define CPT_GPU_INLINE __forceinline__ __device__
 #define CPT_CPU __host__
 #define CPT_CPU_INLINE __forceinline__ __host__
+#define CUDA_PT_PADDING(x, id) uint32_t __bytes##id[x];
+
+#define FLOAT4(v) (*(reinterpret_cast<float4*>(&v)))
+#define FLOAT2(v) (*(reinterpret_cast<float2*>(&v)))
+#define CONST_FLOAT4(v) (*(reinterpret_cast<const float4*>(&v)))
+#define CONST_FLOAT2(v) (*(reinterpret_cast<const float2*>(&v)))
 
 #define CONDITION_TEMPLATE(VecType, TargetType) \
     template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>>>
