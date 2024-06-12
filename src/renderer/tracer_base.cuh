@@ -4,7 +4,7 @@
  * @author: Qianyue He
 */
 #pragma once
-#include "core/soa.cuh"
+#include "core/aos.cuh"
 #include "core/shapes.cuh"
 #include "core/host_device.cuh"
 #include "core/camera_model.cuh"
@@ -52,9 +52,9 @@ class TracerBase {
 protected:
     Shape* shapes;
     AABB* aabbs;
-    SoA3<Vec3>* verts;
-    SoA3<Vec3>* norms; 
-    SoA3<Vec2>* uvs;
+    AoS3<Vec3>* verts;
+    AoS3<Vec3>* norms; 
+    AoS3<Vec2>* uvs;
     DeviceImage image;
     DeviceImage* dev_image;
     int num_prims;
@@ -63,17 +63,17 @@ protected:
 public:
     /**
      * @param shapes    shape information (for ray intersection)
-     * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, SoA3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+     * @param verts     vertices, AoS3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param norms     normal vectors, AoS3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param uvs       uv coordinates, AoS3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
      * @param camera    GPU camera model (constant memory)
      * @param image     GPU image buffer
     */
     TracerBase(
         const std::vector<Shape>& _shapes,
-        const SoA3<Vec3>& _verts,
-        const SoA3<Vec3>& _norms, 
-        const SoA3<Vec2>& _uvs,
+        const AoS3<Vec3>& _verts,
+        const AoS3<Vec3>& _norms, 
+        const AoS3<Vec2>& _uvs,
         int width, int height
     ): image(width, height), dev_image(nullptr),
        num_prims(_shapes.size()), w(width), h(height)

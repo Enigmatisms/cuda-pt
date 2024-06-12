@@ -28,7 +28,7 @@ CPT_GPU bool occlusion_test(
     ConstObjPtr objects,
     ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    const SoA3<Vec3>& verts,
+    const AoS3<Vec3>& verts,
     int num_objects,
     float max_dist
 ) {
@@ -76,9 +76,9 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * 
  * @param objects   object encapsulation
  * @param prim2obj  primitive to object index mapping: which object does this primitive come from?
- * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param uvs       uv coordinates, SoA3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+ * @param verts     vertices, AoS3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param norms     normal vectors, AoS3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param uvs       uv coordinates, AoS3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
  * @param camera    GPU camera model (constant memory)
  * @param image     GPU image buffer
  * @param num_prims number of primitives (to be intersected with)
@@ -112,14 +112,10 @@ __global__ static void render_pt_kernel(
     // optimization: copy at most 32 prims from global memory to shared memory
 
     // this kinda resembles deferred rendering
-    __shared__ __align__(32) Vec3 s_verts[3][32];         // vertex info
-    __shared__ __align__(32) AABB s_aabbs[32];            // aabb
+    __shared__ __align__(64) Vec3 s_verts[TRI_IDX(32)];         // vertex info
+    __shared__ __align__(64) AABB s_aabbs[32];            // aabb
 
-    SoA3<Vec3> s_verts_soa(
-        reinterpret_cast<Vec3*>(&s_verts[0]),
-        reinterpret_cast<Vec3*>(&s_verts[1]),
-        reinterpret_cast<Vec3*>(&s_verts[2]), 32
-    );
+    AoS3<Vec3> s_verts_soa(reinterpret_cast<Vec3*>(&s_verts[0]), 32);
     ShapeIntersectVisitor visitor(s_verts_soa, ray, 0);
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
@@ -139,10 +135,7 @@ __global__ static void render_pt_kernel(
             int cur_idx = (cp_base << 5) + tid, remain_prims = min(num_prims - (cp_base << 5), 32);
             cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
             if (tid < 32 && cur_idx < num_prims) {        // copy from gmem to smem
-                cuda::memcpy_async(&s_verts[0][tid], &verts->x[cur_idx], sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[1][tid], &verts->y[cur_idx], sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[2][tid], &verts->z[cur_idx], sizeof(Vec3), pipe);
-
+                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
                 s_aabbs[tid].copy_from(aabbs[cur_idx]);
             }
             pipe.producer_commit();
@@ -225,9 +218,9 @@ private:
 public:
     /**
      * @param shapes    shape information (for ray intersection)
-     * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, SoA3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+     * @param verts     vertices, AoS3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param norms     normal vectors, AoS3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param uvs       uv coordinates, AoS3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
      * @param camera    GPU camera model (constant memory)
      * @param image     GPU image buffer
      * 
@@ -237,9 +230,9 @@ public:
     PathTracer(
         const std::vector<ObjInfo>& _objs,
         const std::vector<Shape>& _shapes,
-        const SoA3<Vec3>& _verts,
-        const SoA3<Vec3>& _norms, 
-        const SoA3<Vec2>& _uvs,
+        const AoS3<Vec3>& _verts,
+        const AoS3<Vec3>& _norms, 
+        const AoS3<Vec2>& _uvs,
         int num_emitter,
         int width, int height
     ): TracerBase(_shapes, _verts, _norms, _uvs, width, height), 

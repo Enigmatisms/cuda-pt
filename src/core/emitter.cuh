@@ -90,13 +90,13 @@ public:
         float sample_sum = uv.x() + uv.y();
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
         float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y();
-        Vec3 sampled = uv.x() * prims->y[sampled_index] + uv.y() * prims->z[sampled_index] - (uv.x() + uv.y() - 1) * prims->x[sampled_index];
-        Vec3 normal = (norms->x[sampled_index] * diff_x * diff_y + \
-            norms->y[sampled_index] * uv.x() * diff_y + \
-            norms->z[sampled_index] * uv.y() * diff_x).normalized();
+        Vec3 sampled = uv.x() * prims->y(sampled_index) + uv.y() * prims->z(sampled_index) - (uv.x() + uv.y() - 1) * prims->x(sampled_index);
+        Vec3 normal = (norms->x(sampled_index) * diff_x * diff_y + \
+            norms->y(sampled_index) * uv.x() * diff_y + \
+            norms->z(sampled_index) * uv.y() * diff_x).normalized();
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
         sampled = select(
-            sampled, sphere_normal * prims->y[sampled_index].x() + prims->x[sampled_index],
+            sampled, sphere_normal * prims->y(sampled_index).x() + prims->x(sampled_index),
             is_sphere == false
         );
         normal = select(normal, sphere_normal, is_sphere == false);

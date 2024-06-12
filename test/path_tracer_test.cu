@@ -1,4 +1,4 @@
-#include "core/soa.cuh"
+#include "core/aos.cuh"
 #include "core/bsdf.cuh"
 #include "core/object.cuh"
 #include "core/emitter.cuh"
@@ -24,8 +24,8 @@ int main(int argc, char** argv) {
     Vec2 uv_default     = {0.0, 0.0};
 
     // scene setup
-    SoA3<Vec3> vert_data(v1s.size()), norm_data(v1s.size());
-    SoA3<Vec2> uvs_data(v1s.size());
+    AoS3<Vec3> vert_data(v1s.size()), norm_data(v1s.size());
+    AoS3<Vec2> uvs_data(v1s.size());
     vert_data.from_vectors(v1s, v2s, v3s);
     norm_data.from_vectors(norms, norms, norms);
     uvs_data.fill(uv_default);

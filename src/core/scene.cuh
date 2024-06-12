@@ -13,7 +13,7 @@
 #include <cuda_runtime.h>
 #include <tiny_obj_loader.h>
 #include "core/config.cuh"
-#include "core/soa.cuh"
+#include "core/aos.cuh"
 #include "core/bsdf.cuh"
 #include "core/shapes.cuh"
 #include "core/object.cuh"
@@ -492,7 +492,7 @@ public:
         CUDA_CHECK_RETURN(cudaFree(emitters));
     }
 
-    void export_soa(SoA3<Vec3>& verts, SoA3<Vec3>& norms, SoA3<Vec2>& uvs) const {
+    void export_soa(AoS3<Vec3>& verts, AoS3<Vec3>& norms, AoS3<Vec2>& uvs) const {
         verts.from_vectors(verts_list[0], verts_list[1], verts_list[2]);
         norms.from_vectors(norms_list[0], norms_list[1], norms_list[2]);
         uvs.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
