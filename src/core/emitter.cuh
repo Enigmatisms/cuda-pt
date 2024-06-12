@@ -7,6 +7,7 @@
 */
 #pragma once
 #include "core/vec3.cuh"
+#include "core/vec4.cuh"
 #include "core/sampling.cuh"
 
 CPT_CPU_GPU_INLINE float distance_attenuate(Vec3&& diff) {
@@ -15,7 +16,7 @@ CPT_CPU_GPU_INLINE float distance_attenuate(Vec3&& diff) {
 
 class Emitter {
 protected:
-    Vec3 Le;
+    Vec4 Le;
     int obj_ref_id;
     bool is_sphere;         // whether the emitter binds to a sphere
 public:
@@ -24,25 +25,25 @@ public:
     */
     CPT_CPU_GPU Emitter() {}
 
-    CONDITION_TEMPLATE(VecType, Vec3)
+    CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU Emitter(VecType&& le, int obj_ref = -1, bool is_sphere = false):
         Le(std::forward<VecType>(le)), obj_ref_id(obj_ref), is_sphere(is_sphere) {}
 
-    CPT_GPU_INLINE virtual Vec3 sample(const Vec3& hit_pos, Vec3& le, float& pdf, Vec2&&, ConstPrimPtr, ConstPrimPtr, int) const {
+    CPT_GPU_INLINE virtual Vec3 sample(const Vec3& hit_pos, Vec4& le, float& pdf, Vec2&&, ConstPrimPtr, ConstPrimPtr, int) const {
         pdf = 1;
         le.fill(0);
         return Vec3(0, 0, 0);
     }
 
-    CPT_GPU_INLINE virtual Vec3 eval_le(const Vec3* const inci_dir = nullptr, const Vec3* const normal = nullptr) const {
-        return Vec3(0, 0, 0);
+    CPT_GPU_INLINE virtual Vec4 eval_le(const Vec3* const inci_dir = nullptr, const Vec3* const normal = nullptr) const {
+        return Vec4(0, 0, 0, 1);
     }
 
     CPT_GPU_INLINE bool non_delta() const noexcept {
         return this->is_sphere;
     }
 
-    CPT_GPU_INLINE Vec3 get_le() const noexcept {
+    CPT_GPU_INLINE Vec4 get_le() const noexcept {
         return Le;
     }
 
@@ -57,17 +58,17 @@ protected:
 public:
     CPT_CPU_GPU PointSource() {}
 
-    CONDITION_TEMPLATE_2(VType1, VType2, Vec3)
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec4, Vec3)
     CPT_CPU_GPU PointSource(VType1&& le, VType2&& pos): 
         Emitter(std::forward<VType1>(le)), pos(std::forward<VType2>(pos)) {}
 
-    CPT_GPU_INLINE Vec3 sample(const Vec3& hit_pos, Vec3& le, float&, Vec2&&, ConstPrimPtr, ConstPrimPtr, int) const override {
+    CPT_GPU_INLINE Vec3 sample(const Vec3& hit_pos, Vec4& le, float&, Vec2&&, ConstPrimPtr, ConstPrimPtr, int) const override {
         le = this->Le * distance_attenuate(pos - hit_pos);
         return this->pos;
     }
 
-    CPT_GPU_INLINE virtual Vec3 eval_le(const Vec3* const , const Vec3* const ) const override {
-        return Vec3(0, 0, 0);
+    CPT_GPU_INLINE virtual Vec4 eval_le(const Vec3* const , const Vec3* const ) const override {
+        return Vec4(0, 0, 0, 1);
     }
 };
 
@@ -78,12 +79,12 @@ class AreaSource: public Emitter {
 public:
     CPT_CPU_GPU AreaSource() {}
 
-    CONDITION_TEMPLATE(VType, Vec3)
+    CONDITION_TEMPLATE(VType, Vec4)
     CPT_CPU_GPU AreaSource(VType&& le, int obj_ref, bool is_sphere = false): 
         Emitter(std::forward<VType>(le), obj_ref, is_sphere) {}
 
     CPT_GPU_INLINE Vec3 sample(
-        const Vec3& hit_pos, Vec3& le, float& pdf, 
+        const Vec3& hit_pos, Vec4& le, float& pdf, 
         Vec2&& uv, ConstPrimPtr prims, ConstPrimPtr norms, int sampled_index
     ) const override {
         float sample_sum = uv.x() + uv.y();
@@ -109,7 +110,7 @@ public:
         return sampled;
     }
 
-    CPT_GPU virtual Vec3 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
-        return select(this->Le, Vec3(0, 0, 0), inci_dir->dot(*normal) < 0);
+    CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
+        return select(this->Le, Vec4(0, 0, 0, 1), inci_dir->dot(*normal) < 0);
     }
 };

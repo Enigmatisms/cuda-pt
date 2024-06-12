@@ -123,7 +123,7 @@ __global__ static void render_pt_kernel(
     ShapeIntersectVisitor visitor(s_verts_soa, ray, 0);
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
-    Vec3 throughput(1, 1, 1), radiance(0, 0, 0);
+    Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
 
     int num_copy = (num_prims + 31) / 32, min_index = -1;   // round up
@@ -170,7 +170,7 @@ __global__ static void render_pt_kernel(
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
-            Vec3 direct_comp = throughput *\
+            Vec4 direct_comp = throughput *\
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
             radiance += direct_comp;
 
@@ -179,7 +179,7 @@ __global__ static void render_pt_kernel(
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
             Ray shadow_ray(ray.o.advance(ray.d, min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
-            shadow_ray.d = emitter->sample(shadow_ray.o, ray.o, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+            shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
             
             float emit_len_mis = shadow_ray.d.length();
             shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
@@ -189,7 +189,7 @@ __global__ static void render_pt_kernel(
                 // MIS for BSDF / light sampling, to achieve better rendering
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
                 emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
-                radiance += throughput * ray.o * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
+                radiance += throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
                     (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
                 // numerical guard, in case emit_len_mis is 0
             }

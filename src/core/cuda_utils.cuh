@@ -29,6 +29,13 @@
            std::is_same_v<std::decay_t<T2>, TargetType> \
         >>
 
+#define CONDITION_TEMPLATE_SEP_2(T1, T2, TargetType1, TargetType2) \
+    template<typename T1, typename T2, typename = \
+        std::enable_if_t<\
+           std::is_same_v<std::decay_t<T1>, TargetType1> && \
+           std::is_same_v<std::decay_t<T2>, TargetType2> \
+        >>
+
 #ifndef NO_CUDA
 __host__ static void CheckCudaErrorAux (const char *, unsigned, const char *, cudaError_t);
 #define CUDA_CHECK_RETURN(value) CheckCudaErrorAux(__FILE__,__LINE__, #value, value)

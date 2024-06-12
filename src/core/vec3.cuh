@@ -12,8 +12,9 @@
 #include "core/constants.cuh"
 
 class Vec3 {
-public:
+private:
     float3 _data;
+public:
     CPT_CPU_GPU Vec3() {}
     CPT_CPU_GPU
     Vec3(float _x, float _y, float _z): 

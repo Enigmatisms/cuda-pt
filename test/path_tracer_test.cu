@@ -52,12 +52,12 @@ int main(int argc, char** argv) {
     // TODO: this is not correct
     BSDF** pure_bsdfs;
     CUDA_CHECK_RETURN(cudaMalloc(&pure_bsdfs, sizeof(BSDF*) * num_material));
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs, Vec3(1, 0.2, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));     // red right
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 1, Vec3(0.8, 0.8, 0.8), Vec3(0, 0, 0), Vec3(0, 0, 0));
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 2, Vec3(0.2, 1, 0.2), Vec3(0, 0, 0), Vec3(0, 0, 0));
-    create_bsdf<SpecularBSDF><<<1, 1>>>(pure_bsdfs + 3, Vec3(0, 0, 0), Vec3(0.9, 0.9, 0.9), Vec3(0, 0, 0));
-    create_bsdf<TranslucentBSDF><<<1, 1>>>(pure_bsdfs + 4, Vec3(1.5, 0, 0), Vec3(0.99, 0.99, 0.99), Vec3(0, 0, 0));
-    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 5, Vec3(0.99, 0.99, 0.99), Vec3(0, 0, 0), Vec3(0, 0, 0));
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs, Vec4(1, 0.2, 0.2), Vec4(0, 0, 0), Vec4(0, 0, 0));     // red right
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 1, Vec4(0.8, 0.8, 0.8), Vec4(0, 0, 0), Vec4(0, 0, 0));
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 2, Vec4(0.2, 1, 0.2), Vec4(0, 0, 0), Vec4(0, 0, 0));
+    create_bsdf<SpecularBSDF><<<1, 1>>>(pure_bsdfs + 3, Vec4(0, 0, 0), Vec4(0.9, 0.9, 0.9), Vec4(0, 0, 0));
+    create_bsdf<TranslucentBSDF><<<1, 1>>>(pure_bsdfs + 4, Vec4(1.5, 0, 0), Vec4(0.99, 0.99, 0.99), Vec4(0, 0, 0));
+    create_bsdf<LambertianBSDF><<<1, 1>>>(pure_bsdfs + 5, Vec4(0.99, 0.99, 0.99), Vec4(0, 0, 0), Vec4(0, 0, 0));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, pure_bsdfs, num_material * sizeof(BSDF*)));
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
     Emitter** pure_emitters; // null_emitter
     CUDA_CHECK_RETURN(cudaMalloc(&pure_emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(pure_emitters[0]);
-    create_point_source<<<1, 1>>>(pure_emitters[1], Vec3(2, 2, 2), Vec3(0, 0, 0.8));
+    create_point_source<<<1, 1>>>(pure_emitters[1], Vec4(2, 2, 2), Vec3(0, 0, 0.8));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, pure_emitters, (num_emitters + 1) * sizeof(Emitter*)));
     
