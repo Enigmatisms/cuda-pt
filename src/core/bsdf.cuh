@@ -79,7 +79,7 @@ public:
     }
 
     CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
-        return Vec3(0, 0, 0);
+        return Vec4(0, 0, 0);
     }
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
