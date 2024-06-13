@@ -24,8 +24,8 @@ int main(int argc, char** argv) {
     Vec2 uv_default     = {0.0, 0.0};
 
     // scene setup
-    AoS3<Vec3> vert_data(v1s.size()), norm_data(v1s.size());
-    AoS3<Vec2> uvs_data(v1s.size());
+    ArrayType<Vec3> vert_data(v1s.size()), norm_data(v1s.size());
+    ArrayType<Vec2> uvs_data(v1s.size());
     vert_data.from_vectors(v1s, v2s, v3s);
     norm_data.from_vectors(norms, norms, norms);
     uvs_data.fill(uv_default);

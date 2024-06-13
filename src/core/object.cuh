@@ -22,7 +22,7 @@ public:
         return _aabb.intersect(ray, t_near);
     }
 
-    CPT_CPU_GPU void setup(const AoS3<Vec3>& prims, bool is_polygon = true) {
+    CPT_CPU_GPU void setup(const ArrayType<Vec3>& prims, bool is_polygon = true) {
         int ub = prim_offset + prim_num;
         for (int i = prim_offset; i < ub; i++) {
             if (is_polygon) {

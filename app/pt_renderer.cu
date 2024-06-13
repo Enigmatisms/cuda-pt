@@ -17,8 +17,8 @@ int main(int argc, char** argv) {
     Scene scene(xml_path);
 
     // scene setup
-    AoS3<Vec3> vert_data(scene.num_prims), norm_data(scene.num_prims);
-    AoS3<Vec2> uvs_data(scene.num_prims);
+    ArrayType<Vec3> vert_data(scene.num_prims), norm_data(scene.num_prims);
+    ArrayType<Vec2> uvs_data(scene.num_prims);
 
     scene.export_soa(vert_data, norm_data, uvs_data);
 

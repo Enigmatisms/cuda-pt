@@ -93,7 +93,7 @@ public:
     // For sphere, uv coordinates is not supported
     CPT_CPU_GPU float intersect(
         const Ray& ray,
-        const AoS3<Vec3>& verts, 
+        const ArrayType<Vec3>& verts, 
         int index,
         float min_range = EPSILON, float max_range = std::numeric_limits<float>::infinity()
     ) const {
@@ -110,9 +110,9 @@ public:
 
     CPT_CPU_GPU Interaction intersect_full(
         const Ray& ray,
-        const AoS3<Vec3>& verts, 
-        const AoS3<Vec3>& norms, 
-        const AoS3<Vec2>& uvs, 
+        const ArrayType<Vec3>& verts, 
+        const ArrayType<Vec3>& norms, 
+        const ArrayType<Vec2>& uvs, 
         int index
     ) const {
         auto op = verts.x(index) - ray.o; 
@@ -135,7 +135,7 @@ public:
 
     CPT_CPU_GPU float intersect(
         const Ray& ray,
-        const AoS3<Vec3>& verts, 
+        const ArrayType<Vec3>& verts, 
         int index,
         float min_range = EPSILON, float max_range = std::numeric_limits<float>::infinity()
     ) const {
@@ -150,9 +150,9 @@ public:
 
     CPT_CPU_GPU Interaction intersect_full(
         const Ray& ray,
-        const AoS3<Vec3>& verts, 
-        const AoS3<Vec3>& norms, 
-        const AoS3<Vec2>& uvs, 
+        const ArrayType<Vec3>& verts, 
+        const ArrayType<Vec3>& norms, 
+        const ArrayType<Vec2>& uvs, 
         int index
     ) const {
         // solve a linear equation
@@ -174,12 +174,12 @@ public:
 class ShapeIntersectVisitor {
 private:
     const Ray& ray;
-    const AoS3<Vec3>& verts; 
+    const ArrayType<Vec3>& verts; 
     int index;
     float max_range;    
 public:
     CPT_CPU_GPU ShapeIntersectVisitor(
-        const AoS3<Vec3>& _verts, 
+        const ArrayType<Vec3>& _verts, 
         const Ray& _ray,
         int _index,
         float _max_range = std::numeric_limits<float>::infinity()
@@ -198,15 +198,15 @@ public:
 class ShapeExtractVisitor {
 private:
     const Ray& ray;
-    const AoS3<Vec3>& verts; 
-    const AoS3<Vec3>& norms; 
-    const AoS3<Vec2>& uvs; 
+    const ArrayType<Vec3>& verts; 
+    const ArrayType<Vec3>& norms; 
+    const ArrayType<Vec2>& uvs; 
     int index;
 public:
     CPT_CPU_GPU ShapeExtractVisitor(
-        const AoS3<Vec3>& _verts, 
-        const AoS3<Vec3>& _norms, 
-        const AoS3<Vec2>& _uvs, 
+        const ArrayType<Vec3>& _verts, 
+        const ArrayType<Vec3>& _norms, 
+        const ArrayType<Vec2>& _uvs, 
         const Ray& _ray,
         int _index
     ): ray(_ray), verts(_verts), norms(_norms), uvs(_uvs), index(_index) {}
@@ -224,12 +224,12 @@ public:
 */
 class ShapeAABBVisitor {
 private:
-    const AoS3<Vec3>& verts;
+    const ArrayType<Vec3>& verts;
     mutable AABB* aabb_ptr;
     int index;
 public:
     CPT_CPU ShapeAABBVisitor(
-        const AoS3<Vec3>& verts,
+        const ArrayType<Vec3>& verts,
         AABB* aabb
     ): verts(verts), aabb_ptr(aabb), index(0) {}
 
