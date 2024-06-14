@@ -21,7 +21,7 @@ extern __constant__ DeviceCamera dev_cam;
 CPT_GPU float ray_intersect_old(
     const Ray& ray,
     ConstShapePtr shapes,
-    ConstAABBPtr s_aabbs,
+    ConstAABBWPtr s_aabbs,
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
     const int remain_prims,
@@ -31,7 +31,7 @@ CPT_GPU float ray_intersect_old(
     float aabb_tmin = 0; 
     #pragma unroll
     for (int idx = 0; idx < remain_prims; idx ++) {
-        if (s_aabbs[idx].intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
+        if (s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
             shape_visitor.set_index(idx);
             float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
             bool valid = dist > EPSILON && dist < min_dist;
@@ -60,7 +60,7 @@ CPT_GPU float ray_intersect_old(
 CPT_GPU float ray_intersect(
     const Ray& ray,
     ConstShapePtr shapes,
-    ConstAABBPtr s_aabbs,
+    ConstAABBWPtr s_aabbs,
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
     const int remain_prims,
@@ -68,25 +68,26 @@ CPT_GPU float ray_intersect(
     float min_dist
 ) {
     float aabb_tmin = 0;
-    int8_t tasks[32] = {0}, cnt = 0;          // 32 bytes
+    unsigned int tasks = 0;          // 32 bytes
+
 #pragma unroll
     for (int idx = 0; idx < remain_prims; idx++) {
         // if current ray intersects primitive at [idx], tasks will store it
-        int valid_intr = s_aabbs[idx].intersect(ray, aabb_tmin);       // valid intersect
-        tasks[cnt] = valid_intr ? (int8_t)idx : (int8_t)0;
-        cnt += valid_intr;
+        int valid_intr = s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && (aabb_tmin < min_dist);
+        tasks |= (valid_intr << idx);
         // note that __any_sync here won't work well
     }
 #pragma unroll
-    for (int i = 0; i < cnt; i++) {
-        int idx = tasks[i];
+    while (tasks) {
+        int idx = __ffs(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
+        tasks &= ~((unsigned int)1 << idx); // clear bit in case it is found again
         shape_visitor.set_index(idx);
         float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
         bool valid = dist > EPSILON && dist < min_dist;
         min_dist = valid ? dist : min_dist;
         min_index = valid ? cp_base_5 + idx : min_index;
     }
-    return min_dist;
+     return min_dist;
 }
 
 class TracerBase {

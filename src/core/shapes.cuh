@@ -80,7 +80,14 @@ public:
         FLOAT4(maxi) = CONST_FLOAT4(other.maxi); // Load last two elements of second Vec3
     }
 };
+
+struct AABBWrapper {
+    AABB aabb;
+    float4 _padding;
+};
+
 using ConstAABBPtr = const AABB* const;
+using ConstAABBWPtr = const AABBWrapper* const;
 
 class SphereShape {
 public:

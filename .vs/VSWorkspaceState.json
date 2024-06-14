@@ -9,10 +9,13 @@
   },
   "ExpandedNodes": [
     "",
+    "\\scene",
+    "\\scene\\xml",
     "\\src",
     "\\src\\core",
-    "\\src\\renderer"
+    "\\src\\renderer",
+    "\\test"
   ],
-  "SelectedNode": "\\README.md",
+  "SelectedNode": "\\src\\renderer\\path_tracer.cuh",
   "PreviewInSolutionExplorer": false
 }

@@ -113,7 +113,7 @@ __global__ static void render_pt_kernel(
 
     // this kinda resembles deferred rendering
     __shared__ __align__(64) Vec3 s_verts[TRI_IDX(32)];         // vertex info
-    __shared__ __align__(64) AABB s_aabbs[32];            // aabb
+    __shared__ __align__(64) AABBWrapper s_aabbs[32];            // aabb
 
     ArrayType<Vec3> s_verts_soa(reinterpret_cast<Vec3*>(&s_verts[0]), 32);
     ShapeIntersectVisitor visitor(s_verts_soa, ray, 0);
@@ -142,7 +142,7 @@ __global__ static void render_pt_kernel(
 #else
                 cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
 #endif
-                s_aabbs[tid].copy_from(aabbs[cur_idx]);
+                s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
             }
             pipe.producer_commit();
             pipe.consumer_wait();

@@ -43,7 +43,7 @@ __global__ static void render_depth_kernel(
     // optimization: copy at most 32 prims from global memory to shared memory
 
     __shared__ Vec3 s_verts[TRI_IDX(32)];         // vertex info
-    __shared__ AABB s_aabbs[32];            // aabb
+    __shared__ AABBWrapper s_aabbs[32];            // aabb
     ShapeIntersectVisitor visitor(*verts, ray, 0);
 
     int num_copy = (num_prims + 31) / 32;   // round up
@@ -61,7 +61,7 @@ __global__ static void render_depth_kernel(
 #else
                 cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
 #endif
-                s_aabbs[tid].copy_from(aabbs[cur_idx]);
+                s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
             }
             pipe.producer_commit();
             pipe.consumer_wait();

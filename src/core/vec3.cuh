@@ -164,17 +164,17 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
-    Vec3 maximize(VecType&& b) const noexcept { return Vec3(max(_data.x, b.x()), max(_data.y, b.y()), max(_data.z, b.z())); }
+    Vec3 maximize(VecType&& b) const noexcept { return Vec3(fmaxf(_data.x, b.x()), fmaxf(_data.y, b.y()), fmaxf(_data.z, b.z())); }
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
-    Vec3 minimize(VecType&& b) const noexcept { return Vec3(min(_data.x, b.x()), min(_data.y, b.y()), min(_data.z, b.z())); }
+    Vec3 minimize(VecType&& b) const noexcept { return Vec3(fminf(_data.x, b.x()), fminf(_data.y, b.y()), fminf(_data.z, b.z())); }
 
     CPT_CPU_GPU_INLINE
-    float max_elem() const noexcept { return max(_data.x, max(_data.y, _data.z)); }
+    float max_elem() const noexcept { return fmaxf(_data.x, fmaxf(_data.y, _data.z)); }
 
     CPT_CPU_GPU_INLINE
-    float min_elem() const noexcept { return min(_data.x, min(_data.y, _data.z)); }
+    float min_elem() const noexcept { return fminf(_data.x, fminf(_data.y, _data.z)); }
 };
 
 CPT_CPU_GPU void print_vec3(const Vec3& obj) {
