@@ -4,12 +4,43 @@
  * @author: Qianyue He
 */
 #pragma once
-#include "core/soa.cuh"
+#include "core/aos.cuh"
 #include "core/shapes.cuh"
 #include "core/host_device.cuh"
 #include "core/camera_model.cuh"
 
 extern __constant__ DeviceCamera dev_cam;
+
+/**
+ * This API is deprecated, due to the performance bounded by BSYNC
+ * which is the if branch barrier synchronization (convergence problem)
+ * 
+ * Take a look at the stackoverflow post I posted:
+ * https://stackoverflow.com/questions/78603442/convergence-barrier-for-branchless-cuda-conditional-select
+*/
+CPT_GPU float ray_intersect_old(
+    const Ray& ray,
+    ConstShapePtr shapes,
+    ConstAABBWPtr s_aabbs,
+    ShapeIntersectVisitor& shape_visitor,
+    int& min_index,
+    const int remain_prims,
+    const int cp_base_5,
+    float min_dist
+) {
+    float aabb_tmin = 0; 
+    #pragma unroll
+    for (int idx = 0; idx < remain_prims; idx ++) {
+        if (s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
+            shape_visitor.set_index(idx);
+            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
+            bool valid = dist > EPSILON && dist < min_dist;
+            min_dist = valid ? dist : min_dist;
+            min_index = valid ? cp_base_5 + idx : min_index;
+        }
+    }
+    return min_dist;
+}
 
 /**
  * Perform ray-intersection test on shared memory primitives
@@ -21,13 +52,15 @@ extern __constant__ DeviceCamera dev_cam;
  * @param remain_prims: number of primitives to be tested (32 at most)
  * @param cp_base_5: shared memory address offset
  * @param min_dist: current minimal distance
- * 
+ *
  * @return minimum intersection distance
+ * 
+ * compare to the ray_intersect_old, this API almost double the speed
 */
 CPT_GPU float ray_intersect(
     const Ray& ray,
     ConstShapePtr shapes,
-    ConstAABBPtr s_aabbs,
+    ConstAABBWPtr s_aabbs,
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
     const int remain_prims,
@@ -35,26 +68,35 @@ CPT_GPU float ray_intersect(
     float min_dist
 ) {
     float aabb_tmin = 0;
-    #pragma unroll
-    for (int idx = 0; idx < remain_prims; idx ++) {
-        if (s_aabbs[idx].intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
-            shape_visitor.set_index(idx);
-            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
-            bool valid = dist > EPSILON && dist < min_dist;
-            min_dist = valid ? dist : min_dist;
-            min_index = valid ? cp_base_5 + idx : min_index;
-        }
+    unsigned int tasks = 0;          // 32 bytes
+
+#pragma unroll
+    for (int idx = 0; idx < remain_prims; idx++) {
+        // if current ray intersects primitive at [idx], tasks will store it
+        int valid_intr = s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && (aabb_tmin < min_dist);
+        tasks |= (valid_intr << idx);
+        // note that __any_sync here won't work well
     }
-    return min_dist;
+#pragma unroll
+    while (tasks) {
+        int idx = __ffs(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
+        tasks &= ~((unsigned int)1 << idx); // clear bit in case it is found again
+        shape_visitor.set_index(idx);
+        float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
+        bool valid = dist > EPSILON && dist < min_dist;
+        min_dist = valid ? dist : min_dist;
+        min_index = valid ? cp_base_5 + idx : min_index;
+    }
+     return min_dist;
 }
 
 class TracerBase {
 protected:
     Shape* shapes;
     AABB* aabbs;
-    SoA3<Vec3>* verts;
-    SoA3<Vec3>* norms; 
-    SoA3<Vec2>* uvs;
+    ArrayType<Vec3>* verts;
+    ArrayType<Vec3>* norms; 
+    ArrayType<Vec2>* uvs;
     DeviceImage image;
     DeviceImage* dev_image;
     int num_prims;
@@ -63,17 +105,17 @@ protected:
 public:
     /**
      * @param shapes    shape information (for ray intersection)
-     * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, SoA3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+     * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
      * @param camera    GPU camera model (constant memory)
      * @param image     GPU image buffer
     */
     TracerBase(
         const std::vector<Shape>& _shapes,
-        const SoA3<Vec3>& _verts,
-        const SoA3<Vec3>& _norms, 
-        const SoA3<Vec2>& _uvs,
+        const ArrayType<Vec3>& _verts,
+        const ArrayType<Vec3>& _norms, 
+        const ArrayType<Vec2>& _uvs,
         int width, int height
     ): image(width, height), dev_image(nullptr),
        num_prims(_shapes.size()), w(width), h(height)

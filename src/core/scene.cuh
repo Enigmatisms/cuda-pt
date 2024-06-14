@@ -13,7 +13,7 @@
 #include <cuda_runtime.h>
 #include <tiny_obj_loader.h>
 #include "core/config.cuh"
-#include "core/soa.cuh"
+#include "core/aos.cuh"
 #include "core/bsdf.cuh"
 #include "core/shapes.cuh"
 #include "core/object.cuh"
@@ -21,6 +21,7 @@
 #include "core/camera_model.cuh"
 #include "core/virtual_funcs.cuh"
 
+using Vec4Arr = std::vector<Vec4>;
 using Vec3Arr = std::vector<Vec3>;
 using Vec2Arr = std::vector<Vec2>;
 
@@ -32,7 +33,7 @@ std::string getFolderPath(std::string filePath) {
     return ""; // include empty str if depth is 0
 }
 
-Vec3 parseColor(const std::string& value) {
+Vec4 parseColor(const std::string& value) {
     float r, g, b;
     if (value[0] == '#') {
         std::stringstream ss;
@@ -61,7 +62,7 @@ Vec3 parseColor(const std::string& value) {
         g = r;
         b = r;
     }
-    return Vec3(r, g, b);
+    return Vec4(r, g, b);
 }
 
 Vec3 parsePoint(const tinyxml2::XMLElement* element) {
@@ -99,14 +100,14 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
     std::string id = bsdf_elem->Attribute("id");
 
     bsdf_map[id] = index;
-    Vec3 k_d, k_s, k_g;
+    Vec4 k_d, k_s, k_g;
     int kd_tex_id = -1, ex_tex_id = -1;
 
     const tinyxml2::XMLElement* element = bsdf_elem->FirstChildElement("rgb");
     while (element) {
         std::string name = element->Attribute("name");
         std::string value = element->Attribute("value");
-        Vec3 color = parseColor(value);
+        Vec4 color = parseColor(value);
         if (name == "k_d") {
             k_d = color;
         } else if (name == "k_s") {
@@ -162,13 +163,13 @@ void parseEmitter(
     std::string id = emitter_elem->Attribute("id");
 
     obj_ref_names.push_back(id);
-    Vec3 emission(0, 0, 0), scaler(0, 0, 0);
+    Vec4 emission(0, 0, 0), scaler(0, 0, 0);
 
     const tinyxml2::XMLElement* element = emitter_elem->FirstChildElement("rgb");
     while (element) {
         std::string name = element->Attribute("name");
         std::string value = element->Attribute("value");
-        Vec3 color = parseColor(value);
+        Vec4 color = parseColor(value);
         if (name == "emission") {
             emission = color;
         } else if (name == "scaler") {
@@ -491,7 +492,7 @@ public:
         CUDA_CHECK_RETURN(cudaFree(emitters));
     }
 
-    void export_soa(SoA3<Vec3>& verts, SoA3<Vec3>& norms, SoA3<Vec2>& uvs) const {
+    void export_soa(ArrayType<Vec3>& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const {
         verts.from_vectors(verts_list[0], verts_list[1], verts_list[2]);
         norms.from_vectors(norms_list[0], norms_list[1], norms_list[2]);
         uvs.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);

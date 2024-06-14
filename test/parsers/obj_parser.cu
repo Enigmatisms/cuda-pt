@@ -22,7 +22,7 @@ public:
 };
 
 template <typename StructType>
-class SoA3 {
+class ArrayType {
 private:
     StructType* _data;
 public:
@@ -31,13 +31,13 @@ public:
     StructType* z;
     size_t size;
 public:
-    SoA3(size_t _size): size(_size) {
+    ArrayType(size_t _size): size(_size) {
         cudaMallocManaged(&_data, 3 * sizeof(StructType) * _size);
         x = &_data[0];
         y = &_data[_size];
         z = &_data[_size * 2];
     }
-    ~SoA3() {
+    ~ArrayType() {
         cudaFree(_data);
     }
 };
@@ -156,8 +156,8 @@ int getBSDFId(const std::unordered_map<std::string, int>& bsdfIdMap, const std::
 void parseShape(
     const tinyxml2::XMLElement* shapeElement, 
     const std::unordered_map<std::string, int>& bsdfIdMap,
-    std::vector<ObjInfo>& objects, std::vector<SoA3<Vec3>>& verticesList, 
-    std::vector<SoA3<Vec3>>& normalsList, std::vector<SoA3<Vec2>>& uvsList, 
+    std::vector<ObjInfo>& objects, std::vector<ArrayType<Vec3>>& verticesList, 
+    std::vector<ArrayType<Vec3>>& normalsList, std::vector<ArrayType<Vec2>>& uvsList, 
     std::string folder_prefix
 ) {
     std::string filename;
@@ -195,9 +195,9 @@ void parseShape(
 
     for (const auto& shape : shapes) {
         size_t num_primitives = shape.mesh.indices.size() / 3;
-        SoA3<Vec3> vertices(num_primitives);
-        SoA3<Vec3> normals(num_primitives);
-        SoA3<Vec2> uvs(num_primitives);
+        ArrayType<Vec3> vertices(num_primitives);
+        ArrayType<Vec3> normals(num_primitives);
+        ArrayType<Vec2> uvs(num_primitives);
         ObjInfo object;
         object.bsdf_id = bsdf_id;
         object.prim_offset = 0;  //  dummy setting
@@ -264,9 +264,9 @@ int main(int argc, char** argv) {
     const tinyxml2::XMLElement* brdfElement = sceneElement->FirstChildElement("brdf");
 
     std::vector<ObjInfo> objects;
-    std::vector<SoA3<Vec3>> verticesList;
-    std::vector<SoA3<Vec3>> normalsList;
-    std::vector<SoA3<Vec2>> uvsList;
+    std::vector<ArrayType<Vec3>> verticesList;
+    std::vector<ArrayType<Vec3>> normalsList;
+    std::vector<ArrayType<Vec2>> uvsList;
 
     std::vector<BSDF*> bsdfList;
     std::unordered_map<std::string, int> bsdf_map;

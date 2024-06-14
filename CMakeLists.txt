@@ -4,6 +4,14 @@ cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 set(PROJ_NAME "cuda-pt")
 project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
+option(USE_SOA "Use struct of arrays" OFF)
+if (USE_SOA)
+  add_definitions(-DUSE_SOA)
+  message(STATUS "Using SoA3 (struct of arrays) for GPU containers.")
+else()
+  message(STATUS "Using AoS3 (array of structs) for GPU containers.")
+endif()
+
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG")
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -g -G -O0")
   set(CMAKE_CUDA_FLAGS_DEBUG "-G -g")
@@ -13,8 +21,8 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
 ELSE()
   # to check register usage, please set "-Xptxas -v"
   # to cap the register usage to boost occupancy, set ""
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --maxrregcount=64 -lineinfo")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O2 --maxrregcount=64 -lineinfo")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
   message(STATUS "Building project in RELEASE mode.")
   set(CMAKE_BUILD_TYPE Release)
 ENDIF()

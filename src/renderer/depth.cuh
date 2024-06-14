@@ -4,15 +4,16 @@
  * @author: Qianyue He
 */
 #pragma once
+#include <cuda/pipeline>
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
 extern __constant__ DeviceCamera dev_cam;
 
 /**
- * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param uvs       uv coordinates, SoA3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+ * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
  * @param camera    GPU camera model (constant memory)
  * @param image     GPU image buffer
  * @param num_prims number of primitives (to be intersected with)
@@ -41,8 +42,8 @@ __global__ static void render_depth_kernel(
     // A matter of design choice
     // optimization: copy at most 32 prims from global memory to shared memory
 
-    __shared__ Vec3 s_verts[3][32];         // vertex info
-    __shared__ AABB s_aabbs[32];            // aabb
+    __shared__ Vec3 s_verts[TRI_IDX(32)];         // vertex info
+    __shared__ AABBWrapper s_aabbs[32];            // aabb
     ShapeIntersectVisitor visitor(*verts, ray, 0);
 
     int num_copy = (num_prims + 31) / 32;   // round up
@@ -51,12 +52,19 @@ __global__ static void render_depth_kernel(
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
             // memory copy to shared memory
             int cp_base_5 = cp_base << 5, cur_idx = cp_base_5 + tid, remain_prims = min(num_prims - cp_base_5, 32);
+            cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
             if (tid < 32 && cur_idx < num_prims) {        // copy from gmem to smem
-                s_verts[0][tid] = verts->x[cur_idx];
-                s_verts[1][tid] = verts->y[cur_idx];
-                s_verts[2][tid] = verts->z[cur_idx];
-                s_aabbs[tid]    = aabbs[cur_idx];
+#ifdef USE_SOA
+                cuda::memcpy_async(&s_verts[tid],      &verts->x(cur_idx), sizeof(Vec3), pipe);
+                cuda::memcpy_async(&s_verts[tid + 32], &verts->y(cur_idx), sizeof(Vec3), pipe);
+                cuda::memcpy_async(&s_verts[tid + 64], &verts->z(cur_idx), sizeof(Vec3), pipe);
+#else
+                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
+#endif
+                s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
             }
+            pipe.producer_commit();
+            pipe.consumer_wait();
             __syncthreads();
             // step 3: traverse all the primitives and intersect
 
@@ -81,17 +89,17 @@ using TracerBase::h;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
-     * @param verts     vertices, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, SoA3: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, SoA3: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+     * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
      * @param camera    GPU camera model (constant memory)
      * @param image     GPU image buffer
     */
     DepthTracer(
         const std::vector<Shape>& _shapes,
-        const SoA3<Vec3>& _verts,
-        const SoA3<Vec3>& _norms, 
-        const SoA3<Vec2>& _uvs,
+        const ArrayType<Vec3>& _verts,
+        const ArrayType<Vec3>& _norms, 
+        const ArrayType<Vec2>& _uvs,
         int width, int height
     ): TracerBase(_shapes, _verts, _norms, _uvs, width, height) {}
 
