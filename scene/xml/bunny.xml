@@ -6,7 +6,7 @@
 <scene version="1.1">
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
-        <integer name="sample_count" value="2"/>
+        <integer name="sample_count" value="128"/>
         <integer name="max_bounce" value="16"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>

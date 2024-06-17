@@ -112,17 +112,17 @@ __global__ static void render_pt_kernel(
     // optimization: copy at most 32 prims from global memory to shared memory
 
     // this kinda resembles deferred rendering
-    __shared__ __align__(64) Vec3 s_verts[TRI_IDX(32)];         // vertex info
-    __shared__ __align__(64) AABBWrapper s_aabbs[32];            // aabb
+    __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
+    __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
 
-    ArrayType<Vec3> s_verts_soa(reinterpret_cast<Vec3*>(&s_verts[0]), 32);
+    ArrayType<Vec3> s_verts_soa(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
     ShapeIntersectVisitor visitor(s_verts_soa, ray, 0);
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
 
-    int num_copy = (num_prims + 31) / 32, min_index = -1;   // round up
+    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR, min_index = -1;   // round up
     bool hit_emitter = false;
     for (int b = 0; b < max_depth; b++) {
         float min_dist = MAX_DIST;
@@ -132,13 +132,13 @@ __global__ static void render_pt_kernel(
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
             // memory copy to shared memory
-            int cur_idx = (cp_base << 5) + tid, remain_prims = min(num_prims - (cp_base << 5), 32);
+            int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
             cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
-            if (tid < 32 && cur_idx < num_prims) {        // copy from gmem to smem
+            if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
 #ifdef USE_SOA
-                cuda::memcpy_async(&s_verts[tid],      &verts->x(cur_idx), sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[tid + 32], &verts->y(cur_idx), sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[tid + 64], &verts->z(cur_idx), sizeof(Vec3), pipe);
+                cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
+                cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
+                cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
 #else
                 cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
 #endif
@@ -148,7 +148,7 @@ __global__ static void render_pt_kernel(
             pipe.consumer_wait();
             __syncthreads();
             // this might not be a good solution
-            min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << 5, min_dist);
+            min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, min_dist);
         }
 
         // ============= step 2: local shading for indirect bounces ================
