@@ -7,6 +7,7 @@
 #pragma once
 
 constexpr float EPSILON = 1e-3f;
+constexpr float AABB_EPS = 1e-2f;
 constexpr float MAX_DIST = 1e7;
 
 constexpr float M_Pi = 3.1415926535897;

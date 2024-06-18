@@ -115,8 +115,8 @@ __global__ static void render_pt_kernel(
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
 
-    ArrayType<Vec3> s_verts_soa(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
-    ShapeIntersectVisitor visitor(s_verts_soa, ray, 0);
+    ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
+    ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
@@ -134,6 +134,8 @@ __global__ static void render_pt_kernel(
             // memory copy to shared memory
             int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
             cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
+
+            // huge bug
             if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
 #ifdef USE_SOA
                 cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
@@ -149,6 +151,7 @@ __global__ static void render_pt_kernel(
             __syncthreads();
             // this might not be a good solution
             min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, min_dist);
+            __syncthreads();
         }
 
         // ============= step 2: local shading for indirect bounces ================

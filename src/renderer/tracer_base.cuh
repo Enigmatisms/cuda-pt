@@ -14,11 +14,11 @@ extern __constant__ DeviceCamera dev_cam;
 // #define CP_BASE_6
 #ifdef CP_BASE_6
 static constexpr int BASE_SHFL = 6;
-using BitMask = uint64_t;
+using BitMask = long long;
 CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffsll(bits); } 
 #else
 static constexpr int BASE_SHFL = 5;
-using BitMask = uint32_t;
+using BitMask = int;
 CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffs(bits); } 
 #endif
 static constexpr int BASE_ADDR = 1 << BASE_SHFL;
@@ -37,18 +37,18 @@ CPT_GPU float ray_intersect_old(
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
     const int remain_prims,
-    const int cp_base_5,
+    const int cp_base,
     float min_dist
 ) {
     float aabb_tmin = 0; 
     #pragma unroll
     for (int idx = 0; idx < remain_prims; idx ++) {
-        if (s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
+        if (s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist) {
             shape_visitor.set_index(idx);
-            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
+            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base + idx]);
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;
-            min_index = valid ? cp_base_5 + idx : min_index;
+            min_index = valid ? cp_base + idx : min_index;
         }
     }
     return min_dist;
@@ -80,14 +80,13 @@ CPT_GPU float ray_intersect(
     float min_dist
 ) {
     float aabb_tmin = 0;
-    BitMask tasks = 0;          // 32 bytes
+    BitMask tasks = 0;
 
 #pragma unroll
-    for (int idx = 0; idx < remain_prims; idx++) {
+    for (int idx = 0; idx < remain_prims; idx ++) {
         // if current ray intersects primitive at [idx], tasks will store it
-        BitMask valid_intr = s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && (aabb_tmin < min_dist);
-        tasks |= (valid_intr << (BitMask)idx);
-        // note that __any_sync here won't work well
+        BitMask valid_intr = s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        tasks |= valid_intr << (BitMask)idx;
     }
 #pragma unroll
     while (tasks) {
@@ -99,7 +98,7 @@ CPT_GPU float ray_intersect(
         min_dist = valid ? dist : min_dist;
         min_index = valid ? cp_base + idx : min_index;
     }
-     return min_dist;
+    return min_dist;
 }
 
 class TracerBase {
