@@ -11,6 +11,18 @@
 
 extern __constant__ DeviceCamera dev_cam;
 
+// #define CP_BASE_6
+#ifdef CP_BASE_6
+static constexpr int BASE_SHFL = 6;
+using BitMask = long long;
+CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffsll(bits); } 
+#else
+static constexpr int BASE_SHFL = 5;
+using BitMask = int;
+CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffs(bits); } 
+#endif
+static constexpr int BASE_ADDR = 1 << BASE_SHFL;
+
 /**
  * This API is deprecated, due to the performance bounded by BSYNC
  * which is the if branch barrier synchronization (convergence problem)
@@ -25,18 +37,18 @@ CPT_GPU float ray_intersect_old(
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
     const int remain_prims,
-    const int cp_base_5,
+    const int cp_base,
     float min_dist
 ) {
     float aabb_tmin = 0; 
     #pragma unroll
     for (int idx = 0; idx < remain_prims; idx ++) {
-        if (s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin <= min_dist) {
+        if (s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist) {
             shape_visitor.set_index(idx);
-            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
+            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base + idx]);
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;
-            min_index = valid ? cp_base_5 + idx : min_index;
+            min_index = valid ? cp_base + idx : min_index;
         }
     }
     return min_dist;
@@ -50,7 +62,7 @@ CPT_GPU float ray_intersect_old(
  * @param shape_visitor: encapsulated shape visitor
  * @param it: interaction info, containing the interacted normal and uv
  * @param remain_prims: number of primitives to be tested (32 at most)
- * @param cp_base_5: shared memory address offset
+ * @param cp_base: shared memory address offset
  * @param min_dist: current minimal distance
  *
  * @return minimum intersection distance
@@ -64,30 +76,29 @@ CPT_GPU float ray_intersect(
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
     const int remain_prims,
-    const int cp_base_5,
+    const int cp_base,
     float min_dist
 ) {
     float aabb_tmin = 0;
-    unsigned int tasks = 0;          // 32 bytes
+    BitMask tasks = 0;
 
 #pragma unroll
-    for (int idx = 0; idx < remain_prims; idx++) {
+    for (int idx = 0; idx < remain_prims; idx ++) {
         // if current ray intersects primitive at [idx], tasks will store it
-        int valid_intr = s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && (aabb_tmin < min_dist);
-        tasks |= (valid_intr << idx);
-        // note that __any_sync here won't work well
+        BitMask valid_intr = s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        tasks |= valid_intr << (BitMask)idx;
     }
 #pragma unroll
     while (tasks) {
-        int idx = __ffs(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
-        tasks &= ~((unsigned int)1 << idx); // clear bit in case it is found again
+        BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
+        tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
         shape_visitor.set_index(idx);
-        float dist = variant::apply_visitor(shape_visitor, shapes[cp_base_5 + idx]);
+        float dist = variant::apply_visitor(shape_visitor, shapes[cp_base + idx]);
         bool valid = dist > EPSILON && dist < min_dist;
         min_dist = valid ? dist : min_dist;
-        min_index = valid ? cp_base_5 + idx : min_index;
+        min_index = valid ? cp_base + idx : min_index;
     }
-     return min_dist;
+    return min_dist;
 }
 
 class TracerBase {

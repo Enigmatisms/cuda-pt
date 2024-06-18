@@ -56,6 +56,8 @@ public:
                 _aabb.maxi.maximize(prims[0][i]);
                 _aabb.maxi.maximize(prims[1][i]);
                 _aabb.maxi.maximize(prims[2][i]);
+                _aabb.mini -= AABB_EPS;
+                _aabb.maxi += AABB_EPS;
                 inv_area += (prims[1][i] - prims[0][i]).cross(prims[2][i] - prims[0][i]).length();
             } else {
                 _aabb.mini = prims[0][i] - prims[1][i].x();
