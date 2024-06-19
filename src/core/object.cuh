@@ -26,13 +26,15 @@ public:
         int ub = prim_offset + prim_num;
         for (int i = prim_offset; i < ub; i++) {
             if (is_polygon) {
-                _aabb.mini.minimize(prims.x(i));
-                _aabb.mini.minimize(prims.y(i));
-                _aabb.mini.minimize(prims.z(i));
+                _aabb.mini.minimized(prims.x(i));
+                _aabb.mini.minimized(prims.y(i));
+                _aabb.mini.minimized(prims.z(i));
 
-                _aabb.maxi.maximize(prims.x(i));
-                _aabb.maxi.maximize(prims.y(i));
-                _aabb.maxi.maximize(prims.z(i));
+                _aabb.maxi.maximized(prims.x(i));
+                _aabb.maxi.maximized(prims.y(i));
+                _aabb.maxi.maximized(prims.z(i));
+                _aabb.mini -= AABB_EPS;
+                _aabb.maxi += AABB_EPS;
                 inv_area += (prims.y(i) - prims.x(i)).cross(prims.z(i) - prims.x(i)).length();
             } else {
                 _aabb.mini = prims.x(i) - prims.y(i).x();
@@ -49,13 +51,13 @@ public:
         int ub = prim_offset + prim_num;
         for (int i = prim_offset; i < ub; i++) {
             if (is_polygon) {
-                _aabb.mini.minimize(prims[0][i]);
-                _aabb.mini.minimize(prims[1][i]);
-                _aabb.mini.minimize(prims[2][i]);
+                _aabb.mini.minimized(prims[0][i]);
+                _aabb.mini.minimized(prims[1][i]);
+                _aabb.mini.minimized(prims[2][i]);
 
-                _aabb.maxi.maximize(prims[0][i]);
-                _aabb.maxi.maximize(prims[1][i]);
-                _aabb.maxi.maximize(prims[2][i]);
+                _aabb.maxi.maximized(prims[0][i]);
+                _aabb.maxi.maximized(prims[1][i]);
+                _aabb.maxi.maximized(prims[2][i]);
                 _aabb.mini -= AABB_EPS;
                 _aabb.maxi += AABB_EPS;
                 inv_area += (prims[1][i] - prims[0][i]).cross(prims[2][i] - prims[0][i]).length();

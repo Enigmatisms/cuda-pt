@@ -40,9 +40,9 @@ public:
 
     CPT_CPU_GPU AABB(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
         mini = p1.minimize(p2).minimize(p3);
-        mini -= EPSILON;
+        mini -= AABB_EPS;
         maxi = p1.maximize(p2).maximize(p3);
-        maxi += EPSILON;
+        maxi += AABB_EPS;
     }
 
     CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}

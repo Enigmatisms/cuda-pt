@@ -33,17 +33,17 @@ CPT_GPU bool occlusion_test(
     float max_dist
 ) {
     float aabb_tmin = 0;
-    ShapeIntersectVisitor shape_visitor(verts, ray, 0, max_dist - EPSILON);
+    ShapeIntersectVisitor shape_visitor(verts, ray, 0, max_dist);
     int prim_id = 0, num_prim = 0;
     for (int obj_id = 0; obj_id < num_objects; obj_id ++) {
         num_prim = prim_id + objects[obj_id].prim_num;
-        if (objects[obj_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist + EPSILON) {
+        if (objects[obj_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist) {
             // ray intersects the object
             for (; prim_id < num_prim; prim_id ++) {
-                if (aabbs[prim_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist + EPSILON) {
+                if (aabbs[prim_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist) {
                     shape_visitor.set_index(prim_id);
                     float dist = variant::apply_visitor(shape_visitor, shapes[prim_id]);
-                    if (dist < max_dist - EPSILON && dist > EPSILON)
+                    if (dist < max_dist && dist > EPSILON)
                         return false;
                 }
             }
@@ -187,7 +187,7 @@ __global__ static void render_pt_kernel(
             shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
 
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
-            if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis)) {
+            if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)) {
                 // MIS for BSDF / light sampling, to achieve better rendering
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
                 emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();

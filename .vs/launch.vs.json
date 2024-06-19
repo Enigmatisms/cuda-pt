@@ -8,7 +8,7 @@
       "projectTarget": "pt.exe (Release\\pt.exe)",
       "name": "pt.exe (Release\\pt.exe)",
       "args": [
-        "../../scene/xml/bunny.xml"
+        "../../scene/xml/cornell-box.xml"
       ],
       "cwd": "$(ProjectDir)"
     }

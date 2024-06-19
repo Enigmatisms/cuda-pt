@@ -168,6 +168,22 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
+    void minimized(VecType&& b) noexcept {
+        _data.x = fminf(_data.x, b.x());
+        _data.y = fminf(_data.y, b.y());
+        _data.z = fminf(_data.z, b.z());
+    }
+
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU_GPU_INLINE
+    void maximized(VecType&& b) noexcept {
+        _data.x = fmaxf(_data.x, b.x());
+        _data.y = fmaxf(_data.y, b.y());
+        _data.z = fmaxf(_data.z, b.z());
+    }
+
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU_GPU_INLINE
     Vec3 minimize(VecType&& b) const noexcept { return Vec3(fminf(_data.x, b.x()), fminf(_data.y, b.y()), fminf(_data.z, b.z())); }
 
     CPT_CPU_GPU_INLINE
