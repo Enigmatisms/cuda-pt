@@ -5,7 +5,8 @@
 */
 #pragma once
 #include <vector>
-#include "cuda_utils.cuh"
+#include "core/cuda_utils.cuh"
+#include "core/vec4.cuh"
 #include <vector_types.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -48,16 +49,16 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
 
 class DeviceImage {
 private:
-    Vec3* image_buffer;
-    Vec3* host_buffer;
+    Vec4* image_buffer;
+    Vec4* host_buffer;
     size_t pitch;
     int _w;
     int _h;
 public:
     DeviceImage(int width = 800, int height = 800): pitch(0), _w(width), _h(height) {
-        host_buffer = new Vec3[_w * _h];
-        CUDA_CHECK_RETURN(cudaMallocPitch(&image_buffer, &pitch, width * sizeof(Vec3), height));
-        CUDA_CHECK_RETURN(cudaMemset2D(image_buffer, pitch, 0, width * sizeof(Vec3), height));
+        host_buffer = new Vec4[_w * _h];
+        CUDA_CHECK_RETURN(cudaMallocPitch(&image_buffer, &pitch, width * sizeof(Vec4), height));
+        CUDA_CHECK_RETURN(cudaMemset2D(image_buffer, pitch, 0, width * sizeof(Vec4), height));
     }
 
     ~DeviceImage() {
@@ -68,14 +69,14 @@ public:
     // TODO: can be accelerated via multi-threading
     std::vector<uint8_t> export_cpu(float inv_factor = 1, bool gamma_cor = true) const {
         std::vector<uint8_t> byte_buffer(_w * _h * 4);
-        size_t copy_pitch = _w * sizeof(Vec3);
+        size_t copy_pitch = _w * sizeof(Vec4);
         CUDA_CHECK_RETURN(cudaMemcpy2D(host_buffer, copy_pitch, image_buffer, pitch, copy_pitch, _h, cudaMemcpyDeviceToHost));
         if (gamma_cor) {
             for (int i = 0; i < _h; i ++) {
                 int base = i * _w;
                 for (int j = 0; j < _w; j ++) {
                     int pixel_index = base + j;
-                    const Vec3& color = host_buffer[pixel_index];
+                    const Vec4& color = host_buffer[pixel_index];
                     pixel_index <<= 2;
                     byte_buffer[pixel_index]     = to_int(color.x() * inv_factor);
                     byte_buffer[pixel_index + 1] = to_int(color.y() * inv_factor);
@@ -88,7 +89,7 @@ public:
                 int base = i * _w;
                 for (int j = 0; j < _w; j ++) {
                     int pixel_index = base + j;
-                    const Vec3& color = host_buffer[pixel_index];
+                    const Vec4& color = host_buffer[pixel_index];
                     pixel_index <<= 2;
                     byte_buffer[pixel_index]     = to_int_linear(color.x() * inv_factor);
                     byte_buffer[pixel_index + 1] = to_int_linear(color.y() * inv_factor);
@@ -101,8 +102,8 @@ public:
     }
 
     // for cudaMallocPitch (with extra memory alignment), we need to use pitch to access
-    CPT_CPU_GPU Vec3& operator() (int col, int row) {  return ((Vec3*)((char*)image_buffer + row * pitch))[col]; }
-    CPT_CPU_GPU const Vec3& operator() (int col, int row) const { return ((Vec3*)((char*)image_buffer + row * pitch))[col]; }
+    CPT_CPU_GPU Vec4& operator() (int col, int row) {  return ((Vec4*)((char*)image_buffer + row * pitch))[col]; }
+    CPT_CPU_GPU const Vec4& operator() (int col, int row) const { return ((Vec4*)((char*)image_buffer + row * pitch))[col]; }
 
     CPT_CPU_GPU int w() const noexcept { return _w; }
     CPT_CPU_GPU int h() const noexcept { return _h; }

@@ -6,8 +6,8 @@
 <scene version="1.1">
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
-        <integer name="sample_count" value="1024"/>
-        <integer name="max_bounce" value="16"/>
+        <integer name="sample_count" value="500"/>
+        <integer name="max_bounce" value="8"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
@@ -52,12 +52,6 @@
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
 
-	<brdf type="det-refraction" id="bunny">
-		<rgb name="k_d" value="1.5"/>
-		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
-		<rgb name="k_g" value="1.0"/>
-	</brdf>
-
 	<emitter type="area" id="area">
 		<rgb name="emission" value="4, 4, 4"/>
 		<rgb name="scaler" value="2.0"/>			<!--1.5 for gamma correction, 5 for linear-->
@@ -67,11 +61,6 @@
 	<shape type="obj">
 		<string name="filename" value="../meshes/cbox/right_wall.obj"/>
 		<ref type="material" id="right_wall"/>
-	</shape>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/bunny.obj"/>
-		<ref type="material" id="bunny"/>
 	</shape>
 
 	<shape type="obj">
