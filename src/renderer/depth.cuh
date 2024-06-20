@@ -19,7 +19,7 @@ extern __constant__ DeviceCamera dev_cam;
  * @param num_prims number of primitives (to be intersected with)
  * @param max_depth maximum allowed bounce
 */
-__global__ static void render_depth_kernel(
+CPT_KERNEL static void render_depth_kernel(
     ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
@@ -32,7 +32,7 @@ __global__ static void render_depth_kernel(
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 
-    Sampler sampler(px + py * image.w());
+    CudaSampler sampler(px + py * image.w());
     // step 1: generate ray
     Ray ray = dev_cam.generate_ray(px, py, sampler);
 

@@ -21,7 +21,7 @@ std::decay_t<Ty>* to_gpu(Ty&& object) {
 }
 
 template <typename Ty>
-__global__ void parallel_memset(Ty* dst, Ty value, int length) {
+CPT_KERNEL void parallel_memset(Ty* dst, Ty value, int length) {
     int num_thread = blockDim.x;
     for (int i = 0; i < length; i += num_thread) {
         dst[threadIdx.x + num_thread] = value;

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <type_traits>
 
+#define CPT_KERNEL __global__
 #define CPT_CPU_GPU __host__ __device__
 #define CPT_CPU_GPU_INLINE __forceinline__ __host__ __device__
 #define CPT_GPU __device__

@@ -14,6 +14,7 @@ struct Ray {
     float hit_t;
     Vec3 d;
     uint32_t ray_tag;
+
     // we might only use eight of the bits
     // bit 0: is inactive, 1 means inactive
 

@@ -52,7 +52,7 @@ public:
     /**
      * Sampling ray with stratified sampling
     */
-    CPT_GPU Ray generate_ray(int x, int y, Sampler& sampler) const {
+    CPT_GPU Ray generate_ray(int x, int y, CudaSampler& sampler) const {
         float x_pos = sampler.next1D() + float(x),
               y_pos = sampler.next1D() + float(y);
         Vec3 ndc_dir((x_pos - _hw) * inv_focal * signs.x(), (y_pos - _hh) * inv_focal * signs.y(), 1.f);
