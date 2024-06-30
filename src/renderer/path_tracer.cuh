@@ -53,7 +53,7 @@ CPT_GPU bool occlusion_test(
     return true;
 }
 
-CPT_GPU Emitter* sample_emitter(CudaSampler& sampler, float& pdf, int num, int no_sample) {
+CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sample) {
     // logic: if no_sample and num > 1, means that there is one emitter than can not be sampled
     // so we can only choose from num - 1 emitters, the following computation does this (branchless)
     // if (emit_id >= no_sample && no_sample >= 0) -> we should skip one index (the no_sample), therefore + 1
@@ -102,8 +102,7 @@ CPT_KERNEL static void render_pt_kernel(
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 
-    CudaSampler sampler(px + py * image.w(), seed_offset);
-    constexpr int a = sizeof(CudaSampler);
+    Sampler sampler(px + py * image.w(), seed_offset);
     // step 1: generate ray
     Ray ray = dev_cam.generate_ray(px, py, sampler);
 

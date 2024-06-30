@@ -61,9 +61,6 @@ private:
         rand_state.d[0] = 5783321UL + t0;
         rand_state.d[1] = 6615241 + t1 + t0;
     }
-
-
-    
 private:
     RandState rand_state;
 };
@@ -72,7 +69,6 @@ class CudaSampler {
 public:
     CPT_GPU CudaSampler(int seed, int offset = 0) {
         curand_init(seed + offset, 0, 0, &rand_state);
-        sizeof(rand_state);
     }
 
     CPT_GPU Vec2 next2D() noexcept { return Vec2(curand_uniform(&rand_state), curand_uniform(&rand_state)); }
@@ -81,3 +77,9 @@ public:
 private:
     curandState rand_state;
 };
+
+#ifdef USE_CUDA_SAMPLER
+using Sampler = CudaSampler;
+#else
+using Sampler = TinySampler;
+#endif // USE_CUDA_SAMPLER
