@@ -7,9 +7,7 @@ This will definitely be benchmarked with AdaPT and, well CPU based renders like 
 
 Since I have no intention making this a extensive project (like AdaPT, taking care of all the user-friendly aspect) and I am doing this just to challenge myself for more difficult parallel program design, this repo will not be so user friendly and the scalability will be far worse than that of AdaPT. I will try to keep the chores minimal and focus on heterogeneous program design. 
 
-- [x] Toy CUDA depth renderer with profiling:
-
-
+- [x] Toy CUDA depth renderer with profiling
 
 - [x] Unidirectional path tracing with AABB culling. Full traversal without spatial partition. In this stage, shared memory and constant memory will be made use of. Special kind of `variant` will be of use (since `std::variant` is not supported by CUDA, for `std::visit` will either crash or be rejected by the compiler). This version of UDPT can be 3-8x faster than my [AdaPT](https://github.com/Enigmatisms/AdaPT) renderer (Taichi lang, JIT CUDA backend).
 

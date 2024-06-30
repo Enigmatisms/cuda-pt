@@ -174,7 +174,7 @@ __global__ static void render_pt_kernel(
             // (2) check if the ray hits an emitter
             Vec4 direct_comp = throughput *\
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
-            radiance += direct_comp;
+            radiance += direct_comp * emission_weight;
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
