@@ -22,20 +22,28 @@ struct Ray {
     CPT_CPU_GPU
     Ray(T1&& o_, T2&& d_, float hitT = MAX_DIST) : o(std::forward<T1>(o_)), hit_t(hitT), d(std::forward<T2>(d_)), ray_tag(0) {}
 
-    bool is_active() const noexcept {
+    CPT_CPU_GPU_INLINE
+    Vec3 advance(float t) const noexcept {
+        return Vec3(fmaf(d.x(), t, o.x()), fmaf(d.y(), t, o.y()), fmaf(d.z(), t, o.z()));
+    } 
+
+    CPT_CPU_GPU_INLINE bool is_active() const noexcept {
         return (ray_tag >> 28) & 1;
     }
 
-    int hit_id() const noexcept {
+    CPT_CPU_GPU_INLINE int hit_id() const noexcept {
         return ray_tag & 0x0fffffff;
     }
 
-    void set_hit_index(int min_index) noexcept {
+    CPT_CPU_GPU_INLINE void set_hit_index(int min_index) noexcept {
         ray_tag = (0xf0000000 & ray_tag) | min_index; 
     }
 
-    void set_hit_status(bool hit) noexcept {
+    CPT_CPU_GPU_INLINE void clr_hit() noexcept {
         ray_tag &= 0xefffffff;      // clear bit 28
-        ray_tag |= hit << 28;       // set bit 28
+    }
+
+    CPT_CPU_GPU_INLINE void set_hit() noexcept {
+        ray_tag |= 1 << 28;         // set bit 28
     }
 };

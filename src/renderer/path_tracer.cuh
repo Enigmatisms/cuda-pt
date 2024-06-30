@@ -169,12 +169,12 @@ CPT_KERNEL static void render_pt_kernel(
             // (2) check if the ray hits an emitter
             Vec4 direct_comp = throughput *\
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
-            radiance += direct_comp;
+            radiance += direct_comp * emission_weight;
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
-            Ray shadow_ray(ray.o.advance(ray.d, min_dist), Vec3(0, 0, 0));
+            Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
             shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
             

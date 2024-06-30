@@ -32,8 +32,8 @@ struct PathPayLoad {
     Vec4 L;             // 4 * 4 Bytes
 
     Ray ray;            // 8 * 4 Bytes
-    Sampler sp;         // 6 * 4 Bytes
-    uint32_t _pad;      // 1 * 4 Byte
+    Sampler sg;         // 6 * 4 Bytes
+    int path_flag;      // 1 * 4 Byte:
 
     Interaction it;     // 5 * 4 Bytes
 
@@ -41,11 +41,16 @@ struct PathPayLoad {
     CONDITION_TEMPLATE_2(T1, T2, Vec3)
     CPT_CPU_GPU PathPayLoad(T1&& o_, T2&& d_, int seed, float hitT = MAX_DIST, int offset = 0):
         thp(1, 1, 1, 1), L(0, 0, 0, 1),
-        ray(std::forward<T1>(o_), std::forward<T2>(d_), hitT), sp(seed, offset) {}
+        ray(std::forward<T1>(o_), std::forward<T2>(d_), hitT), sg(seed, offset) {}
 
     CPT_CPU_GPU PathPayLoad(float vthp, float vl, int seed, int offset = 0):
         thp(vthp, vthp, vthp), L(vl, vl, vl),
-        ray(Vec3(0, 0, 0), Vec3(0, 0, 1), MAX_DIST), sp(seed, offset) {}
+        ray(Vec3(0, 0, 0), Vec3(0, 0, 1), MAX_DIST), sg(seed, offset) {}
+
+    CPT_CPU_GPU_INLINE void reset() {
+        ray.clr_hit();
+        ray.set_hit_index(0);
+    }
 };
 
 namespace {
@@ -68,7 +73,7 @@ namespace {
 CPT_KERNEL void raygen_shader(PayLoadBuffer payloads, int sx, int sy) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x + sx, py = threadIdx.y + blockIdx.y * blockDim.y + sy;
     const int block_index = (py - sy) * blockDim.x * gridDim.x + px - sx;
-    payloads[block_index].ray = dev_cam.generate_ray(px, py, payloads[block_index].sp.next2D());
+    payloads[block_index].ray = dev_cam.generate_ray(px, py, payloads[block_index].sg.next2D());
 }
 
 /**
@@ -93,11 +98,11 @@ CPT_KERNEL void closesthit_shader(
 ) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     const int block_index = py * blockDim.x * gridDim.x + px, tid = threadIdx.x + threadIdx.y * blockDim.x;
-    // block 
     
     if (block_index < num_valid) {
         int index = idx_buffer[block_index];
         PathPayLoad payload = payloads[index];        // To local register
+        payload.reset();
         
         __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
         __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
@@ -138,13 +143,122 @@ CPT_KERNEL void closesthit_shader(
         }
 
         // ============= step 2: local shading for indirect bounces ================
-        payload.ray.set_hit_status(min_index >= 0);
-        payload.ray.set_hit_index(min_index >= 0 ? min_index : 0);
         if (min_index >= 0) {
             extract.set_index(min_index);
+            payload.ray.set_hit();
+            payload.ray.set_hit_index(min_index);
             payload.it = variant::apply_visitor(extract, shapes[min_index]);
         }
 
-        payloads[index] = payload;
+        payloads[index].ray = payload.ray;
+        payloads[index].sg  = payload.sg;
+        payloads[index].it  = payload.it;
     }
+}
+
+/***
+ * For non-delta hit (shading point), direct component should be evaluated:
+ * we sample a light source then start ray intersection test
+*/
+CPT_KERNEL void nee_shader(
+    ConstObjPtr objects,
+    ConstIndexPtr prim2obj,
+    ConstShapePtr shapes,
+    ConstAABBPtr aabbs,
+    ConstPrimPtr verts,
+    PayLoadBuffer payloads,
+    ConstPrimPtr norms, 
+    ConstUVPtr,         
+    int num_prims,
+    int num_objects,
+    int num_emitter,
+    int* const idx_buffer,
+    int num_valid
+) {
+    const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
+    const int block_index = py * blockDim.x * gridDim.x + px, tid = threadIdx.x + threadIdx.y * blockDim.x;
+    
+    if (block_index < num_valid) {
+        int index = idx_buffer[block_index];
+        PathPayLoad payload = payloads[index];        // To local register
+
+        int object_id   = prim2obj[payload.ray.hit_id()],
+            material_id = objects[object_id].bsdf_id,
+            emitter_id  = objects[object_id].emitter_id;
+        bool hit_emitter = emitter_id > 0;
+
+        float direct_pdf = 1;
+
+        Emitter* emitter = sample_emitter(payload.sg, direct_pdf, num_emitter, emitter_id);
+        int emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(payload.sg.discrete1D(), direct_pdf);
+        Ray shadow_ray(payload.ray.advance(payload.ray.hit_t), Vec3(0, 0, 0));
+        // use ray.o to avoid creating another shadow_int variable
+        Vec4 direct_comp(0, 0, 0, 1);
+        shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, payload.sg.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+
+        float emit_len_mis = shadow_ray.d.length();
+        shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized directi 
+        // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
+        if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)) {
+            // MIS for BSDF / light sampling, to achieve better rendering
+            // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
+            emit_len_mis = direct_pdf + c_material[material_id]->pdf(payload.it, shadow_ray.d, payload.ray.d) * emitter->non_delta();
+            payload.L += payload.thp * direct_comp * c_material[material_id]->eval(payload.it, shadow_ray.d, payload.ray.d) * \
+                (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
+            // numerical guard, in case emit_len_mis is 0
+        }
+
+        payloads[index].L   = payloads->L;
+        payloads[index].thp = payloads->thp;
+        payloads[index].sg  = payloads->sg;
+    }
+}
+
+
+/**
+ * BSDF sampling & direct shading shader
+*/
+
+CPT_KERNEL void bsdf_emission_shader(
+    ConstObjPtr objects,
+    ConstIndexPtr prim2obj,
+    PayLoadBuffer payloads,
+    ConstUVPtr,         
+    int num_prims,
+    int* const idx_buffer,
+    int num_valid,
+    bool secondary_bounce
+) {
+    const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
+    const int block_index = py * blockDim.x * gridDim.x + px, tid = threadIdx.x + threadIdx.y * blockDim.x;
+
+    if (block_index < num_valid) {
+        int index = idx_buffer[block_index];
+        PathPayLoad payload = payloads[index];        // To local register
+
+        int object_id   = prim2obj[payload.ray.hit_id()],
+            material_id = objects[object_id].bsdf_id,
+            emitter_id  = objects[object_id].emitter_id;
+        bool hit_emitter = emitter_id > 0;
+
+        // emitter MIS
+        float emission_weight = emission_weight / (emission_weight + 
+                objects[object_id].solid_angle_pdf(payload.it.shading_norm, payload.ray.d, payload.ray.hit_t) * hit_emitter * secondary_bounce);
+        // (2) check if the ray hits an emitter
+        Vec4 direct_comp = payload.thp *\
+                    c_emitter[emitter_id]->eval_le(&payload.ray.d, &payload.it.shading_norm);
+        payload.L += direct_comp * emission_weight;
+
+        payload.ray.o = payload.ray.advance(payload.ray.hit_t);
+        payload.ray.d = c_material[material_id]->sample_dir(payload.ray.d, payload.it, payload.thp, emission_weight, payload.sg.next2D());
+
+        payloads[index].ray = payload.ray;
+        payloads[index].thp = payload.thp;
+        payloads[index].sg  = payload.sg;
+        payloads[index].L   = payload.L;
+    }
+}
+
+CPT_KERNEL void miss_shader() {
+    // Nothing here, currently, if we decide not to support env lighting
 }
