@@ -13,7 +13,7 @@ struct Ray {
     Vec3 o;
     float hit_t;
     Vec3 d;
-    uint32_t ray_tag;
+    int ray_tag;
 
     // ray_tag: the highest 4 bits:
     // 31, 30, 29: reserved, 28: active, if 0: inactive, if 1: active
@@ -26,7 +26,16 @@ struct Ray {
         return (ray_tag >> 28) & 1;
     }
 
-    uint32_t hit_id() const noexcept {
+    int hit_id() const noexcept {
         return ray_tag & 0x0fffffff;
+    }
+
+    void set_hit_index(int min_index) noexcept {
+        ray_tag = (0xf0000000 & ray_tag) | min_index; 
+    }
+
+    void set_hit_status(bool hit) noexcept {
+        ray_tag &= 0xefffffff;      // clear bit 28
+        ray_tag |= hit << 28;       // set bit 28
     }
 };

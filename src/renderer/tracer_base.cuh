@@ -6,6 +6,7 @@
 #pragma once
 #include "core/aos.cuh"
 #include "core/shapes.cuh"
+#include "core/object.cuh"
 #include "core/host_device.cuh"
 #include "core/camera_model.cuh"
 
@@ -22,6 +23,10 @@ using BitMask = int;
 CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffs(bits); } 
 #endif
 static constexpr int BASE_ADDR = 1 << BASE_SHFL;
+
+using ConstObjPtr   = const ObjInfo* const;
+using ConstBSDFPtr  = const BSDF* const;
+using ConstIndexPtr = const int* const;
 
 /**
  * This API is deprecated, due to the performance bounded by BSYNC

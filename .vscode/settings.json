@@ -73,6 +73,7 @@
         "unordered_set": "cpp",
         "valarray": "cpp",
         "pipeline": "cpp",
-        "barrier": "cpp"
+        "barrier": "cpp",
+        "shared_mutex": "cpp"
     }
 }

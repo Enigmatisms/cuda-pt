@@ -7,7 +7,6 @@
 #include <cuda/pipeline>
 #include "core/progress.h"
 #include "core/emitter.cuh"
-#include "core/object.cuh"
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
@@ -15,10 +14,6 @@ static constexpr int SEED_SCALER = 11451;
 
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
-
-using ConstObjPtr   = const ObjInfo* const;
-using ConstBSDFPtr  = const BSDF* const;
-using ConstIndexPtr = const int* const;
 
 /**
  * Occlusion test, computation is done on global memory
