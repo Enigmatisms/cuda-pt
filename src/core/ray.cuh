@@ -16,7 +16,7 @@ struct Ray {
     int ray_tag;
 
     // ray_tag: the highest 4 bits:
-    // 31, 30, 29: reserved, 28: active, if 0: inactive, if 1: active
+    // 31, 30, 29: hit, if 0: not hit (potentially inactive), 1 hit, 28: active, if 0: inactive, if 1: active
 
     CONDITION_TEMPLATE_2(T1, T2, Vec3)
     CPT_CPU_GPU
@@ -28,7 +28,12 @@ struct Ray {
     } 
 
     CPT_CPU_GPU_INLINE bool is_active() const noexcept {
-        return (ray_tag >> 28) & 1;
+        return (ray_tag & 0x10000000) > 0;
+    }
+
+    CPT_CPU_GPU_INLINE void set_active(bool v) noexcept {
+        ray_tag &= 0xdfffffff;      // clear bit 28
+        ray_tag |= int(v) << 28;
     }
 
     CPT_CPU_GPU_INLINE int hit_id() const noexcept {
@@ -39,11 +44,15 @@ struct Ray {
         ray_tag = (0xf0000000 & ray_tag) | min_index; 
     }
 
+    CPT_CPU_GPU_INLINE bool is_hit() const noexcept {
+        return (ray_tag & 0x20000000) > 0;
+    }
+
     CPT_CPU_GPU_INLINE void clr_hit() noexcept {
-        ray_tag &= 0xefffffff;      // clear bit 28
+        ray_tag &= 0xdfffffff;      // clear bit 29
     }
 
     CPT_CPU_GPU_INLINE void set_hit() noexcept {
-        ray_tag |= 1 << 28;         // set bit 28
+        ray_tag |= 1 << 29;         // set bit 29
     }
 };

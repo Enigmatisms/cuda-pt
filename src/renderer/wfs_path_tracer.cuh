@@ -70,10 +70,12 @@ namespace {
  * @note we first consider images that have width and height to be the multiple of 128
  * to avoid having to consider the border problem
 */ 
-CPT_KERNEL void raygen_shader(PayLoadBuffer payloads, int sx, int sy) {
+CPT_KERNEL void raygen_shader(PayLoadBuffer payloads, int* const idx_buffer, int sx, int sy) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x + sx, py = threadIdx.y + blockIdx.y * blockDim.y + sy;
     const int block_index = (py - sy) * blockDim.x * gridDim.x + px - sx;
     payloads[block_index].ray = dev_cam.generate_ray(px, py, payloads[block_index].sg.next2D());
+    idx_buffer[block_index] = block_index;
+    __syncthreads();
 }
 
 /**
@@ -92,8 +94,8 @@ CPT_KERNEL void closesthit_shader(
     PayLoadBuffer payloads,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
+    const int* const idx_buffer,
     int num_prims,
-    int* const idx_buffer,
     int num_valid
 ) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -143,17 +145,22 @@ CPT_KERNEL void closesthit_shader(
         }
 
         // ============= step 2: local shading for indirect bounces ================
-        if (min_index >= 0) {
+        if (min_index >= 0 && payload.thp.good()) {
             extract.set_index(min_index);
             payload.ray.set_hit();
             payload.ray.set_hit_index(min_index);
             payload.it = variant::apply_visitor(extract, shapes[min_index]);
+        }
+        if (!payload.thp.good()) {
+            payload.reset();
+            payload.ray.set_active(false);
         }
 
         payloads[index].ray = payload.ray;
         payloads[index].sg  = payload.sg;
         payloads[index].it  = payload.it;
     }
+    __syncthreads();
 }
 
 /***
@@ -169,10 +176,10 @@ CPT_KERNEL void nee_shader(
     PayLoadBuffer payloads,
     ConstPrimPtr norms, 
     ConstUVPtr,         
+    const int* const idx_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
-    int* const idx_buffer,
     int num_valid
 ) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -212,6 +219,7 @@ CPT_KERNEL void nee_shader(
         payloads[index].thp = payloads->thp;
         payloads[index].sg  = payloads->sg;
     }
+    __syncthreads();
 }
 
 
@@ -224,13 +232,13 @@ CPT_KERNEL void bsdf_emission_shader(
     ConstIndexPtr prim2obj,
     PayLoadBuffer payloads,
     ConstUVPtr,         
-    int num_prims,
-    int* const idx_buffer,
+    const int* const idx_buffer,
+    int num_prims, 
     int num_valid,
     bool secondary_bounce
 ) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
-    const int block_index = py * blockDim.x * gridDim.x + px, tid = threadIdx.x + threadIdx.y * blockDim.x;
+    const int block_index = py * blockDim.x * gridDim.x + px;
 
     if (block_index < num_valid) {
         int index = idx_buffer[block_index];
@@ -257,8 +265,73 @@ CPT_KERNEL void bsdf_emission_shader(
         payloads[index].sg  = payload.sg;
         payloads[index].L   = payload.L;
     }
+    __syncthreads();
 }
 
-CPT_KERNEL void miss_shader() {
+/**
+ * Sample the new ray according to BSDF
+*/
+CPT_KERNEL void ray_update_shader(
+    ConstObjPtr objects,
+    ConstIndexPtr prim2obj,
+    PayLoadBuffer payloads,
+    ConstUVPtr,   
+    const int* const idx_buffer,
+    int num_valid
+) {
+
+    const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
+    const int block_index = py * blockDim.x * gridDim.x + px;
+
+    if (block_index < num_valid) {
+        int index = idx_buffer[block_index];
+        PathPayLoad payload = payloads[index];        // To local register
+
+        int object_id   = prim2obj[payload.ray.hit_id()],
+            material_id = objects[object_id].bsdf_id,
+            emitter_id  = objects[object_id].emitter_id;
+        
+        PathPayLoad payload = payloads[block_index];
+        payload.ray.o = payload.ray.advance(payload.ray.hit_t);
+        // TODO: fix this path PDF
+        payload.ray.d = c_material[material_id]->sample_dir(
+            payload.ray.d, payload.it, payload.thp, emission_weight, payload.sg.next2D()
+        );
+        
+    }
+    __syncthreads();
+}
+
+
+CPT_KERNEL void miss_shader(
+    PayLoadBuffer payloads,
+    const int* const idx_buffer,
+    int num_valid
+) {
     // Nothing here, currently, if we decide not to support env lighting
+
+    const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
+    const int block_index = py * blockDim.x * gridDim.x + px;
+
+    if (block_index < num_valid) {
+        int index = idx_buffer[block_index];
+        payloads[index].reset();
+        payloads[index].ray.set_active(false);
+    }
+    __syncthreads();
+}
+
+CPT_KERNEL void radiance_splat(
+    PayLoadBuffer payloads,
+    DeviceImage image,
+    int* const idx_buffer,
+    int num_valid
+) {
+    // Nothing here, currently, if we decide not to support env lighting
+
+    const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
+    const int block_index = py * blockDim.x * gridDim.x + px;
+    Vec4 L = payloads[block_index].L;
+    image(px, py) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
+    __syncthreads();
 }

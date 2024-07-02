@@ -150,6 +150,11 @@ public:
 
     CPT_CPU_GPU_INLINE
     float min_elem() const noexcept { return min(min(_data.w, _data.x), min(_data.y, _data.z)); }
+
+    CPT_CPU_GPU_INLINE
+    bool good() const noexcept {
+        return _data.x > THP_EPS || _data.y > THP_EPS || _data.z > THP_EPS;
+    }
 };
 
 CPT_CPU_GPU void print_Vec4(const Vec4& obj) {
