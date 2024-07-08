@@ -27,13 +27,15 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
+static constexpr int NUM_STREAM = 8;
+
 struct PathPayLoad {
     Vec4 thp;           // 4 * 4 Bytes
     Vec4 L;             // 4 * 4 Bytes
 
     Ray ray;            // 8 * 4 Bytes
     Sampler sg;         // 6 * 4 Bytes
-    int path_flag;      // 1 * 4 Byte:
+    float pdf;          // 1 * 4 Byte:
 
     Interaction it;     // 5 * 4 Bytes
 
@@ -250,7 +252,7 @@ CPT_KERNEL void bsdf_emission_shader(
         bool hit_emitter = emitter_id > 0;
 
         // emitter MIS
-        float emission_weight = emission_weight / (emission_weight + 
+        float emission_weight = payload.pdf / (payload.pdf + 
                 objects[object_id].solid_angle_pdf(payload.it.shading_norm, payload.ray.d, payload.ray.hit_t) * hit_emitter * secondary_bounce);
         // (2) check if the ray hits an emitter
         Vec4 direct_comp = payload.thp *\
@@ -293,9 +295,8 @@ CPT_KERNEL void ray_update_shader(
         
         PathPayLoad payload = payloads[block_index];
         payload.ray.o = payload.ray.advance(payload.ray.hit_t);
-        // TODO: fix this path PDF
         payload.ray.d = c_material[material_id]->sample_dir(
-            payload.ray.d, payload.it, payload.thp, emission_weight, payload.sg.next2D()
+            payload.ray.d, payload.it, payload.thp, payload.pdf, payload.sg.next2D()
         );
         
     }
@@ -334,4 +335,13 @@ CPT_KERNEL void radiance_splat(
     Vec4 L = payloads[block_index].L;
     image(px, py) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
     __syncthreads();
+}
+
+CPT_CPU void wf_path_tracer_host() {
+    cudaStream_t streams[NUM_STREAM];
+    for (int i = 0; i < NUM_STREAM; i++)
+        cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking);
+
+    for (int i = 0; i < NUM_STREAM; i++)
+        cudaStreamDestroy(streams[i]);
 }
