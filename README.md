@@ -5,6 +5,8 @@ Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 trait
 
 This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).
 
+This repo currently has no plan for OptiX, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated in the experimental path tracer AdaPT. Check my github homepage for more information.
+
 Since I have no intention making this a extensive project (like AdaPT, taking care of all the user-friendly aspect) and I am doing this just to challenge myself for more difficult parallel program design, this repo will not be so user friendly and the scalability will be far worse than that of AdaPT. I will try to keep the chores minimal and focus on heterogeneous program design. 
 
 - [x] Toy CUDA depth renderer with profiling
