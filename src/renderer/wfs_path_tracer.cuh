@@ -339,9 +339,124 @@ CPT_KERNEL void radiance_splat(
 
 CPT_CPU void wf_path_tracer_host() {
     cudaStream_t streams[NUM_STREAM];
+    // step 1: create several streams (8 here)
     for (int i = 0; i < NUM_STREAM; i++)
         cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking);
+    // step 2: distribute work among streams in the SPP loop
+
+    
 
     for (int i = 0; i < NUM_STREAM; i++)
         cudaStreamDestroy(streams[i]);
 }
+
+class WavefrontPathTracer: public TracerBase {
+using TracerBase::shapes;
+using TracerBase::aabbs;
+using TracerBase::verts;
+using TracerBase::norms; 
+using TracerBase::uvs;
+using TracerBase::image;
+using TracerBase::dev_image;
+using TracerBase::num_prims;
+using TracerBase::w;
+using TracerBase::h;
+private:
+    ObjInfo* obj_info;
+    int*    prim2obj;
+    int num_objs;
+    int num_emitter;
+public:
+    /**
+     * @param shapes    shape information (for ray intersection)
+     * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+     * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+     * @param camera    GPU camera model (constant memory)
+     * @param image     GPU image buffer
+     * 
+     * @todo: initialize emitters
+     * @todo: initialize objects
+    */
+    WavefrontPathTracer(
+        const std::vector<ObjInfo>& _objs,
+        const std::vector<Shape>& _shapes,
+        const ArrayType<Vec3>& _verts,
+        const ArrayType<Vec3>& _norms, 
+        const ArrayType<Vec2>& _uvs,
+        int num_emitter,
+        int width, int height
+    ): TracerBase(_shapes, _verts, _norms, _uvs, width, height), 
+        num_objs(_objs.size()), num_emitter(num_emitter) 
+    {
+        CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
+        CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
+
+        int prim_offset = 0;
+        for (int i = 0; i < num_objs; i++) {
+            obj_info[i] = _objs[i];
+            int prim_num = _objs[i].prim_num;
+            for (int j = 0; j < prim_num; j++)
+                prim2obj[prim_offset + j] = i;
+            prim_offset += prim_num;
+        }
+        // TODO: copy all the material into constant memory
+    }
+
+    ~WavefrontPathTracer() {
+        CUDA_CHECK_RETURN(cudaFree(obj_info));
+        CUDA_CHECK_RETURN(cudaFree(prim2obj));
+    }
+
+    CPT_CPU std::vector<uint8_t> render(
+        int num_iter = 64,
+        int max_depth = 4,
+        bool gamma_correction = true
+    ) override {
+        TicToc _timer("render_pt_kernel()", num_iter);
+        // step 1: create several streams (8 here)
+        cudaStream_t streams[NUM_STREAM];
+
+        // optimize this
+        constexpr int BLOCK_X = 4;
+        constexpr int BLOCK_Y = 4;
+        constexpr int THREAD_X = 16;
+        constexpr int THREAD_Y = 16;
+        constexpr int PATCH_X = BLOCK_X * THREAD_X;
+        constexpr int PATCH_Y = BLOCK_Y * THREAD_Y;
+        const int x_patches = w / PATCH_X, y_patches = h / PATCH_Y;
+        const int num_patches = x_patches * y_patches;
+
+        for (int i = 0; i < NUM_STREAM; i++)
+            cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking);
+
+        dim3 BLOCKS(BLOCK_X, BLOCK_Y), THREADS(THREAD_X, THREAD_Y);
+        for (int i = 0; i < num_iter; i++) {
+            // for more sophisticated renderer (like path tracer), shared_memory should be used
+
+            for (int p_idx = 0; p_idx < num_patches; p_idx) {
+                int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches;
+                // raygen_shader<<<BLOCKS, THREADS>>>(, );
+            }
+
+            // step 2: distribute work among streams in the SPP loop
+            // step 2.1 first generate camera rays
+            raygen_shader<<< >>>
+
+
+            render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth
+            ); 
+
+
+
+            CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+            printProgress(i, num_iter);
+        }
+        for (int i = 0; i < NUM_STREAM; i++)
+            cudaStreamDestroy(streams[i]);
+        printf("\n");
+        return image.export_cpu(1.f / num_iter, gamma_correction);
+    }
+};

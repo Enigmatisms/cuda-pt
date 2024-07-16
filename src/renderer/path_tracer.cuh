@@ -281,4 +281,3 @@ public:
         return image.export_cpu(1.f / num_iter, gamma_correction);
     }
 };
-
