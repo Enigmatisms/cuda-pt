@@ -57,6 +57,7 @@ struct PathPayLoad {
 
 namespace {
     using PayLoadBuffer = PathPayLoad* const;
+    using PayLoadAccessor = Accessor<PathPayLoad>;
     using ConstPayLoadBuffer = const PayLoadBuffer;
 }
 
@@ -65,16 +66,20 @@ namespace {
 
 /**
  * @brief ray generation kernel 
- * @param ray_pool the writing destination for the raygen result
- * @param samplers samplers to be used to generate random number
- * @param (sx, sy) stream offset for the current image patch
+ * note that, all the kernels are called per stream, each stream can have multiple blocks (since it is a kernel call)
+ * let's say, for example, a 4 * 4 block for one kernel call. These 16 blocks should be responsible for 
+ * one image patch, offseted by the stream offset sx, sy.
+ * @param (sx, sy) stream offset for the current image patch. For example,
+ *      sx = row_patch_id * gridDim.x * blockDim.x
+ *      sy = col_patch_id * gridDim.y * blockDim.y
  * 
  * @note we first consider images that have width and height to be the multiple of 128
  * to avoid having to consider the border problem
 */ 
-CPT_KERNEL void raygen_shader(PayLoadBuffer payloads, int* const idx_buffer, int sx, int sy) {
+CPT_KERNEL void raygen_shader(PayLoadBuffer payloads, PayLoadAccessor acc, int* const idx_buffer, int sx, int sy, int pitch) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x + sx, py = threadIdx.y + blockIdx.y * blockDim.y + sy;
     const int block_index = (py - sy) * blockDim.x * gridDim.x + px - sx;
+
     payloads[block_index].ray = dev_cam.generate_ray(px, py, payloads[block_index].sg.next2D());
     idx_buffer[block_index] = block_index;
     __syncthreads();
@@ -431,12 +436,14 @@ public:
             cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking);
 
         dim3 BLOCKS(BLOCK_X, BLOCK_Y), THREADS(THREAD_X, THREAD_Y);
+        // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
+        DevicePitchBuffer<PathPayLoad> payload_buffer(w, h);
+
         for (int i = 0; i < num_iter; i++) {
-            // for more sophisticated renderer (like path tracer), shared_memory should be used
 
             for (int p_idx = 0; p_idx < num_patches; p_idx) {
                 int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches;
-                // raygen_shader<<<BLOCKS, THREADS>>>(, );
+                raygen_shader<<<BLOCKS, THREADS>>>(, );
             }
 
             // step 2: distribute work among streams in the SPP loop
