@@ -40,6 +40,10 @@ struct PathPayLoad {
 
     Interaction it;     // 5 * 4 Bytes
 
+    CPT_CPU_GPU PathPayLoad(int sg_seed):
+        thp(1, 1, 1, 1), L(0, 0, 0, 1),
+        ray(Vec3(0, 0, 0), Vec3(0, 0, 1), 0), sg(sg_seed), pdf(1) {}
+
     // 28 * 4 Bytes in total
     CONDITION_TEMPLATE_2(T1, T2, Vec3)
     CPT_CPU_GPU PathPayLoad(T1&& o_, T2&& d_, int seed, float hitT = MAX_DIST, int offset = 0):
@@ -77,12 +81,21 @@ namespace {
  * @note we first consider images that have width and height to be the multiple of 128
  * to avoid having to consider the border problem
 */ 
-CPT_KERNEL void raygen_shader(PayLoadBuffer payloads, PayLoadAccessor acc, int* const idx_buffer, int sx, int sy, int pitch) {
+CPT_KERNEL void raygen_shader(
+    PayLoadBuffer payloads, 
+    PayLoadAccessor acc, 
+    uint32_t* const idx_buffer, 
+    int sx, int sy, int pitch, int width
+) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x + sx, py = threadIdx.y + blockIdx.y * blockDim.y + sy;
     const int block_index = (py - sy) * blockDim.x * gridDim.x + px - sx;
-
-    payloads[block_index].ray = dev_cam.generate_ray(px, py, payloads[block_index].sg.next2D());
-    idx_buffer[block_index] = block_index;
+    auto& payload = acc(payloads, px, py, pitch);
+    payload = PathPayLoad(px + py * width);
+    payload.ray = dev_cam.generate_ray(px, py, payload.sg.next2D());
+    // compress two int (to int16) to a uint32_t 
+    // note that we can not use int here, since int shifting might retain the sign
+    // it is implementation dependent
+    idx_buffer[block_index] = (py << 16) + px;      
     __syncthreads();
 }
 
@@ -100,22 +113,25 @@ CPT_KERNEL void closesthit_shader(
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     PayLoadBuffer payloads,
+    PayLoadAccessor acc,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
-    const int* const idx_buffer,
+    const uint32_t* const idx_buffer,
     int num_prims,
-    int num_valid
+    int num_valid,
+    int pitch
 ) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     const int block_index = py * blockDim.x * gridDim.x + px, tid = threadIdx.x + threadIdx.y * blockDim.x;
     
     if (block_index < num_valid) {
-        int index = idx_buffer[block_index];
-        PathPayLoad payload = payloads[index];        // To local register
+        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        py >>= 16;
+        PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
         payload.reset();
         
-        __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
-        __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
+        __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
+        __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
         ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
         ShapeIntersectVisitor visitor(s_verts_arr, payload.ray, 0);
@@ -164,9 +180,10 @@ CPT_KERNEL void closesthit_shader(
             payload.ray.set_active(false);
         }
 
-        payloads[index].ray = payload.ray;
-        payloads[index].sg  = payload.sg;
-        payloads[index].it  = payload.it;
+        auto& to_store = acc(payloads, px, py, pitch);
+        to_store.ray = payload.ray;
+        to_store.sg  = payload.sg;
+        to_store.it  = payload.it;
     }
     __syncthreads();
 }
@@ -182,20 +199,23 @@ CPT_KERNEL void nee_shader(
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     PayLoadBuffer payloads,
+    PayLoadAccessor acc,
     ConstPrimPtr norms, 
     ConstUVPtr,         
     const int* const idx_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
-    int num_valid
+    int num_valid,
+    int pitch
 ) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     const int block_index = py * blockDim.x * gridDim.x + px, tid = threadIdx.x + threadIdx.y * blockDim.x;
     
     if (block_index < num_valid) {
-        int index = idx_buffer[block_index];
-        PathPayLoad payload = payloads[index];        // To local register
+        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        py >>= 16;
+        PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
 
         int object_id   = prim2obj[payload.ray.hit_id()],
             material_id = objects[object_id].bsdf_id,
@@ -223,9 +243,10 @@ CPT_KERNEL void nee_shader(
             // numerical guard, in case emit_len_mis is 0
         }
 
-        payloads[index].L   = payloads->L;
-        payloads[index].thp = payloads->thp;
-        payloads[index].sg  = payloads->sg;
+        auto& to_store = acc(payloads, px, py, pitch);
+        to_store.ray = payload.ray;
+        to_store.sg  = payload.sg;
+        to_store.thp = payload.thp;
     }
     __syncthreads();
 }
@@ -436,15 +457,16 @@ public:
         for (int i = 0; i < NUM_STREAM; i++)
             cudaStreamCreateWithFlags(&streams[i], cudaStreamDefault);
 
-        dim3 BLOCKS(BLOCK_X, BLOCK_Y), THREADS(THREAD_X, THREAD_Y);
         // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
-        DevicePitchBuffer<PathPayLoad> payload_buffer(w, h);
 
         assert(omp_get_num_threads() == NUM_STREAM);
 
 
         // TODO: create NUM_THREADS * (PATCH_X * PATCH_Y) PathPayLoad Buffer
-        // TODO: check the payload index buffer. Design the index buffer
+        int* ray_idx_buffer;
+        DevicePitchBuffer<PathPayLoad> payload_buffer(NUM_STREAM * PATCH_X, PATCH_Y);
+        CUDA_CHECK_RETURN(cudaMalloc(&ray_idx_buffer, sizeof(int) * NUM_STREAM * PATCH_X * PATCH_Y));
+        const dim3 GRID(BLOCK_X, BLOCK_Y), BLOCK(THREAD_X, THREAD_Y);
 
         for (int i = 0; i < num_iter; i++) {
             
@@ -455,11 +477,18 @@ public:
             // This can be extended even further: use a high performance thread pool
             for (int p_idx = 0; p_idx < num_patches; p_idx) {
                 int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
+                int sx      = patch_x * PATCH_X, sy      = patch_y * PATCH_Y;
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
-                // raygen_shader<<< >>>
+                raygen_shader<<<GRID, BLOCK, 0, streams[stream_id]>>>(
+                    payload_buffer.data(), payload_buffer.accessor(), 
+                    ray_idx_buffer, sx, sy, payload_buffer.get_pitch(), image.w());
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
                     // step2: closesthit shader
+                    closesthit_shader<<<GRID, BLOCK, 0, streams[stream_id]>>>(
+
+                    );
+
                     // closesthit_shader<<< >>>
                     
                     // step3: thrust stream compaction
@@ -483,7 +512,8 @@ public:
         }
         for (int i = 0; i < NUM_STREAM; i++)
             cudaStreamDestroy(streams[i]);
+        CUDA_CHECK_RETURN(cudaFree(ray_idx_buffer));
         printf("\n");
-        return dev_image.export_cpu(1.f / num_iter, gamma_correction);
+        return image.export_cpu(1.f / num_iter, gamma_correction);
     }
 };

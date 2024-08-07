@@ -53,9 +53,9 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
 template<typename ValType>
 struct Accessor {
     CPT_CPU_GPU Accessor() {}
-    CPT_CPU_GPU_INLINE ValType& operator() (ValType* buffer, int col, int row, int pitch) 
+    CPT_CPU_GPU_INLINE ValType& operator() (ValType* buffer, uint32_t col, uint32_t row, uint32_t pitch) 
                 {  return ((ValType*)((char*)buffer + row * pitch))[col]; }
-    CPT_CPU_GPU_INLINE const ValType& operator() (ValType* buffer, int col, int row, int pitch) const 
+    CPT_CPU_GPU_INLINE const ValType& operator() (ValType* buffer, uint32_t col, uint32_t row, uint32_t pitch) const 
                 { return ((ValType*)((char*)buffer + row * pitch))[col]; }
 };
 
@@ -89,6 +89,10 @@ public:
 
     CPT_CPU_GPU_INLINE static Accessor<ValType> accessor() noexcept {
         return Accessor();
+    }
+
+    CPT_CPU_GPU_INLINE ValType* data() {
+        return _buffer;
     }
 };
 
