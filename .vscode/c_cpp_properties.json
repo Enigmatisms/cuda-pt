@@ -13,7 +13,20 @@
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64"
-        }
+        },
+        {
+            "name": "Win32",
+            "compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.40.33807/bin/Hostx64/x64/cl.exe",
+            "intelliSenseMode": "windows-msvc-x64",
+            "includePath": [
+                "${workspaceFolder}/src/*",
+                "${workspaceFolder}/src/ext/**"
+            ],
+            "defines": ["_WINDOWS"],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "windowsSdkVersion": "10.0.19041.0",
+          }
     ],
     "version": 4
   }

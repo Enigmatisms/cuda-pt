@@ -20,6 +20,7 @@
  * @date   2024.6.20
 */
 #pragma once
+#include <omp.h>
 #include <cuda/pipeline>
 #include "core/progress.h"
 #include "core/emitter.cuh"
@@ -433,37 +434,56 @@ public:
         const int num_patches = x_patches * y_patches;
 
         for (int i = 0; i < NUM_STREAM; i++)
-            cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking);
+            cudaStreamCreateWithFlags(&streams[i], cudaStreamDefault);
 
         dim3 BLOCKS(BLOCK_X, BLOCK_Y), THREADS(THREAD_X, THREAD_Y);
         // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
         DevicePitchBuffer<PathPayLoad> payload_buffer(w, h);
 
-        for (int i = 0; i < num_iter; i++) {
+        assert(omp_get_num_threads() == NUM_STREAM);
 
+
+        // TODO: create NUM_THREADS * (PATCH_X * PATCH_Y) PathPayLoad Buffer
+        // TODO: check the payload index buffer. Design the index buffer
+
+        for (int i = 0; i < num_iter; i++) {
+            
+            // here, we should use multi threading to submit the kernel call
+            // each thread is responsible for only one stream (and dedicated to that stream only)
+            // If we decide to use 8 streams, then we will use 8 CPU threads
+            // Using multi-threading to submit kernel, we can avoid stucking on just one stream
+            // This can be extended even further: use a high performance thread pool
             for (int p_idx = 0; p_idx < num_patches; p_idx) {
-                int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches;
-                raygen_shader<<<BLOCKS, THREADS>>>(, );
+                int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
+
+                // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
+                // raygen_shader<<< >>>
+                for (int bounce = 0; bounce < max_depth; bounce ++) {
+                    // step2: closesthit shader
+                    // closesthit_shader<<< >>>
+                    
+                    // step3: thrust stream compaction
+                    // thrust::partition(thrust::cuda::par.on(stream_i)), send the kernel call to different streams
+                    // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
+
+                    // step4: nee shader
+
+                    // step5: emission shader
+
+                    // step6: rayupdate shader
+                }
+
+                // step7: accumulating radiance to the rgb buffer
+
             }
 
-            // step 2: distribute work among streams in the SPP loop
-            // step 2.1 first generate camera rays
-            raygen_shader<<< >>>
-
-
-            render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
-                *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth
-            ); 
-
-
-
+            // should we synchronize here? Yes, host end needs this
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
             printProgress(i, num_iter);
         }
         for (int i = 0; i < NUM_STREAM; i++)
             cudaStreamDestroy(streams[i]);
         printf("\n");
-        return image.export_cpu(1.f / num_iter, gamma_correction);
+        return dev_image.export_cpu(1.f / num_iter, gamma_correction);
     }
 };

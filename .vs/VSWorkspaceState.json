@@ -9,6 +9,7 @@
   },
   "ExpandedNodes": [
     "",
+    "\\assets",
     "\\scene",
     "\\scene\\xml",
     "\\src",
@@ -16,5 +17,6 @@
     "\\src\\renderer",
     "\\test"
   ],
+  "SelectedNode": "\\CMakeLists.txt",
   "PreviewInSolutionExplorer": false
 }
