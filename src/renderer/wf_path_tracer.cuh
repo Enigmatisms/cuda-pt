@@ -22,6 +22,10 @@
 #pragma once
 #include <omp.h>
 #include <cuda/pipeline>
+#include <thrust/copy.h>
+#include <thrust/partition.h>
+#include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
 #include "core/progress.h"
 #include "core/emitter.cuh"
 #include "core/object.cuh"
@@ -451,6 +455,7 @@ public:
         constexpr int THREAD_Y = 16;
         constexpr int PATCH_X = BLOCK_X * THREAD_X;
         constexpr int PATCH_Y = BLOCK_Y * THREAD_Y;
+        constexpr int TOTAL_RAY = PATCH_X * PATCH_Y;
         const int x_patches = w / PATCH_X, y_patches = h / PATCH_Y;
         const int num_patches = x_patches * y_patches;
 
@@ -463,9 +468,9 @@ public:
 
 
         // TODO: create NUM_THREADS * (PATCH_X * PATCH_Y) PathPayLoad Buffer
-        int* ray_idx_buffer;
+        uint32_t* ray_idx_buffer;
         DevicePitchBuffer<PathPayLoad> payload_buffer(NUM_STREAM * PATCH_X, PATCH_Y);
-        CUDA_CHECK_RETURN(cudaMalloc(&ray_idx_buffer, sizeof(int) * NUM_STREAM * PATCH_X * PATCH_Y));
+        CUDA_CHECK_RETURN(cudaMalloc(&ray_idx_buffer, sizeof(uint32_t) * NUM_STREAM * TOTAL_RAY));
         const dim3 GRID(BLOCK_X, BLOCK_Y), BLOCK(THREAD_X, THREAD_Y);
 
         for (int i = 0; i < num_iter; i++) {
@@ -475,6 +480,7 @@ public:
             // If we decide to use 8 streams, then we will use 8 CPU threads
             // Using multi-threading to submit kernel, we can avoid stucking on just one stream
             // This can be extended even further: use a high performance thread pool
+            #pragma omp parallel for num_threads(NUM_STREAM)
             for (int p_idx = 0; p_idx < num_patches; p_idx) {
                 int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
                 int sx      = patch_x * PATCH_X, sy      = patch_y * PATCH_Y;
@@ -483,16 +489,29 @@ public:
                 raygen_shader<<<GRID, BLOCK, 0, streams[stream_id]>>>(
                     payload_buffer.data(), payload_buffer.accessor(), 
                     ray_idx_buffer, sx, sy, payload_buffer.get_pitch(), image.w());
+                int num_valid_ray = TOTAL_RAY;
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
                     // step2: closesthit shader
                     closesthit_shader<<<GRID, BLOCK, 0, streams[stream_id]>>>(
-
+                        obj_info, prim2obj, shapes, aabbs, verts, payload_buffer.data(),
+                        payload_buffer.accessor(), norms, uvs, ray_idx_buffer,
+                        num_prims, num_valid_ray, payload_buffer.get_pitch()
                     );
-
-                    // closesthit_shader<<< >>>
                     
                     // step3: thrust stream compaction
-                    // thrust::partition(thrust::cuda::par.on(stream_i)), send the kernel call to different streams
+                    thrust::partition(
+                        thrust::cuda::par.on(streams[stream_id]), 
+                        &ray_idx_buffer[stream_id * TOTAL_RAY], 
+                        &ray_idx_buffer[stream_id * TOTAL_RAY + TOTAL_RAY],
+                        [
+                            data = payload_buffer.data(), 
+                            acco = payload_buffer.accessor(), 
+                            pitch = payload_buffer.get_pitch()
+                        ] (int index) {
+                            uint32_t py = index >> 16, px = index & 0x0000ffff;
+                            return acco(data, px, py, pitch).ray.is_active();
+                        } 
+                    );
                     // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
 
                     // step4: nee shader
