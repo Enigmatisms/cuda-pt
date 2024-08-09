@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "*.cuh": "cpp",
         "iostream": "cpp",
         "chrono": "cpp",
         "random": "cpp",
@@ -74,6 +75,25 @@
         "valarray": "cpp",
         "pipeline": "cpp",
         "barrier": "cpp",
-        "shared_mutex": "cpp"
+        "shared_mutex": "cpp",
+        "charconv": "cpp",
+        "format": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "xfacet": "cpp",
+        "xhash": "cpp",
+        "xiosbase": "cpp",
+        "xlocale": "cpp",
+        "xlocbuf": "cpp",
+        "xlocinfo": "cpp",
+        "xlocmes": "cpp",
+        "xlocmon": "cpp",
+        "xlocnum": "cpp",
+        "xloctime": "cpp",
+        "xmemory": "cpp",
+        "xstring": "cpp",
+        "xtr1common": "cpp",
+        "xtree": "cpp",
+        "xutility": "cpp"
     }
 }

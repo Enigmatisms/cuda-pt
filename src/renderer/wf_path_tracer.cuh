@@ -33,6 +33,15 @@
 #include "renderer/path_tracer.cuh"
 
 static constexpr int NUM_STREAM = 8;
+#ifdef NO_STREAM_COMPACTION
+    #define partition_func(...) (-1)
+#else
+    #ifdef STABLE_PARTITION
+    #define partition_func(...) thrust::stable_partition(__VA_ARGS__)
+    #else
+    #define partition_func(...) thrust::partition(__VA_ARGS__)
+    #endif    // STABLE_PARTITION
+#endif    // NO_STREAM_COMPACTION
 
 struct PathPayLoad {
     Vec4 thp;           // 4 * 4 Bytes
@@ -174,14 +183,12 @@ CPT_KERNEL void closesthit_shader(
 
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0 && payload.thp.good()) {
+            // if the ray hits nothing, or the path throughput is 0, then the ray will be inactive
+            // inactive rays will only be processed in the miss_shader
             extract.set_index(min_index);
             payload.ray.set_hit();
             payload.ray.set_hit_index(min_index);
             payload.it = variant::apply_visitor(extract, shapes[min_index]);
-        }
-        if (!payload.thp.good()) {
-            payload.reset();
-            payload.ray.set_active(false);
         }
 
         auto& to_store = acc(payloads, px, py, pitch);
@@ -264,18 +271,21 @@ CPT_KERNEL void bsdf_emission_shader(
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     PayLoadBuffer payloads,
+    PayLoadAccessor acc,
     ConstUVPtr,         
     const int* const idx_buffer,
     int num_prims, 
     int num_valid,
-    bool secondary_bounce
+    int pitch
+    bool secondary_bounce,
 ) {
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     const int block_index = py * blockDim.x * gridDim.x + px;
 
     if (block_index < num_valid) {
-        int index = idx_buffer[block_index];
-        PathPayLoad payload = payloads[index];        // To local register
+        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        py >>= 16;
+        PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
 
         int object_id   = prim2obj[payload.ray.hit_id()],
             material_id = objects[object_id].bsdf_id,
@@ -293,10 +303,11 @@ CPT_KERNEL void bsdf_emission_shader(
         payload.ray.o = payload.ray.advance(payload.ray.hit_t);
         payload.ray.d = c_material[material_id]->sample_dir(payload.ray.d, payload.it, payload.thp, emission_weight, payload.sg.next2D());
 
-        payloads[index].ray = payload.ray;
-        payloads[index].thp = payload.thp;
-        payloads[index].sg  = payload.sg;
-        payloads[index].L   = payload.L;
+        auto& to_store = acc(payloads, px, py, pitch);
+        to_store.ray = payload.ray;
+        to_store.thp = payload.thp;
+        to_store.sg  = payload.sg;
+        to_store.L   = payload.L;
     }
     __syncthreads();
 }
@@ -308,17 +319,19 @@ CPT_KERNEL void ray_update_shader(
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     PayLoadBuffer payloads,
+    PayLoadAccessor acc,
     ConstUVPtr,   
     const int* const idx_buffer,
-    int num_valid
+    int num_valid,
+    int pitch
 ) {
-
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     const int block_index = py * blockDim.x * gridDim.x + px;
 
     if (block_index < num_valid) {
-        int index = idx_buffer[block_index];
-        PathPayLoad payload = payloads[index];        // To local register
+        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        py >>= 16;
+        PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
 
         int object_id   = prim2obj[payload.ray.hit_id()],
             material_id = objects[object_id].bsdf_id,
@@ -329,16 +342,29 @@ CPT_KERNEL void ray_update_shader(
         payload.ray.d = c_material[material_id]->sample_dir(
             payload.ray.d, payload.it, payload.thp, payload.pdf, payload.sg.next2D()
         );
-        
+        auto& to_store = acc(payloads, px, py, pitch);
+        to_store.ray = payload.ray;
     }
     __syncthreads();
 }
 
-
+/**
+ * Purpose of the miss shader: if ray hits nothing in closesthit shader
+ * the we will set the hit status (flag) to be false
+ * in this shader, we find the rays marked as no-hit, and check the
+ * availability of environment map (currently not supported)
+ * after processing the env-map lighting, we mark the ray as inactive
+ * before stream compaction. Then stream compaction will 'remove' all these
+ * rays (and the threads)
+ * 
+ * MISS_SHADER is the only place where you mark a ray as inactive
+*/
 CPT_KERNEL void miss_shader(
     PayLoadBuffer payloads,
+    PayLoadAccessor acc,
     const int* const idx_buffer,
-    int num_valid
+    int num_valid,
+    int pitch
 ) {
     // Nothing here, currently, if we decide not to support env lighting
 
@@ -346,40 +372,51 @@ CPT_KERNEL void miss_shader(
     const int block_index = py * blockDim.x * gridDim.x + px;
 
     if (block_index < num_valid) {
-        int index = idx_buffer[block_index];
-        payloads[index].reset();
-        payloads[index].ray.set_active(false);
+        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        py >>= 16;
+        PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
+        if (!payload.ray.is_hit()) {
+            // TODO: process no-hit ray, environment map lighting
+            payload.ray.set_active(false);
+        }
+        auto& to_store = acc(payloads, px, py, pitch);
+        to_store.ray = payload.ray;
     }
     __syncthreads();
 }
 
 CPT_KERNEL void radiance_splat(
     PayLoadBuffer payloads,
+    PayLoadAccessor acc,
     DeviceImage image,
-    int* const idx_buffer,
-    int num_valid
+    int pitch
 ) {
     // Nothing here, currently, if we decide not to support env lighting
-
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     const int block_index = py * blockDim.x * gridDim.x + px;
-    Vec4 L = payloads[block_index].L;
+    Vec4 payload = acc(payloads, px, py, pitch).L;         // To local register
     image(px, py) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
     __syncthreads();
 }
 
-CPT_CPU void wf_path_tracer_host() {
-    cudaStream_t streams[NUM_STREAM];
-    // step 1: create several streams (8 here)
-    for (int i = 0; i < NUM_STREAM; i++)
-        cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking);
-    // step 2: distribute work among streams in the SPP loop
+/**
+ * This functor is used for stream compaction
+*/
+struct ActiveRayFunctor
+{
+    const PayLoadBuffer data;
+    const PayLoadAccessor acco;
+    const int pitch;
 
-    
+    CPT_CPU_GPU ActiveRayFunctor(PayLoadBuffer _data, PayLoadAccessor&& _acc, size_t pit):
+        data(_data), _acc(std::move(acco)), pit(pitch) {}
 
-    for (int i = 0; i < NUM_STREAM; i++)
-        cudaStreamDestroy(streams[i]);
-}
+    CPT_CPU_GPU bool operator()(int index) const
+    {
+        uint32_t py = index >> 16, px = index & 0x0000ffff;
+        return acco(data, px, py, pitch).ray.is_active();
+    }
+};
 
 class WavefrontPathTracer: public TracerBase {
 using TracerBase::shapes;
@@ -462,19 +499,17 @@ public:
         for (int i = 0; i < NUM_STREAM; i++)
             cudaStreamCreateWithFlags(&streams[i], cudaStreamDefault);
 
-        // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
 
         assert(omp_get_num_threads() == NUM_STREAM);
 
-
-        // TODO: create NUM_THREADS * (PATCH_X * PATCH_Y) PathPayLoad Buffer
+        // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
         uint32_t* ray_idx_buffer;
         DevicePitchBuffer<PathPayLoad> payload_buffer(NUM_STREAM * PATCH_X, PATCH_Y);
         CUDA_CHECK_RETURN(cudaMalloc(&ray_idx_buffer, sizeof(uint32_t) * NUM_STREAM * TOTAL_RAY));
         const dim3 GRID(BLOCK_X, BLOCK_Y), BLOCK(THREAD_X, THREAD_Y);
+        const int pitch = payload_buffer.get_pitch();
 
         for (int i = 0; i < num_iter; i++) {
-            
             // here, we should use multi threading to submit the kernel call
             // each thread is responsible for only one stream (and dedicated to that stream only)
             // If we decide to use 8 streams, then we will use 8 CPU threads
@@ -484,45 +519,58 @@ public:
             for (int p_idx = 0; p_idx < num_patches; p_idx) {
                 int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
                 int sx      = patch_x * PATCH_X, sy      = patch_y * PATCH_Y;
+                auto cur_stream = streams[stream_id];
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
-                raygen_shader<<<GRID, BLOCK, 0, streams[stream_id]>>>(
+                raygen_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                     payload_buffer.data(), payload_buffer.accessor(), 
-                    ray_idx_buffer, sx, sy, payload_buffer.get_pitch(), image.w());
+                    ray_idx_buffer, sx, sy, pitch, image.w());
                 int num_valid_ray = TOTAL_RAY;
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
                     // step2: closesthit shader
-                    closesthit_shader<<<GRID, BLOCK, 0, streams[stream_id]>>>(
+                    closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         obj_info, prim2obj, shapes, aabbs, verts, payload_buffer.data(),
                         payload_buffer.accessor(), norms, uvs, ray_idx_buffer,
-                        num_prims, num_valid_ray, payload_buffer.get_pitch()
+                        num_prims, num_valid_ray, pitch
                     );
                     
-                    // step3: thrust stream compaction
-                    thrust::partition(
-                        thrust::cuda::par.on(streams[stream_id]), 
+                    // step3: thrust stream compaction (optional)
+                    num_valid_ray = partition_func(
+                        thrust::cuda::par.on(cur_stream), 
                         &ray_idx_buffer[stream_id * TOTAL_RAY], 
                         &ray_idx_buffer[stream_id * TOTAL_RAY + TOTAL_RAY],
-                        [
-                            data = payload_buffer.data(), 
-                            acco = payload_buffer.accessor(), 
-                            pitch = payload_buffer.get_pitch()
-                        ] (int index) {
-                            uint32_t py = index >> 16, px = index & 0x0000ffff;
-                            return acco(data, px, py, pitch).ray.is_active();
-                        } 
+                        ActiveRayFunctor(payload_buffer.data(), payload_buffer.accessor(), pitch)
                     );
                     // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
+                    if (!num_valid_ray) break;
+                    num_valid_ray = num_valid_ray < 0 ? TOTAL_RAY : num_valid_ray;
 
                     // step4: nee shader
+                    nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                        obj_info, prim2obj, shapes, aabbs, verts, payload_buffer.data(),
+                        payload_buffer.accessor(), norms, uvs, ray_idx_buffer,
+                        num_prims, num_objects, num_emitter, num_valid_ray, pitch
+                    );
 
                     // step5: emission shader
+                    bsdf_emission_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                        obj_info, prim2obj, payload_buffer.data(),
+                        payload_buffer.accessor(), uvs, ray_idx_buffer,
+                        num_prims, num_valid_ray, pitch, bounce > 0
+                    );
 
                     // step6: rayupdate shader
+                    ray_update_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                        obj_info, prim2obj, payload_buffer.data(),
+                        payload_buffer.accessor(), uvs, ray_idx_buffer,
+                        num_valid_ray, pitch
+                    );
                 }
 
                 // step7: accumulating radiance to the rgb buffer
-
+                radiance_splat<<<GRID, BLOCK, 0, cur_stream>>>(
+                    payload_buffer.data(), payload_buffer.accessor(), dev_image, pitch
+                );
             }
 
             // should we synchronize here? Yes, host end needs this
