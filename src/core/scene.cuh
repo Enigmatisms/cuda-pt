@@ -369,6 +369,16 @@ void parseObjShape(
     }
 }
 
+enum RendererType {
+    MegaKernelPT = 0,
+    WavefrontPT  = 1,
+    VoxelSDFPT   = 2,            // not supported currently
+    NumRendererType
+};
+
+const std::array<std::string, NumRendererType> RENDER_TYPE_STR
+    = {"MegaKernel-PT", "Wavefront-PT", "Voxel-SDF-PT"};
+
 class Scene {
 public:
     BSDF** bsdfs;
@@ -387,6 +397,8 @@ public:
     int num_prims;
     int num_emitters;
     int num_objects;
+
+    RendererType rdr_type;
 public:
     Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0) {
         tinyxml2::XMLDocument doc;
@@ -399,13 +411,20 @@ public:
                                    *bsdf_elem    = scene_elem->FirstChildElement("brdf"),
                                    *shape_elem   = scene_elem->FirstChildElement("shape"),
                                    *emitter_elem = scene_elem->FirstChildElement("emitter"),
-                                   *sensor_elem  = scene_elem->FirstChildElement("sensor"), *ptr = nullptr;
+                                   *sensor_elem  = scene_elem->FirstChildElement("sensor"), 
+                                   *render_elem  = scene_elem->FirstChildElement("renderer"), *ptr = nullptr;
 
         std::unordered_map<std::string, int> bsdf_map, emitter_map, emitter_obj_map;
         std::vector<std::string> emitter_names;
         emitter_names.reserve(9);
         emitter_map.reserve(9);
         bsdf_map.reserve(32);
+
+        // ------------------------- (0) parse the renderer -------------------------
+        std::string render_type = render_elem != nullptr ? render_elem->Attribute("type") : "megakernel";
+        if      (render_type == "megakernel") rdr_type = RendererType::MegaKernelPT;
+        else if (render_type == "wavefront")  rdr_type = RendererType::WavefrontPT;
+        else                                  rdr_type = RendererType::MegaKernelPT;
 
         // ------------------------- (1) parse all the BSDF -------------------------
         
@@ -512,6 +531,7 @@ public:
 
     void print() const noexcept {
         std::cout << " Scene:\n";
+        std::cout << "\tRenderer type:\t\t" << RENDER_TYPE_STR[rdr_type] << std::endl;
         std::cout << "\tNumber of objects: \t" << num_objects << std::endl;
         std::cout << "\tNumber of primitives: \t" << num_prims << std::endl;
         std::cout << "\tNumber of emitters: \t" << num_emitters << std::endl;

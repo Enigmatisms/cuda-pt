@@ -88,7 +88,7 @@ public:
     CPT_CPU_GPU_INLINE int get_pitch() const noexcept { return pitch; }
 
     CPT_CPU_GPU_INLINE static Accessor<ValType> accessor() noexcept {
-        return Accessor();
+        return Accessor<ValType>();
     }
 
     CPT_CPU_GPU_INLINE ValType* data() {

@@ -5,12 +5,12 @@
         {
             "name": "Linux",        
             "includePath": [
-                "${workspaceFolder}\\src\\*",
-                "${workspaceFolder}\\src\\ext\\**",
-                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\include"
+                "${workspaceFolder}/src/*",
+                "${workspaceFolder}/src/ext/**",
+                "/usr/local/cuda-11.8/include/"
             ],
             "defines": [],
-            "compilerPath": "\\usr\\bin\\gcc",
+            "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64"
@@ -28,7 +28,7 @@
             "cStandard": "c11",
             "cppStandard": "c++17",
             "windowsSdkVersion": "10.0.19041.0"
-          }
+        }
     ],
     "version": 4
   }

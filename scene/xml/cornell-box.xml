@@ -4,6 +4,8 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
+	<renderer type="wavefront"/>
+
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="500"/>
@@ -16,8 +18,8 @@
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="800"/>
-			<integer name="height" value="800"/>
+			<integer name="width" value="1024"/>
+			<integer name="height" value="1024"/>
 			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>

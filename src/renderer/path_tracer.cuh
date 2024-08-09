@@ -204,17 +204,18 @@ CPT_KERNEL static void render_pt_kernel(
 }
 
 class PathTracer: public TracerBase {
-using TracerBase::shapes;
-using TracerBase::aabbs;
-using TracerBase::verts;
-using TracerBase::norms; 
-using TracerBase::uvs;
-using TracerBase::image;
-using TracerBase::dev_image;
-using TracerBase::num_prims;
-using TracerBase::w;
-using TracerBase::h;
-private:
+protected:
+    using TracerBase::shapes;
+    using TracerBase::aabbs;
+    using TracerBase::verts;
+    using TracerBase::norms; 
+    using TracerBase::uvs;
+    using TracerBase::image;
+    using TracerBase::dev_image;
+    using TracerBase::num_prims;
+    using TracerBase::w;
+    using TracerBase::h;
+
     ObjInfo* obj_info;
     int*    prim2obj;
     int num_objs;
@@ -253,15 +254,14 @@ public:
                 prim2obj[prim_offset + j] = i;
             prim_offset += prim_num;
         }
-        // TODO: copy all the material into constant memory
     }
 
-    ~PathTracer() {
+    virtual ~PathTracer() {
         CUDA_CHECK_RETURN(cudaFree(obj_info));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
     }
 
-    CPT_CPU std::vector<uint8_t> render(
+    virtual CPT_CPU std::vector<uint8_t> render(
         int num_iter = 64,
         int max_depth = 4,
         bool gamma_correction = true

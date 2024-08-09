@@ -16,8 +16,8 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -g -G -O0")
   set(CMAKE_CUDA_FLAGS_DEBUG "-G -g")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
-  message(STATUS "Building project in DEBUG mode.")
   set(CMAKE_BUILD_TYPE Debug)
+  message(STATUS "Building project in DEBUG mode.")
 ELSE()
   # to check register usage, please set "-Xptxas -v"
   # to cap the register usage to boost occupancy, set ""
@@ -32,6 +32,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Threads REQUIRED)
+find_package(OpenMP REQUIRED)
+if (OPENMP_FOUND)
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    message(STATUS "OpenMP is found.")
+else()
+    message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
+endif()
+
 include_directories(${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
 
 add_subdirectory(src/ext/tinyxml2)
