@@ -32,7 +32,7 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
-static constexpr int NUM_STREAM = 1;
+static constexpr int NUM_STREAM = 8;
 #ifdef STABLE_PARTITION
 #define partition_func(...) thrust::stable_partition(__VA_ARGS__)
 #else
@@ -74,6 +74,15 @@ namespace {
     using PayLoadAccessor = Accessor<PathPayLoad>;
     using ConstPayLoadBuffer = const PayLoadBuffer;
     using IndexBuffer        = uint32_t* const;
+
+    constexpr int BLOCK_X = 4;
+    constexpr int BLOCK_Y = 4;
+    constexpr int THREAD_X = 16;
+    constexpr int THREAD_Y = 16;
+    constexpr int PATCH_X = BLOCK_X * THREAD_X;
+    constexpr int PATCH_Y = BLOCK_Y * THREAD_Y;
+    constexpr int TOTAL_RAY = PATCH_X * PATCH_Y;
+    
 }
 
 // camera is defined in the global constant memory
@@ -91,22 +100,27 @@ CPT_KERNEL void raygen_shader(
     PayLoadBuffer payloads, 
     PayLoadAccessor acc, 
     IndexBuffer idx_buffer, 
-    int sx, int sy, 
-    int stream_offset, int pitch, int width
+    int x_patch, int y_patch, 
+    int stream_id, int pitch, int width
 ) {
-    const int px = threadIdx.x + blockIdx.x * blockDim.x + sx, py = threadIdx.y + blockIdx.y * blockDim.y + sy;
-    const int block_index = (py - sy) * blockDim.x * gridDim.x + px - sx;
-    // FIXME: PayLoadBuffer px and py offsets with sx and sy are erroneous 
-    auto& payload = acc(payloads, px, py, pitch);
-    payload = PathPayLoad(px + py * width);
-    payload.ray = dev_cam.generate_ray(px, py, payload.sg.next2D());
+    // stream and patch related offset
+    const int sx = x_patch * PATCH_X, sy = y_patch * PATCH_Y, buffer_xoffset = stream_id * PATCH_X;
+    // within kernel thread position
+    const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
+    // linear idx_buffer position
+    const int block_index = py * blockDim.x * gridDim.x + px;
+
+    auto& payload = acc(payloads, px + buffer_xoffset, py, pitch);
+    payload = PathPayLoad(px + sx + (py + sy) * width);
+    payload.ray = dev_cam.generate_ray(px + sx, py + sy, payload.sg.next2D());
     // compress two int (to int16) to a uint32_t 
     // note that we can not use int here, since int shifting might retain the sign
     // it is implementation dependent
 
     // note that we only have stream_number * payloadbuffers
     // so row indices won't be offset by sy, col indices should only be offseted by stream_offset
-    idx_buffer[block_index] = ((py - sy) << 16) + px + stream_offset;      
+    idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;      
+    // px has already encoded stream_offset (stream_id * PATCH_X)
     __syncthreads();
 }
 
@@ -128,6 +142,7 @@ CPT_KERNEL void closesthit_shader(
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
     const IndexBuffer idx_buffer,
+    int stream_offset,
     int num_prims,
     int num_valid,
     int pitch
@@ -136,7 +151,7 @@ CPT_KERNEL void closesthit_shader(
     const int block_index = py * blockDim.x * gridDim.x + px, tid = threadIdx.x + threadIdx.y * blockDim.x;
     
     if (block_index < num_valid) {
-        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
         PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
         payload.reset();
@@ -212,6 +227,7 @@ CPT_KERNEL void nee_shader(
     ConstPrimPtr norms, 
     ConstUVPtr,         
     const IndexBuffer idx_buffer,
+    int stream_offset,
     int num_prims,
     int num_objects,
     int num_emitter,
@@ -222,7 +238,7 @@ CPT_KERNEL void nee_shader(
     const int block_index = py * blockDim.x * gridDim.x + px;
     
     if (block_index < num_valid) {
-        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
         PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
 
@@ -271,6 +287,7 @@ CPT_KERNEL void bsdf_emission_shader(
     PayLoadAccessor acc,
     ConstUVPtr,         
     const IndexBuffer idx_buffer,
+    int stream_offset,
     int num_prims, 
     int num_valid,
     int pitch,
@@ -280,7 +297,7 @@ CPT_KERNEL void bsdf_emission_shader(
     const int block_index = py * blockDim.x * gridDim.x + px;
 
     if (block_index < num_valid) {
-        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
         PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
 
@@ -319,6 +336,7 @@ CPT_KERNEL void ray_update_shader(
     PayLoadAccessor acc,
     ConstUVPtr,   
     const IndexBuffer idx_buffer,
+    int stream_offset,
     int num_valid,
     int pitch
 ) {
@@ -326,7 +344,7 @@ CPT_KERNEL void ray_update_shader(
     const int block_index = py * blockDim.x * gridDim.x + px;
 
     if (block_index < num_valid) {
-        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
         PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
 
@@ -358,6 +376,7 @@ CPT_KERNEL void miss_shader(
     PayLoadBuffer payloads,
     PayLoadAccessor acc,
     const IndexBuffer idx_buffer,
+    int stream_offset,
     int num_valid,
     int pitch
 ) {
@@ -367,7 +386,7 @@ CPT_KERNEL void miss_shader(
     const int block_index = py * blockDim.x * gridDim.x + px;
 
     if (block_index < num_valid) {
-        uint32_t py = idx_buffer[block_index], px = py & 0x0000ffff;
+        uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
         PathPayLoad payload = acc(payloads, px, py, pitch);         // To local register
         if (!payload.ray.is_hit()) {
@@ -384,11 +403,12 @@ CPT_KERNEL void radiance_splat(
     PayLoadBuffer payloads,
     PayLoadAccessor acc,
     DeviceImage& image,
+    int stream_id,
     int pitch
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
-    Vec4 L = acc(payloads, px, py, pitch).L;         // To local register
+    Vec4 L = acc(payloads, px + stream_id * PATCH_X, py, pitch).L;         // To local register
     image(px, py) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
     __syncthreads();
 }
@@ -459,14 +479,6 @@ public:
         // step 1: create several streams (8 here)
         cudaStream_t streams[NUM_STREAM];
 
-        // optimize this
-        constexpr int BLOCK_X = 4;
-        constexpr int BLOCK_Y = 4;
-        constexpr int THREAD_X = 16;
-        constexpr int THREAD_Y = 16;
-        constexpr int PATCH_X = BLOCK_X * THREAD_X;
-        constexpr int PATCH_Y = BLOCK_Y * THREAD_Y;
-        constexpr int TOTAL_RAY = PATCH_X * PATCH_Y;
         const int x_patches = w / PATCH_X, y_patches = h / PATCH_Y;
         const int num_patches = x_patches * y_patches;
 
@@ -489,20 +501,20 @@ public:
             #pragma omp parallel for num_threads(NUM_STREAM)
             for (int p_idx = 0; p_idx < num_patches; p_idx++) {
                 int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
-                int sx      = patch_x * PATCH_X, sy      = patch_y * PATCH_Y;
+                int stream_offset = stream_id * TOTAL_RAY;
                 auto cur_stream = streams[stream_id];
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
                 raygen_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                     payload_buffer.data(), payload_buffer.accessor(), 
-                    ray_idx_buffer, sx, sy, stream_id * PATCH_X, pitch, image.w());
+                    ray_idx_buffer, patch_x, patch_y, stream_id, pitch, image.w());
                 int num_valid_ray = TOTAL_RAY;
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
                     // step2: closesthit shader
                     closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         obj_info, prim2obj, shapes, aabbs, verts, payload_buffer.data(),
                         payload_buffer.accessor(), norms, uvs, ray_idx_buffer,
-                        num_prims, num_valid_ray, pitch
+                        stream_offset, num_prims, num_valid_ray, pitch
                     );
                     
                     // step3: thrust stream compaction (optional)
@@ -524,27 +536,28 @@ public:
                     nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         obj_info, prim2obj, shapes, aabbs, verts, payload_buffer.data(),
                         payload_buffer.accessor(), norms, uvs, ray_idx_buffer,
-                        num_prims, num_objs, num_emitter, num_valid_ray, pitch
+                        stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, pitch
                     );
 
                     // step5: emission shader
                     bsdf_emission_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         obj_info, prim2obj, payload_buffer.data(),
                         payload_buffer.accessor(), uvs, ray_idx_buffer,
-                        num_prims, num_valid_ray, pitch, bounce > 0
+                        stream_offset, num_prims, num_valid_ray, pitch, bounce > 0
                     );
 
                     // step6: rayupdate shader
                     ray_update_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         obj_info, prim2obj, payload_buffer.data(),
                         payload_buffer.accessor(), uvs, ray_idx_buffer,
-                        num_valid_ray, pitch
+                        stream_offset, num_valid_ray, pitch
                     );
                 }
 
                 // step7: accumulating radiance to the rgb buffer
                 radiance_splat<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer.data(), payload_buffer.accessor(), *dev_image, pitch
+                    payload_buffer.data(), payload_buffer.accessor(), 
+                    *dev_image, stream_id, pitch
                 );
             }
 
