@@ -96,6 +96,21 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "__nullptr": "cpp",
-        "codecvt": "cpp"
+        "codecvt": "cpp",
+        "cassert": "cpp",
+        "ccomplex": "cpp",
+        "cerrno": "cpp",
+        "ciso646": "cpp",
+        "climits": "cpp",
+        "filesystem": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "cstdbool": "cpp",
+        "version": "cpp",
+        "__hash_table": "cpp",
+        "__locale": "cpp",
+        "__string": "cpp",
+        "__tree": "cpp",
+        "__preprocessor": "cpp"
     }
 }
