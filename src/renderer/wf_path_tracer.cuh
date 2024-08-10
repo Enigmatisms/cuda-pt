@@ -33,6 +33,7 @@
 #include "renderer/path_tracer.cuh"
 
 static constexpr int NUM_STREAM = 8;
+#define NO_STREAM_COMPACTION
 #ifdef STABLE_PARTITION
 #define partition_func(...) thrust::stable_partition(__VA_ARGS__)
 #else
@@ -403,13 +404,13 @@ CPT_KERNEL void radiance_splat(
     PayLoadBuffer payloads,
     PayLoadAccessor acc,
     DeviceImage& image,
-    int stream_id,
-    int pitch
+    int stream_id, int pitch,
+    int x_patch, int y_patch
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     Vec4 L = acc(payloads, px + stream_id * PATCH_X, py, pitch).L;         // To local register
-    image(px, py) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
+    image(px + x_patch * PATCH_X, py + y_patch * PATCH_Y) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
     __syncthreads();
 }
 
@@ -518,8 +519,8 @@ public:
                     );
                     
                     // step3: thrust stream compaction (optional)
-                    auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
 #ifndef NO_STREAM_COMPACTION
+                    auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
                     num_valid_ray = partition_func(
                         thrust::cuda::par.on(cur_stream), 
                         start_iter, start_iter + TOTAL_RAY,
@@ -557,7 +558,7 @@ public:
                 // step7: accumulating radiance to the rgb buffer
                 radiance_splat<<<GRID, BLOCK, 0, cur_stream>>>(
                     payload_buffer.data(), payload_buffer.accessor(), 
-                    *dev_image, stream_id, pitch
+                    *dev_image, stream_id, pitch, patch_x, patch_y
                 );
             }
 
