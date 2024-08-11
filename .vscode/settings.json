@@ -111,6 +111,8 @@
         "__locale": "cpp",
         "__string": "cpp",
         "__tree": "cpp",
-        "__preprocessor": "cpp"
+        "__preprocessor": "cpp",
+        "__split_buffer": "cpp",
+        "__threading_support": "cpp"
     }
 }

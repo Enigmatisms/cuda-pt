@@ -16,6 +16,8 @@ struct RandState {
     unsigned int v[4], d[2];
 };
 public:
+    CPT_CPU_GPU TinySampler() {}
+
     CPT_CPU_GPU TinySampler(int seed, int offset = 0) {
         _init_state(seed + offset);
     }

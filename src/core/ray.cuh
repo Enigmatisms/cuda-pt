@@ -16,6 +16,8 @@ struct Ray {
     Vec3 d;
     uint32_t ray_tag;
 
+    CPT_CPU_GPU Ray() {}
+
     // ray_tag: the highest 4 bits:
     // 31, 30, 29: hit, if 0: not hit (potentially inactive), 1 hit, 28: active, if 0: inactive, if 1: active
     // the ray is marked active since construction
@@ -34,7 +36,7 @@ struct Ray {
     }
 
     CPT_CPU_GPU_INLINE void set_active(bool v) noexcept {
-        ray_tag &= 0xdfffffff;      // clear bit 28
+        ray_tag &= 0xefffffff;      // clear bit 28
         ray_tag |= uint32_t(v) << 28;
     }
 
@@ -56,5 +58,10 @@ struct Ray {
 
     CPT_CPU_GPU_INLINE void set_hit() noexcept {
         ray_tag |= 1 << 29;         // set bit 29
+    }
+
+    CPT_CPU_GPU_INLINE void reset() {
+        clr_hit();
+        set_hit_index(0);
     }
 };

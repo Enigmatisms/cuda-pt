@@ -5,6 +5,7 @@
 __constant__ DeviceCamera dev_cam;
 __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
+__constant__ PayLoadBufferSoA payloads;
 
 int main(int argc, char** argv) {
     if (argc < 2) {
