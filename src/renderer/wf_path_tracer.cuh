@@ -76,8 +76,8 @@ namespace {
     using ConstPayLoadBuffer = const PayLoadBuffer;
     using IndexBuffer        = uint32_t* const;
 
-    constexpr int BLOCK_X = 8;
-    constexpr int BLOCK_Y = 8;
+    constexpr int BLOCK_X = 16;
+    constexpr int BLOCK_Y = 16;
     constexpr int THREAD_X = 16;
     constexpr int THREAD_Y = 16;
     constexpr int PATCH_X = BLOCK_X * THREAD_X;
@@ -111,9 +111,10 @@ CPT_KERNEL void raygen_shader(
     // linear idx_buffer position
     const int block_index = py * blockDim.x * gridDim.x + px;
 
-    auto& payload = acc(payloads, px + buffer_xoffset, py, pitch);
-    payload = PathPayLoad(px + sx + (py + sy) * width, iter * SEED_SCALER);
+    PathPayLoad payload = PathPayLoad(px + sx + (py + sy) * width, iter * SEED_SCALER);
     payload.ray = dev_cam.generate_ray(px + sx, py + sy, payload.sg.next2D());
+    // move is bad here?
+    acc(payloads, px + buffer_xoffset, py, pitch) = payload;
     // compress two int (to int16) to a uint32_t 
     // note that we can not use int here, since int shifting might retain the sign
     // it is implementation dependent
@@ -122,7 +123,6 @@ CPT_KERNEL void raygen_shader(
     // so row indices won't be offset by sy, col indices should only be offseted by stream_offset
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;      
     // px has already encoded stream_offset (stream_id * PATCH_X)
-    __syncthreads();
 }
 
 /**
