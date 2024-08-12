@@ -64,4 +64,9 @@ struct Ray {
         clr_hit();
         set_hit_index(0);
     }
+
+    CPT_CPU_GPU_INLINE void copy_from(const Ray& ray) {
+        FLOAT4(o) = CONST_FLOAT4(ray.o);
+        FLOAT4(d) = CONST_FLOAT4(ray.d); // Load last two elements of second Vec3
+    }
 };

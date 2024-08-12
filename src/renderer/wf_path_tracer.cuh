@@ -32,7 +32,7 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
-static constexpr int NUM_STREAM = 8;
+static constexpr int NUM_STREAM = 2;
 //#define NO_STREAM_COMPACTION
 #define STABLE_PARTITION
 #ifdef STABLE_PARTITION
@@ -64,11 +64,42 @@ union PDFInteraction {
 };
 
 class PayLoadBufferSoA {
+private:
+    struct RayOrigin {
+        Vec3 o;
+        float hit_t;
+        CPT_CPU_GPU_INLINE RayOrigin() {}
+
+        CPT_CPU_GPU_INLINE RayOrigin(const Ray& ray) { FLOAT4(o) = CONST_FLOAT4(ray.o); }
+        CPT_CPU_GPU_INLINE void get(Ray& ray) const { FLOAT4(ray.o) = CONST_FLOAT4(o); }
+        CPT_CPU_GPU_INLINE void set(const Ray& ray) { FLOAT4(o) = CONST_FLOAT4(ray.o); }
+    };
+
+    struct RayDirTag {
+        Vec3 d;
+        uint32_t ray_tag;
+        CPT_CPU_GPU_INLINE RayDirTag() {}
+
+        CPT_CPU_GPU_INLINE RayDirTag(const Ray& ray) { FLOAT4(d) = CONST_FLOAT4(ray.d); }
+        CPT_CPU_GPU_INLINE void get(Ray& ray) const { FLOAT4(ray.d) = CONST_FLOAT4(d); }
+        CPT_CPU_GPU_INLINE void set(const Ray& ray) { FLOAT4(d) = CONST_FLOAT4(ray.d); }
+
+        CPT_CPU_GPU_INLINE void set_active(bool v) noexcept {
+            ray_tag &= 0xefffffff;      // clear bit 28
+            ray_tag |= uint32_t(v) << 28;
+        }
+
+        CPT_CPU_GPU_INLINE bool is_hit() const noexcept {
+            return (ray_tag & 0x20000000) > 0;
+        }
+    };
 public:
+
     Vec4* thps;             // direct malloc
     Vec4* Ls;               // direct malloc
     
-    Ray* rays;              // direct malloc
+    RayOrigin* ray_os;
+    RayDirTag* ray_ds;
     Sampler* samplers;      // pitch malloc
     PDFInteraction* its;    // its
 
@@ -83,7 +114,8 @@ public:
         int full_size = width * height;
         CUDA_CHECK_RETURN(cudaMalloc(&thps, sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMalloc(&Ls,   sizeof(Vec4) * full_size));
-        CUDA_CHECK_RETURN(cudaMalloc(&rays, sizeof(Ray) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&ray_os, sizeof(Vec4) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&ray_ds, sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMallocPitch(&samplers, &sp_pitch, sizeof(Sampler) * width, height));
         CUDA_CHECK_RETURN(cudaMallocPitch(&its,      &it_pitch, sizeof(PDFInteraction) * width, height));
     }
@@ -94,8 +126,34 @@ public:
     CPT_CPU_GPU_INLINE Vec4& L(int col, int row) { return Ls[col + row * _width]; }
     CPT_CPU_GPU_INLINE const Vec4& L(int col, int row) const { return Ls[col + row * _width]; }
 
-    CPT_CPU_GPU_INLINE Ray& ray(int col, int row) { return rays[col + row * _width]; }
-    CPT_CPU_GPU_INLINE const Ray& ray(int col, int row) const { return rays[col + row * _width]; }
+    CONDITION_TEMPLATE(RayType, Ray)
+    CPT_CPU_GPU_INLINE void set_ray(int col, int row, RayType&& ray) { 
+        int index = col + row * _width;
+        ray_os[index].set(ray);
+        ray_ds[index].set(ray);
+    }
+
+    CPT_CPU_GPU_INLINE Ray get_ray(int col, int row) const { 
+        Ray ray;
+        int index = col + row * _width;
+        ray_os[index].get(ray);
+        ray_ds[index].get(ray);
+        return ray; 
+    }
+
+    CPT_CPU_GPU_INLINE void set_active(int col, int row, bool v) noexcept {
+        int index = col + row * _width;
+        ray_ds[index].set_active(v);
+    }
+
+    CPT_CPU_GPU_INLINE bool is_hit(int col, int row) const noexcept {
+        int index = col + row * _width;
+        return ray_ds[index].is_hit();
+    }
+
+    CPT_CPU_GPU_INLINE bool is_active(int col, int row) const noexcept {
+        return (ray_ds[col + row * _width].ray_tag & 0x10000000) > 0;
+    }
 
     CPT_CPU_GPU_INLINE Sampler& sampler(int col, int row) 
         { return ((Sampler*)((char*)samplers + row * sp_pitch))[col]; }
@@ -110,7 +168,8 @@ public:
     CPT_CPU void destroy() {
         CUDA_CHECK_RETURN(cudaFree(thps));
         CUDA_CHECK_RETURN(cudaFree(Ls));
-        CUDA_CHECK_RETURN(cudaFree(rays));
+        CUDA_CHECK_RETURN(cudaFree(ray_os));
+        CUDA_CHECK_RETURN(cudaFree(ray_ds));
         CUDA_CHECK_RETURN(cudaFree(samplers));
         CUDA_CHECK_RETURN(cudaFree(its));
     }
@@ -157,10 +216,10 @@ CPT_KERNEL void raygen_shader(
 
     Sampler sg = Sampler(px + sx + (py + sy) * width, iter * SEED_SCALER);
     // Hopefully, this will give us more coalesced memory access
-    payloads.ray(px + buffer_xoffset, py) =
-            dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
+    Ray ray = dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     payloads.L(px + buffer_xoffset, py)   = Vec4(0, 0, 0, 1);
+    payloads.set_ray(px + buffer_xoffset, py, ray);
     payloads.sampler(px + buffer_xoffset, py)    = sg;
     payloads.iteraction(px + buffer_xoffset, py) = PDFInteraction(1.f);
 
@@ -201,7 +260,7 @@ CPT_KERNEL void closesthit_shader(
     
     uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
     py >>= 16;
-    Ray           ray = payloads.ray(px, py);
+    Ray           ray = payloads.get_ray(px, py);
     PDFInteraction it = payloads.iteraction(px, py);            // To local register
     ray.reset();
     
@@ -251,7 +310,7 @@ CPT_KERNEL void closesthit_shader(
         it.it() = variant::apply_visitor(extract, shapes[min_index]);
     }
 
-    payloads.ray(px, py)        = ray;
+    payloads.set_ray(px, py, ray);
     payloads.iteraction(px, py) = it;
     __syncthreads();
 }
@@ -283,7 +342,7 @@ CPT_KERNEL void nee_shader(
         uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
         Vec4 thp = payloads.thp(px, py);
-        Ray ray  = payloads.ray(px, py);
+        Ray ray  = payloads.get_ray(px, py);
         Sampler sg = payloads.sampler(px, py);
         const PDFInteraction it = payloads.iteraction(px, py);
 
@@ -341,7 +400,7 @@ CPT_KERNEL void bsdf_emission_shader(
         py >>= 16;
 
         Vec4 thp = payloads.thp(px, py);
-        Ray ray  = payloads.ray(px, py);
+        Ray ray  = payloads.get_ray(px, py);
         PDFInteraction it = payloads.iteraction(px, py);
 
         int object_id   = prim2obj[ray.hit_id()],
@@ -380,7 +439,7 @@ CPT_KERNEL void ray_update_shader(
         py >>= 16;
 
         Vec4 thp = payloads.thp(px, py);
-        Ray ray  = payloads.ray(px, py);
+        Ray ray  = payloads.get_ray(px, py);
         Sampler sg = payloads.sampler(px, py);
         PDFInteraction it = payloads.iteraction(px, py);
 
@@ -393,7 +452,7 @@ CPT_KERNEL void ray_update_shader(
         );
 
         payloads.thp(px, py) = thp;
-        payloads.ray(px, py) = ray;
+        payloads.set_ray(px, py, ray);
         payloads.sampler(px, py) = sg;
         payloads.iteraction(px, py) = it;
     }
@@ -424,10 +483,9 @@ CPT_KERNEL void miss_shader(
         uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
         Vec4 thp = payloads.thp(px, py);
-        Ray& ray = payloads.ray(px, py);         // To local register
-        if ((!ray.is_hit()) || thp.max_elem() <= 1e-5f) {
+        if ((!payloads.is_hit(px, py)) || thp.max_elem() <= 1e-5f) {
             // TODO: process no-hit ray, environment map lighting
-            ray.set_active(false);
+            payloads.set_active(px, py, false);
         }
     }
     __syncthreads();
@@ -455,7 +513,7 @@ struct ActiveRayFunctor
     CPT_GPU_INLINE bool operator()(uint32_t index) const
     {
         uint32_t py = index >> 16, px = index & 0x0000ffff;
-        return payloads.rays[px + py * width].is_active();
+        return payloads.is_active(px, py);
     }
 };
 
