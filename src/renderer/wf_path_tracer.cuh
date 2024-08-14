@@ -48,8 +48,7 @@ union PDFInteraction {
     } v;
     struct {
         uint4 p1;
-        uint4 p2;
-        uint4 p3;
+        uint2 p2;
     } data;
 
     CPT_CPU_GPU PDFInteraction() {}
