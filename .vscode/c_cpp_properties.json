@@ -6,13 +6,28 @@
             "name": "Linux",        
             "includePath": [
                 "${workspaceFolder}/src/*",
-                "${workspaceFolder}/src/ext/**"
+                "${workspaceFolder}/src/ext/**",
+                "/usr/local/cuda-11.8/include/"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64"
+        },
+        {
+            "name": "Win32",
+            "compilerPath": "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/14.40.33807/bin/Hostx64/x64/cl.exe",
+            "includePath": [
+                "${workspaceFolder}\\src\\",
+                "${workspaceFolder}\\src\\ext\\**",
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\include"
+            ],
+            "defines": [],
+            "intelliSenseMode": "windows-msvc-x64",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "windowsSdkVersion": "10.0.19041.0"
         }
     ],
     "version": 4

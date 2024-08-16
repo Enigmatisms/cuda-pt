@@ -35,7 +35,7 @@ struct TypeVisitor {
 
 using VarType = variant::variant<Type1, Type2>;
 
-__global__ void kernel_op(VarType* objects, int* result_buffer) {
+CPT_KERNEL void kernel_op(VarType* objects, int* result_buffer) {
     result_buffer[threadIdx.x] = variant::apply_visitor(TypeVisitor(), objects[threadIdx.x]);
 }
 

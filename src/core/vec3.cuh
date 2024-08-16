@@ -129,7 +129,6 @@ public:
                isinf(_data.x) || isinf(_data.y) || isinf(_data.z);
     }
 
-
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
     Vec3 advance(VecType&& d, float t) const noexcept {
