@@ -11,7 +11,7 @@ public:
     Vec3 shading_norm;
     Vec2 uv_coord;
 
-    CPT_CPU_GPU Interaction(): shading_norm(), uv_coord() {}
+    CPT_CPU_GPU Interaction() {}
 
     template <typename Vec3Type, typename Vec2Type>
     CPT_CPU_GPU Interaction(Vec3Type&& _n, Vec2Type&& _uv): 

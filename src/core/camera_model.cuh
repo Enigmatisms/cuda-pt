@@ -59,6 +59,13 @@ public:
         return Ray(t, R.rotate(ndc_dir.normalized()));
     }
 
+    CPT_GPU Ray generate_ray(int x, int y, Vec2&& sample) const {
+        float x_pos = sample.x() + float(x),
+              y_pos = sample.y() + float(y);
+        Vec3 ndc_dir((x_pos - _hw) * inv_focal * signs.x(), (y_pos - _hh) * inv_focal * signs.y(), 1.f);
+        return Ray(t, R.rotate(ndc_dir.normalized()));
+    }
+
     CPT_CPU static DeviceCamera from_xml(const tinyxml2::XMLElement* sensorElement) {
         float fov = 0, hsign = 1, vsign = 1;
         int width = 512, height = 512;

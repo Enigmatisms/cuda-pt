@@ -21,7 +21,7 @@ std::decay_t<Ty>* to_gpu(Ty&& object) {
 }
 
 template <typename Ty>
-__global__ void parallel_memset(Ty* dst, Ty value, int length) {
+CPT_KERNEL void parallel_memset(Ty* dst, Ty value, int length) {
     int num_thread = blockDim.x;
     for (int i = 0; i < length; i += num_thread) {
         dst[threadIdx.x + num_thread] = value;
@@ -47,30 +47,72 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
     return dev_mem;
 }
 
-class DeviceImage {
-private:
-    Vec4* image_buffer;
-    Vec4* host_buffer;
+/**
+ * Accessor for CUDA pitch array
+*/
+template<typename ValType>
+struct Accessor {
+    CPT_CPU_GPU Accessor() {}
+    CPT_CPU_GPU_INLINE ValType& operator() (ValType* buffer, uint32_t col, uint32_t row, uint32_t pitch) 
+                {  return ((ValType*)((char*)buffer + row * pitch))[col]; }
+    CPT_CPU_GPU_INLINE const ValType& operator() (ValType* buffer, uint32_t col, uint32_t row, uint32_t pitch) const 
+                { return ((ValType*)((char*)buffer + row * pitch))[col]; }
+};
+
+/**
+ * A 2D CUDA pitch array encapsulation
+*/
+template<typename ValType>
+class DevicePitchBuffer {
+protected:
+    ValType* _buffer;
     size_t pitch;
     int _w;
     int _h;
 public:
-    DeviceImage(int width = 800, int height = 800): pitch(0), _w(width), _h(height) {
-        host_buffer = new Vec4[_w * _h];
-        CUDA_CHECK_RETURN(cudaMallocPitch(&image_buffer, &pitch, width * sizeof(Vec4), height));
-        CUDA_CHECK_RETURN(cudaMemset2D(image_buffer, pitch, 0, width * sizeof(Vec4), height));
+    DevicePitchBuffer(int width = 800, int height = 800): pitch(0), _w(width), _h(height) {
+        CUDA_CHECK_RETURN(cudaMallocPitch(&_buffer, &pitch, width * sizeof(ValType), height));
+        CUDA_CHECK_RETURN(cudaMemset2D(_buffer, pitch, 0, width * sizeof(ValType), height));
+    }
+
+    ~DevicePitchBuffer() {
+        cudaFree(_buffer);
+    }
+
+    // for cudaMallocPitch (with extra memory alignment), we need to use pitch to access
+    CPT_CPU_GPU_INLINE ValType& operator() (int col, int row) {  return ((ValType*)((char*)_buffer + row * pitch))[col]; }
+    CPT_CPU_GPU_INLINE const ValType& operator() (int col, int row) const { return ((ValType*)((char*)_buffer + row * pitch))[col]; }
+
+    CPT_CPU_GPU_INLINE int w() const noexcept { return _w; }
+    CPT_CPU_GPU_INLINE int h() const noexcept { return _h; }
+    CPT_CPU_GPU_INLINE int get_pitch() const noexcept { return pitch; }
+
+    CPT_CPU_GPU_INLINE static Accessor<ValType> accessor() noexcept {
+        return Accessor<ValType>();
+    }
+
+    CPT_CPU_GPU_INLINE ValType* data() {
+        return _buffer;
+    }
+};
+
+class DeviceImage: public DevicePitchBuffer<Vec4> {
+private:
+    Vec4* host_buffer;
+public:
+    DeviceImage(int width = 800, int height = 800): DevicePitchBuffer<Vec4>(width, height) {
+        host_buffer = new Vec4[width * height];
     }
 
     ~DeviceImage() {
         delete [] host_buffer;
-        cudaFree(image_buffer);
     }
 
     // TODO: can be accelerated via multi-threading
     std::vector<uint8_t> export_cpu(float inv_factor = 1, bool gamma_cor = true) const {
         std::vector<uint8_t> byte_buffer(_w * _h * 4);
         size_t copy_pitch = _w * sizeof(Vec4);
-        CUDA_CHECK_RETURN(cudaMemcpy2D(host_buffer, copy_pitch, image_buffer, pitch, copy_pitch, _h, cudaMemcpyDeviceToHost));
+        CUDA_CHECK_RETURN(cudaMemcpy2D(host_buffer, copy_pitch, _buffer, pitch, copy_pitch, _h, cudaMemcpyDeviceToHost));
         if (gamma_cor) {
             for (int i = 0; i < _h; i ++) {
                 int base = i * _w;
@@ -100,11 +142,4 @@ public:
         }
         return byte_buffer;
     }
-
-    // for cudaMallocPitch (with extra memory alignment), we need to use pitch to access
-    CPT_CPU_GPU Vec4& operator() (int col, int row) {  return ((Vec4*)((char*)image_buffer + row * pitch))[col]; }
-    CPT_CPU_GPU const Vec4& operator() (int col, int row) const { return ((Vec4*)((char*)image_buffer + row * pitch))[col]; }
-
-    CPT_CPU_GPU int w() const noexcept { return _w; }
-    CPT_CPU_GPU int h() const noexcept { return _h; }
 };

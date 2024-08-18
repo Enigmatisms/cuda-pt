@@ -83,7 +83,7 @@ public:
 
 struct AABBWrapper {
     AABB aabb;
-    float4 _padding;
+    float4 _padding;            // padding is here to avoid bank conflict
 };
 
 using ConstAABBPtr = const AABB* const;
@@ -149,7 +149,7 @@ public:
         // solve a linear equation
         auto anchor = verts.x(index), v1 = verts.y(index) - anchor, v2 = verts.z(index) - anchor;
         SO3 M(v1, v2, -ray.d, false);       // column wise input
-        auto solution = M.inverse().rotate(ray.o - anchor);
+        auto solution = M.inverse_transform(ray.o - anchor);
         bool valid    = (solution.x() > 0 && solution.y() > 0 && solution.x() + solution.y() < 1 &&
                             solution.z() > EPSILON && solution.z() < max_range);
         return solution.z() * valid;

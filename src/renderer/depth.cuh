@@ -19,7 +19,7 @@ extern __constant__ DeviceCamera dev_cam;
  * @param num_prims number of primitives (to be intersected with)
  * @param max_depth maximum allowed bounce
 */
-__global__ static void render_depth_kernel(
+CPT_KERNEL static void render_depth_kernel(
     ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <type_traits>
 
+#define CPT_KERNEL __global__
 #define CPT_CPU_GPU __host__ __device__
 #define CPT_CPU_GPU_INLINE __forceinline__ __host__ __device__
 #define CPT_GPU __device__
@@ -18,6 +19,11 @@
 #define FLOAT2(v) (*(reinterpret_cast<float2*>(&v)))
 #define CONST_FLOAT4(v) (*(reinterpret_cast<const float4*>(&v)))
 #define CONST_FLOAT2(v) (*(reinterpret_cast<const float2*>(&v)))
+
+#define UINT4(v) (*(reinterpret_cast<uint4*>(&v)))
+#define UINT2(v) (*(reinterpret_cast<uint2*>(&v)))
+#define CONST_UINT4(v) (*(reinterpret_cast<const uint4*>(&v)))
+#define CONST_UINT2(v) (*(reinterpret_cast<const uint2*>(&v)))
 
 #define CONDITION_TEMPLATE(VecType, TargetType) \
     template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>>>

@@ -7,7 +7,6 @@
 #include <cuda/pipeline>
 #include "core/progress.h"
 #include "core/emitter.cuh"
-#include "core/object.cuh"
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
@@ -15,10 +14,6 @@ static constexpr int SEED_SCALER = 11451;
 
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
-
-using ConstObjPtr   = const ObjInfo* const;
-using ConstBSDFPtr  = const BSDF* const;
-using ConstIndexPtr = const int* const;
 
 /**
  * Occlusion test, computation is done on global memory
@@ -84,7 +79,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param num_prims number of primitives (to be intersected with)
  * @param max_depth maximum allowed bounce
 */
-__global__ static void render_pt_kernel(
+CPT_KERNEL static void render_pt_kernel(
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     ConstShapePtr shapes,
@@ -179,7 +174,7 @@ __global__ static void render_pt_kernel(
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
-            Ray shadow_ray(ray.o.advance(ray.d, min_dist), Vec3(0, 0, 0));
+            Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
             shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
             
@@ -209,17 +204,18 @@ __global__ static void render_pt_kernel(
 }
 
 class PathTracer: public TracerBase {
-using TracerBase::shapes;
-using TracerBase::aabbs;
-using TracerBase::verts;
-using TracerBase::norms; 
-using TracerBase::uvs;
-using TracerBase::image;
-using TracerBase::dev_image;
-using TracerBase::num_prims;
-using TracerBase::w;
-using TracerBase::h;
-private:
+protected:
+    using TracerBase::shapes;
+    using TracerBase::aabbs;
+    using TracerBase::verts;
+    using TracerBase::norms; 
+    using TracerBase::uvs;
+    using TracerBase::image;
+    using TracerBase::dev_image;
+    using TracerBase::num_prims;
+    using TracerBase::w;
+    using TracerBase::h;
+
     ObjInfo* obj_info;
     int*    prim2obj;
     int num_objs;
@@ -258,15 +254,14 @@ public:
                 prim2obj[prim_offset + j] = i;
             prim_offset += prim_num;
         }
-        // TODO: copy all the material into constant memory
     }
 
-    ~PathTracer() {
+    virtual ~PathTracer() {
         CUDA_CHECK_RETURN(cudaFree(obj_info));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
     }
 
-    CPT_CPU std::vector<uint8_t> render(
+    virtual CPT_CPU std::vector<uint8_t> render(
         int num_iter = 64,
         int max_depth = 4,
         bool gamma_correction = true
@@ -286,4 +281,3 @@ public:
         return image.export_cpu(1.f / num_iter, gamma_correction);
     }
 };
-
