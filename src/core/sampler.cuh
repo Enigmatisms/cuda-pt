@@ -41,6 +41,11 @@ public:
         rand_state.d[1] += 362437;
         return rand_state.d[0] + rand_state.d[1];
     }
+
+    // unsafe method, be sure that you know what you are doing when calling this
+    CPT_CPU_GPU_INLINE unsigned int& _get_v_front() { return rand_state.v[0]; }
+    // unsafe method, be sure that you know what you are doing when calling this
+    CPT_CPU_GPU_INLINE unsigned int& _get_d_front() { return rand_state.d[0]; }
 private:
     static CPT_CPU_GPU_INLINE float _uniform_uint_to_float(unsigned int x)
     {

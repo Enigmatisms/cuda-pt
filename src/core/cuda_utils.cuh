@@ -20,6 +20,11 @@
 #define CONST_FLOAT4(v) (*(reinterpret_cast<const float4*>(&v)))
 #define CONST_FLOAT2(v) (*(reinterpret_cast<const float2*>(&v)))
 
+#define UINT4(v) (*(reinterpret_cast<uint4*>(&v)))
+#define UINT2(v) (*(reinterpret_cast<uint2*>(&v)))
+#define CONST_UINT4(v) (*(reinterpret_cast<const uint4*>(&v)))
+#define CONST_UINT2(v) (*(reinterpret_cast<const uint2*>(&v)))
+
 #define CONDITION_TEMPLATE(VecType, TargetType) \
     template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>>>
 

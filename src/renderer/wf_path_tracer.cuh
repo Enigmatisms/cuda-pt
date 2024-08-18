@@ -32,8 +32,9 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
-static constexpr int NUM_STREAM = 2;
-//#define NO_STREAM_COMPACTION
+// When doing profiling, this can be set as 1, otherwise, 8 is optimal
+static constexpr int NUM_STREAM = 8;
+// #define NO_STREAM_COMPACTION
 #define STABLE_PARTITION
 #ifdef STABLE_PARTITION
 #define partition_func(...) thrust::stable_partition(__VA_ARGS__)
@@ -47,8 +48,8 @@ union PDFInteraction {
         Interaction it;
     } v;
     struct {
-        uint4 p1;
-        uint2 p2;
+        float4 p1;
+        float2 p2;
     } data;
 
     CPT_CPU_GPU PDFInteraction() {}
@@ -63,7 +64,7 @@ union PDFInteraction {
 };
 
 class PayLoadBufferSoA {
-private:
+public:
     struct RayOrigin {
         Vec3 o;
         float hit_t;
@@ -92,6 +93,17 @@ private:
             return (ray_tag & 0x20000000) > 0;
         }
     };
+private:
+    template <typename VectorType>
+    struct Length4Data {
+        VectorType data;
+        CPT_CPU_GPU_INLINE Length4Data() {}
+    };
+    template <typename VectorType>
+    struct Length2Data {
+        VectorType data;
+        CPT_CPU_GPU_INLINE Length2Data() {}
+    };
 public:
 
     Vec4* thps;             // direct malloc
@@ -99,11 +111,11 @@ public:
     
     RayOrigin* ray_os;
     RayDirTag* ray_ds;
-    Sampler* samplers;      // pitch malloc
-    PDFInteraction* its;    // its
+    Length4Data<uint4>* samp_heads;
+    Length2Data<uint2>* samp_tails;
+    Length4Data<float4>* its_heads;
+    Length2Data<float2>* its_tails;
 
-    size_t sp_pitch;
-    size_t it_pitch;
     int    _width;       
 
     CPT_CPU_GPU PayLoadBufferSoA() {}
@@ -115,8 +127,10 @@ public:
         CUDA_CHECK_RETURN(cudaMalloc(&Ls,   sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMalloc(&ray_os, sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMalloc(&ray_ds, sizeof(Vec4) * full_size));
-        CUDA_CHECK_RETURN(cudaMallocPitch(&samplers, &sp_pitch, sizeof(Sampler) * width, height));
-        CUDA_CHECK_RETURN(cudaMallocPitch(&its,      &it_pitch, sizeof(PDFInteraction) * width, height));
+        CUDA_CHECK_RETURN(cudaMalloc(&samp_heads, sizeof(Length4Data<uint4>) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&its_heads,  sizeof(Length4Data<float4>) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&samp_tails, sizeof(Length2Data<uint2>) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&its_tails,  sizeof(Length2Data<float2>) * full_size));
     }
 
     CPT_CPU_GPU_INLINE Vec4& thp(int col, int row) { return thps[col + row * _width]; }
@@ -154,27 +168,48 @@ public:
         return (ray_ds[col + row * _width].ray_tag & 0x10000000) > 0;
     }
 
-    CPT_CPU_GPU_INLINE Sampler& sampler(int col, int row) 
-        { return ((Sampler*)((char*)samplers + row * sp_pitch))[col]; }
-    CPT_CPU_GPU_INLINE const Sampler& sampler(int col, int row) const 
-        { return ((Sampler*)((char*)samplers + row * sp_pitch))[col]; }
+    CPT_CPU_GPU_INLINE Sampler get_sampler(int col, int row) const { 
+        static_assert(std::is_same_v<Sampler, TinySampler>);
+        Sampler samp;
+        int index = col + row * _width;
+        UINT4(samp._get_v_front()) = samp_heads[index].data;
+        UINT2(samp._get_d_front()) = samp_tails[index].data;
+        return samp; 
+    }
 
-    CPT_CPU_GPU_INLINE PDFInteraction& iteraction(int col, int row) 
-        { return ((PDFInteraction*)((char*)its + row * it_pitch))[col]; }
-    CPT_CPU_GPU_INLINE const PDFInteraction& iteraction(int col, int row) const 
-        { return ((PDFInteraction*)((char*)its + row * it_pitch))[col]; }
+    CONDITION_TEMPLATE(SamplerType, TinySampler)
+    CPT_CPU_GPU_INLINE void set_sampler(int col, int row, SamplerType&& sampler) { 
+        int index = col + row * _width;
+        samp_heads[index].data = CONST_UINT4(sampler._get_v_front());
+        samp_tails[index].data = CONST_UINT2(sampler._get_d_front());
+    }
+
+    CPT_CPU_GPU_INLINE PDFInteraction get_interaction(int col, int row) const { 
+        PDFInteraction it;
+        int index = col + row * _width;
+        it.data.p1 = its_heads[index].data;
+        it.data.p2 = its_tails[index].data;
+        return it; 
+    }
+
+    CONDITION_TEMPLATE(ItType, PDFInteraction)
+    CPT_CPU_GPU_INLINE void set_interaction(int col, int row, ItType&& it) { 
+        int index = col + row * _width;
+        its_heads[index].data = it.data.p1;
+        its_tails[index].data = it.data.p2;
+    }
 
     CPT_CPU void destroy() {
         CUDA_CHECK_RETURN(cudaFree(thps));
         CUDA_CHECK_RETURN(cudaFree(Ls));
         CUDA_CHECK_RETURN(cudaFree(ray_os));
         CUDA_CHECK_RETURN(cudaFree(ray_ds));
-        CUDA_CHECK_RETURN(cudaFree(samplers));
-        CUDA_CHECK_RETURN(cudaFree(its));
+        CUDA_CHECK_RETURN(cudaFree(samp_heads));
+        CUDA_CHECK_RETURN(cudaFree(samp_tails));
+        CUDA_CHECK_RETURN(cudaFree(its_heads));
+        CUDA_CHECK_RETURN(cudaFree(its_tails));
     }
 };  
-
-extern __constant__ PayLoadBufferSoA payloads;
 
 namespace {
     using PayLoadBuffer      = PayLoadBufferSoA* const;
@@ -200,8 +235,10 @@ namespace {
  * one image patch, offseted by the stream_offset.
  * @note we first consider images that have width and height to be the multiple of 128
  * to avoid having to consider the border problem
+ * @note we pass payloads in by value
 */ 
 CPT_KERNEL void raygen_shader(
+    PayLoadBufferSoA payloads,
     IndexBuffer idx_buffer, 
     int x_patch, int y_patch, int iter,
     int stream_id, int width
@@ -213,14 +250,16 @@ CPT_KERNEL void raygen_shader(
     // linear idx_buffer position
     const int block_index = py * blockDim.x * gridDim.x + px;
 
-    Sampler sg = Sampler(px + sx + (py + sy) * width, iter * SEED_SCALER);
     // Hopefully, this will give us more coalesced memory access
-    Ray ray = dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
+
+    // IMC miss (immediate constant memory cache miss)
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
+    Sampler sg = Sampler(px + sx + (py + sy) * width, iter * SEED_SCALER);
     payloads.L(px + buffer_xoffset, py)   = Vec4(0, 0, 0, 1);
+    Ray ray = dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
     payloads.set_ray(px + buffer_xoffset, py, ray);
-    payloads.sampler(px + buffer_xoffset, py)    = sg;
-    payloads.iteraction(px + buffer_xoffset, py) = PDFInteraction(1.f);
+    payloads.set_sampler(px + buffer_xoffset, py, sg);
+    payloads.set_interaction(px + buffer_xoffset, py, PDFInteraction(1.f));
 
     // compress two int (to int16) to a uint32_t 
     // note that we can not use int here, since int shifting might retain the sign
@@ -229,7 +268,6 @@ CPT_KERNEL void raygen_shader(
     // so row indices won't be offset by sy, col indices should only be offseted by stream_offset
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;      
     // px has already encoded stream_offset (stream_id * PATCH_X)
-    __syncthreads();
 }
 
 /**
@@ -240,6 +278,7 @@ CPT_KERNEL void raygen_shader(
  * and we need the index to port the 
 */ 
 CPT_KERNEL void closesthit_shader(
+    PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     ConstShapePtr shapes,
@@ -260,7 +299,7 @@ CPT_KERNEL void closesthit_shader(
     uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
     py >>= 16;
     Ray           ray = payloads.get_ray(px, py);
-    PDFInteraction it = payloads.iteraction(px, py);            // To local register
+    PDFInteraction it = payloads.get_interaction(px, py);            // To local register
     ray.reset();
     
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
@@ -279,16 +318,19 @@ CPT_KERNEL void closesthit_shader(
         // memory copy to shared memory
         int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
         cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
-
-        // huge bug
         if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-#ifdef USE_SOA
+#ifdef USE_SOA          // SOA is actually better
             cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
             cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
             cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
 #else
+            // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
+            // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
+            // since our step is Vec3, this will lead to uncoalesced access
+            // shared memory is enough. Though padding is not easy to implement
             cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
 #endif
+            // This memory op is not fully coalesced, since AABB container is not a complete SOA
             s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
         }
         pipe.producer_commit();
@@ -310,8 +352,7 @@ CPT_KERNEL void closesthit_shader(
     }
 
     payloads.set_ray(px, py, ray);
-    payloads.iteraction(px, py) = it;
-    __syncthreads();
+    payloads.set_interaction(px, py, it);
 }
 
 /***
@@ -319,6 +360,7 @@ CPT_KERNEL void closesthit_shader(
  * we sample a light source then start ray intersection test
 */
 CPT_KERNEL void nee_shader(
+    PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     ConstShapePtr shapes,
@@ -342,8 +384,8 @@ CPT_KERNEL void nee_shader(
         py >>= 16;
         Vec4 thp = payloads.thp(px, py);
         Ray ray  = payloads.get_ray(px, py);
-        Sampler sg = payloads.sampler(px, py);
-        const PDFInteraction it = payloads.iteraction(px, py);
+        Sampler sg = payloads.get_sampler(px, py);
+        const PDFInteraction it = payloads.get_interaction(px, py);
 
         int object_id    = prim2obj[ray.hit_id()],
             material_id  = objects[object_id].bsdf_id,
@@ -370,9 +412,8 @@ CPT_KERNEL void nee_shader(
             // numerical guard, in case emit_len_mis is 0
         }
 
-        payloads.sampler(px, py) = sg;
+        payloads.set_sampler(px, py, sg);
     }
-    __syncthreads();
 }
 
 
@@ -381,6 +422,7 @@ CPT_KERNEL void nee_shader(
 */
 
 CPT_KERNEL void bsdf_emission_shader(
+    PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     ConstUVPtr,         
@@ -400,7 +442,7 @@ CPT_KERNEL void bsdf_emission_shader(
 
         Vec4 thp = payloads.thp(px, py);
         Ray ray  = payloads.get_ray(px, py);
-        PDFInteraction it = payloads.iteraction(px, py);
+        PDFInteraction it = payloads.get_interaction(px, py);
 
         int object_id   = prim2obj[ray.hit_id()],
             emitter_id  = objects[object_id].emitter_id;
@@ -415,13 +457,13 @@ CPT_KERNEL void bsdf_emission_shader(
 
         payloads.L(px, py) += direct_comp * emission_weight;
     }
-    __syncthreads();
 }
 
 /**
  * Sample the new ray according to BSDF
 */
 CPT_KERNEL void ray_update_shader(
+    PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     ConstUVPtr,   
@@ -439,8 +481,8 @@ CPT_KERNEL void ray_update_shader(
 
         Vec4 thp = payloads.thp(px, py);
         Ray ray  = payloads.get_ray(px, py);
-        Sampler sg = payloads.sampler(px, py);
-        PDFInteraction it = payloads.iteraction(px, py);
+        Sampler sg = payloads.get_sampler(px, py);
+        PDFInteraction it = payloads.get_interaction(px, py);
 
         int object_id   = prim2obj[ray.hit_id()],
             material_id = objects[object_id].bsdf_id;
@@ -452,10 +494,9 @@ CPT_KERNEL void ray_update_shader(
 
         payloads.thp(px, py) = thp;
         payloads.set_ray(px, py, ray);
-        payloads.sampler(px, py) = sg;
-        payloads.iteraction(px, py) = it;
+        payloads.set_sampler(px, py, sg);
+        payloads.set_interaction(px, py, it);
     }
-    __syncthreads();
 }
 
 /**
@@ -470,6 +511,7 @@ CPT_KERNEL void ray_update_shader(
  * MISS_SHADER is the only place where you mark a ray as inactive
 */
 CPT_KERNEL void miss_shader(
+    PayLoadBufferSoA payloads,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_valid
@@ -487,17 +529,16 @@ CPT_KERNEL void miss_shader(
             payloads.set_active(px, py, false);
         }
     }
-    __syncthreads();
 }
 
 CPT_KERNEL void radiance_splat(
-    DeviceImage& image, int stream_id, int x_patch, int y_patch
+    PayLoadBufferSoA payloads, DeviceImage& image, 
+    int stream_id, int x_patch, int y_patch
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     Vec4 L = payloads.L(px + stream_id * PATCH_X, py);         // To local register
     image(px + x_patch * PATCH_X, py + y_patch * PATCH_Y) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
-    __syncthreads();
 }
 
 /**
@@ -506,13 +547,14 @@ CPT_KERNEL void radiance_splat(
 struct ActiveRayFunctor
 {
     const int width;
+    const PayLoadBufferSoA::RayDirTag* const dir_tags;
 
-    CPT_CPU_GPU ActiveRayFunctor(int w): width(w) {}
+    CPT_CPU_GPU ActiveRayFunctor(PayLoadBufferSoA::RayDirTag* tags, int w): width(w), dir_tags(tags) {}
 
     CPT_GPU_INLINE bool operator()(uint32_t index) const
     {
         uint32_t py = index >> 16, px = index & 0x0000ffff;
-        return payloads.is_active(px, py);
+        return (dir_tags[px + py * width].ray_tag & 0x10000000) > 0;
     }
 };
 
@@ -567,7 +609,6 @@ public:
         const int num_patches = x_patches * y_patches;
         PayLoadBufferSoA payload_buffer;
         payload_buffer.init(NUM_STREAM * PATCH_X, PATCH_Y);
-        CUDA_CHECK_RETURN(cudaMemcpyToSymbol(payloads, &payload_buffer, sizeof(PayLoadBufferSoA)));
 
         for (int i = 0; i < NUM_STREAM; i++)
             cudaStreamCreateWithFlags(&streams[i], cudaStreamDefault);
@@ -591,20 +632,22 @@ public:
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
                 raygen_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    ray_idx_buffer, patch_x, patch_y, i, stream_id, image.w());
+                    payload_buffer, ray_idx_buffer, patch_x, patch_y, i, stream_id, image.w());
                 int num_valid_ray = TOTAL_RAY;
                 auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
                     // step2: closesthit shader
                     closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        obj_info, prim2obj, shapes, aabbs, verts,
-                        norms, uvs, ray_idx_buffer,
+                        payload_buffer, obj_info, prim2obj, shapes, aabbs, 
+                        verts, norms, uvs, ray_idx_buffer,
                         stream_offset, num_prims, num_valid_ray
                     );
 
+                    // TODO: we can implement a RR shader here.
+
                     // step3: miss shader (ray inactive)
                     miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        ray_idx_buffer, stream_offset, num_valid_ray
+                        payload_buffer, ray_idx_buffer, stream_offset, num_valid_ray
                     );
                     
                     // step4: thrust stream compaction (optional)
@@ -612,7 +655,7 @@ public:
                     num_valid_ray = partition_func(
                         thrust::cuda::par.on(cur_stream), 
                         start_iter, start_iter + num_valid_ray,
-                        ActiveRayFunctor(NUM_STREAM * PATCH_X)
+                        ActiveRayFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
                     ) - start_iter;
 #else
                     num_valid_ray = TOTAL_RAY;    
@@ -623,26 +666,26 @@ public:
 
                     // step5: NEE shader
                     nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, ray_idx_buffer,
+                        payload_buffer, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, ray_idx_buffer,
                         stream_offset, num_prims, num_objs, num_emitter, num_valid_ray
                     );
 
                     // step6: emission shader
                     bsdf_emission_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        obj_info, prim2obj, uvs, ray_idx_buffer,
+                        payload_buffer, obj_info, prim2obj, uvs, ray_idx_buffer,
                         stream_offset, num_prims, num_valid_ray, bounce > 0
                     );
 
                     // step7: rayupdate shader
                     ray_update_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        obj_info, prim2obj, uvs, ray_idx_buffer,
-                        stream_offset, num_valid_ray
+                        payload_buffer, obj_info, prim2obj, uvs, 
+                        ray_idx_buffer, stream_offset, num_valid_ray
                     );
                 }
 
                 // step8: accumulating radiance to the rgb buffer
                 radiance_splat<<<GRID, BLOCK, 0, cur_stream>>>(
-                    *dev_image, stream_id, patch_x, patch_y
+                    payload_buffer, *dev_image, stream_id, patch_x, patch_y
                 );
             }
 

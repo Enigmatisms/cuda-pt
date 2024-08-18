@@ -9,7 +9,7 @@
                 "${workspaceFolder}/src/ext/**",
                 "/usr/local/cuda-11.8/include/"
             ],
-            "defines": [],
+            "defines": ["USE_SOA"],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
@@ -23,7 +23,7 @@
                 "${workspaceFolder}\\src\\ext\\**",
                 "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\include"
             ],
-            "defines": [],
+            "defines": ["USE_SOA"],
             "intelliSenseMode": "windows-msvc-x64",
             "cStandard": "c11",
             "cppStandard": "c++17",
