@@ -237,9 +237,17 @@ namespace {
  * to avoid having to consider the border problem
  * @note we pass payloads in by value
 */ 
-CPT_KERNEL void raygen_shader(
+CPT_KERNEL void raygen_primary_hit_shader(
     PayLoadBufferSoA payloads,
-    IndexBuffer idx_buffer, 
+    ConstObjPtr objects,
+    ConstIndexPtr prim2obj,
+    ConstShapePtr shapes,
+    ConstAABBPtr aabbs,
+    ConstPrimPtr verts,
+    ConstPrimPtr norms, 
+    ConstUVPtr uvs,
+    const IndexBuffer idx_buffer,
+    int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
     int stream_id, int width
 ) {
@@ -249,24 +257,74 @@ CPT_KERNEL void raygen_shader(
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     // linear idx_buffer position
     const int block_index = py * blockDim.x * gridDim.x + px;
+    const int tid = threadIdx.x + threadIdx.y * blockDim.x;
 
-    // Hopefully, this will give us more coalesced memory access
-
-    // IMC miss (immediate constant memory cache miss)
-    payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     Sampler sg = Sampler(px + sx + (py + sy) * width, iter * SEED_SCALER);
-    payloads.L(px + buffer_xoffset, py)   = Vec4(0, 0, 0, 1);
     Ray ray = dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
-    payloads.set_ray(px + buffer_xoffset, py, ray);
+
+    PDFInteraction it;            // To local register
+    
+    __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
+    __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
+
+    ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
+    ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
+    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
+
+    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR, min_index = -1;   // round up
+    ray.hit_t = MAX_DIST;
+
+    payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
+    idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;     
+    // ============= step 1: ray intersection =================
+    #pragma unroll
+    for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
+        // memory copy to shared memory
+        int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
+        cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
+        if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
+#ifdef USE_SOA          // SOA is actually better
+            cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
+            cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
+            cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
+#else
+            // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
+            // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
+            // since our step is Vec3, this will lead to uncoalesced access
+            // shared memory is enough. Though padding is not easy to implement
+            cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
+#endif
+            // This memory op is not fully coalesced, since AABB container is not a complete SOA
+            s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
+        }
+        pipe.producer_commit();
+        pipe.consumer_wait();
+        __syncthreads();
+        // this might not be a good solution
+        ray.hit_t = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, ray.hit_t);
+        __syncthreads();
+    }
+
+    // ============= step 2: local shading for indirect bounces ================
+    payloads.L(px + buffer_xoffset, py)   = Vec4(0, 0, 0, 1);
     payloads.set_sampler(px + buffer_xoffset, py, sg);
-    payloads.set_interaction(px + buffer_xoffset, py, PDFInteraction(1.f));
+    if (min_index >= 0) {
+        // if the ray hits nothing, or the path throughput is 0, then the ray will be inactive
+        // inactive rays will only be processed in the miss_shader
+        extract.set_index(min_index);
+        ray.set_hit();
+        ray.set_hit_index(min_index);
+        it.it() = variant::apply_visitor(extract, shapes[min_index]);
+    }
 
     // compress two int (to int16) to a uint32_t 
     // note that we can not use int here, since int shifting might retain the sign
     // it is implementation dependent
     // note that we only have stream_number * payloadbuffers
     // so row indices won't be offset by sy, col indices should only be offseted by stream_offset
-    idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;      
+    payloads.set_ray(px + buffer_xoffset, py, ray);
+    payloads.set_interaction(px + buffer_xoffset, py, it);
+     
     // px has already encoded stream_offset (stream_id * PATCH_X)
 }
 
@@ -631,20 +689,15 @@ public:
                 auto cur_stream = streams[stream_id];
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
-                raygen_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer, ray_idx_buffer, patch_x, patch_y, i, stream_id, image.w());
+                raygen_primary_hit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                    payload_buffer, obj_info, prim2obj, shapes, aabbs, 
+                    verts, norms, uvs, ray_idx_buffer, stream_offset, 
+                    num_prims, patch_x, patch_y, i, stream_id, image.w());
                 int num_valid_ray = TOTAL_RAY;
                 auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
-                    // step2: closesthit shader
-                    closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, prim2obj, shapes, aabbs, 
-                        verts, norms, uvs, ray_idx_buffer,
-                        stream_offset, num_prims, num_valid_ray
-                    );
-
+                   
                     // TODO: we can implement a RR shader here.
-
                     // step3: miss shader (ray inactive)
                     miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         payload_buffer, ray_idx_buffer, stream_offset, num_valid_ray
@@ -660,6 +713,12 @@ public:
 #else
                     num_valid_ray = TOTAL_RAY;    
 #endif  // NO_STREAM_COMPACTION
+
+#ifndef NO_RAY_SORTING
+                    // thrust::sort
+#else
+
+#endif
 
                     // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
                     if (!num_valid_ray) break;
@@ -680,6 +739,14 @@ public:
                     ray_update_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         payload_buffer, obj_info, prim2obj, uvs, 
                         ray_idx_buffer, stream_offset, num_valid_ray
+                    );
+
+                    // step2: closesthit shader
+                    if (bounce + 1 >= max_depth) break;
+                    closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                        payload_buffer, obj_info, prim2obj, shapes, aabbs, 
+                        verts, norms, uvs, ray_idx_buffer,
+                        stream_offset, num_prims, num_valid_ray
                     );
                 }
 
