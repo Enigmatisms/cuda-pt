@@ -36,6 +36,9 @@
 static constexpr int NUM_STREAM = 8;
 // #define NO_STREAM_COMPACTION
 #define STABLE_PARTITION
+#define NO_RAY_SORTING
+#define FUSED_MISS_SHADER
+
 #ifdef STABLE_PARTITION
 #define partition_func(...) thrust::stable_partition(__VA_ARGS__)
 #else
@@ -199,6 +202,11 @@ public:
         its_tails[index].data = it.data.p2;
     }
 
+    CPT_CPU_GPU_INLINE void set_it_head(int col, int row, float4 p1) { 
+        int index = col + row * _width;
+        its_heads[index].data = p1;
+    }
+
     CPT_CPU void destroy() {
         CUDA_CHECK_RETURN(cudaFree(thps));
         CUDA_CHECK_RETURN(cudaFree(Ls));
@@ -274,6 +282,10 @@ CPT_KERNEL void raygen_primary_hit_shader(
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR, min_index = -1;   // round up
     ray.hit_t = MAX_DIST;
 
+#ifdef FUSED_MISS_SHADER
+    ray.set_active(false);
+#endif   // FUSED_MISS_SHADER
+
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;     
     // ============= step 1: ray intersection =================
@@ -314,6 +326,9 @@ CPT_KERNEL void raygen_primary_hit_shader(
         extract.set_index(min_index);
         ray.set_hit();
         ray.set_hit_index(min_index);
+#ifdef FUSED_MISS_SHADER
+        ray.set_active(true);
+#endif   // FUSED_MISS_SHADER
         it.it() = variant::apply_visitor(extract, shapes[min_index]);
     }
 
@@ -370,6 +385,10 @@ CPT_KERNEL void closesthit_shader(
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR, min_index = -1;   // round up
     ray.hit_t = MAX_DIST;
 
+#ifdef FUSED_MISS_SHADER
+    ray.set_active(false);
+#endif   // FUSED_MISS_SHADER
+
     // ============= step 1: ray intersection =================
     #pragma unroll
     for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
@@ -406,6 +425,9 @@ CPT_KERNEL void closesthit_shader(
         extract.set_index(min_index);
         ray.set_hit();
         ray.set_hit_index(min_index);
+#ifdef FUSED_MISS_SHADER
+        ray.set_active(true);
+#endif   // FUSED_MISS_SHADER
         it.it() = variant::apply_visitor(extract, shapes[min_index]);
     }
 
@@ -479,7 +501,7 @@ CPT_KERNEL void nee_shader(
  * BSDF sampling & direct shading shader
 */
 
-CPT_KERNEL void bsdf_emission_shader(
+CPT_KERNEL void bsdf_local_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
@@ -500,10 +522,14 @@ CPT_KERNEL void bsdf_emission_shader(
 
         Vec4 thp = payloads.thp(px, py);
         Ray ray  = payloads.get_ray(px, py);
+        Sampler sg = payloads.get_sampler(px, py);
         PDFInteraction it = payloads.get_interaction(px, py);
+        Vec2 sample = sg.next2D();
+        payloads.set_sampler(px, py, sg);
 
         int object_id   = prim2obj[ray.hit_id()],
-            emitter_id  = objects[object_id].emitter_id;
+            emitter_id  = objects[object_id].emitter_id,
+            material_id = objects[object_id].bsdf_id;
         bool hit_emitter = emitter_id > 0;
 
         // emitter MIS
@@ -512,48 +538,16 @@ CPT_KERNEL void bsdf_emission_shader(
         // (2) check if the ray hits an emitter
         Vec4 direct_comp = thp *\
                     c_emitter[emitter_id]->eval_le(&ray.d, &it.it_const().shading_norm);
-
         payloads.L(px, py) += direct_comp * emission_weight;
-    }
-}
-
-/**
- * Sample the new ray according to BSDF
-*/
-CPT_KERNEL void ray_update_shader(
-    PayLoadBufferSoA payloads,
-    ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstUVPtr,   
-    const IndexBuffer idx_buffer,
-    int stream_offset,
-    int num_valid
-) {
-    const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
-                            blockDim.x * gridDim.x +                            // cols
-                            threadIdx.x + blockIdx.x * blockDim.x;              // px
-
-    if (block_index < num_valid) {
-        uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
-        py >>= 16;
-
-        Vec4 thp = payloads.thp(px, py);
-        Ray ray  = payloads.get_ray(px, py);
-        Sampler sg = payloads.get_sampler(px, py);
-        PDFInteraction it = payloads.get_interaction(px, py);
-
-        int object_id   = prim2obj[ray.hit_id()],
-            material_id = objects[object_id].bsdf_id;
         
         ray.o = ray.advance(ray.hit_t);
         ray.d = c_material[material_id]->sample_dir(
-            ray.d, it.it_const(), thp, it.pdf(), sg.next2D()
+            ray.d, it.it_const(), thp, it.pdf(), std::move(sample)
         );
 
         payloads.thp(px, py) = thp;
         payloads.set_ray(px, py, ray);
-        payloads.set_sampler(px, py, sg);
-        payloads.set_interaction(px, py, it);
+        payloads.set_it_head(px, py, it.data.p1);
     }
 }
 
@@ -613,6 +607,24 @@ struct ActiveRayFunctor
     {
         uint32_t py = index >> 16, px = index & 0x0000ffff;
         return (dir_tags[px + py * width].ray_tag & 0x10000000) > 0;
+    }
+};
+
+
+/**
+ * This functor is used for ray index sorting
+*/
+struct RaySortFunctor
+{
+    const int width;
+    const PayLoadBufferSoA::RayDirTag* const dir_tags;
+
+    CPT_CPU_GPU RaySortFunctor(PayLoadBufferSoA::RayDirTag* tags, int w): width(w), dir_tags(tags) {}
+
+    CPT_GPU_INLINE bool operator()(uint32_t idx1, uint32_t idx2) const
+    {
+        return (dir_tags[(idx1 & 0x0000ffff) + (idx1 >> 16) * width].ray_tag & 0x0fffffff) <
+               (dir_tags[(idx2 & 0x0000ffff) + (idx2 >> 16) * width].ray_tag & 0x0fffffff);
     }
 };
 
@@ -699,9 +711,11 @@ public:
                    
                     // TODO: we can implement a RR shader here.
                     // step3: miss shader (ray inactive)
+#ifndef FUSED_MISS_SHADER
                     miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         payload_buffer, ray_idx_buffer, stream_offset, num_valid_ray
                     );
+#endif  // FUSED_MISS_SHADER
                     
                     // step4: thrust stream compaction (optional)
 #ifndef NO_STREAM_COMPACTION
@@ -715,9 +729,13 @@ public:
 #endif  // NO_STREAM_COMPACTION
 
 #ifndef NO_RAY_SORTING
-                    // thrust::sort
-#else
-
+                    // sort the ray (indices) by their ray tag (hit object)
+                    // ray sorting is extremely slow
+                    thrust::sort(
+                        thrust::cuda::par.on(cur_stream), 
+                        start_iter, start_iter + num_valid_ray,
+                        RaySortFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
+                    );
 #endif
 
                     // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
@@ -729,16 +747,10 @@ public:
                         stream_offset, num_prims, num_objs, num_emitter, num_valid_ray
                     );
 
-                    // step6: emission shader
-                    bsdf_emission_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                    // step6: emission shader + ray update shader
+                    bsdf_local_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         payload_buffer, obj_info, prim2obj, uvs, ray_idx_buffer,
                         stream_offset, num_prims, num_valid_ray, bounce > 0
-                    );
-
-                    // step7: rayupdate shader
-                    ray_update_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, prim2obj, uvs, 
-                        ray_idx_buffer, stream_offset, num_valid_ray
                     );
 
                     // step2: closesthit shader
