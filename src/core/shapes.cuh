@@ -79,6 +79,16 @@ public:
         FLOAT4(mini) = CONST_FLOAT4(other.mini);
         FLOAT4(maxi) = CONST_FLOAT4(other.maxi); // Load last two elements of second Vec3
     }
+
+    CPT_CPU_GPU_INLINE float area() const {
+        Vec3 diff = maxi - mini;
+        return 2.f * (diff.x() * diff.y() + diff.y() * diff.z() + diff.x() * diff.z());
+    }
+
+    CPT_CPU_GPU_INLINE void clear() {
+        mini.fill(1e4);
+        maxi.fill(-1e4);
+    }
 };
 
 struct AABBWrapper {
