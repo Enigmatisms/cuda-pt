@@ -5,6 +5,7 @@
 */
 #pragma once
 #include <cuda/pipeline>
+#include "core/scene.cuh"
 #include "core/progress.h"
 #include "core/emitter.cuh"
 #include "core/stats.h"
@@ -233,23 +234,22 @@ public:
      * @todo: initialize objects
     */
     PathTracer(
-        const std::vector<ObjInfo>& _objs,
-        const std::vector<Shape>& _shapes,
+        const Scene& scene,
         const ArrayType<Vec3>& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
-        int num_emitter,
-        int width, int height
-    ): TracerBase(_shapes, _verts, _norms, _uvs, width, height), 
-        num_objs(_objs.size()), num_emitter(num_emitter) 
+        int num_emitter
+    ): TracerBase(scene.shapes, _verts, _norms, _uvs, scene.config.width, scene.config.height), 
+        num_objs(scene.objects.size()), num_emitter(num_emitter) 
     {
         CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
 
+        // TODO: export BVH here, if the scene BVH is available
         int prim_offset = 0;
         for (int i = 0; i < num_objs; i++) {
-            obj_info[i] = _objs[i];
-            int prim_num = _objs[i].prim_num;
+            obj_info[i] = scene.objects[i];
+            int prim_num = scene.objects[i].prim_num;
             for (int j = 0; j < prim_num; j++)
                 prim2obj[prim_offset + j] = i;
             prim_offset += prim_num;

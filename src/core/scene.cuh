@@ -20,6 +20,7 @@
 #include "core/emitter.cuh"
 #include "core/camera_model.cuh"
 #include "core/virtual_funcs.cuh"
+#include "bvh/bvh.cuh"
 
 using Vec4Arr = std::vector<Vec4>;
 using Vec3Arr = std::vector<Vec3>;
@@ -385,6 +386,8 @@ public:
     Emitter** emitters;
     std::vector<ObjInfo> objects;
     std::vector<Shape> shapes;
+    std::vector<LinearBVH> lin_bvhs;
+    std::vector<LinearNode> lin_nodes;
 
     std::array<Vec3Arr, 3> verts_list;
     std::array<Vec3Arr, 3> norms_list;
@@ -397,10 +400,11 @@ public:
     int num_prims;
     int num_emitters;
     int num_objects;
+    const bool use_bvh;
 
     RendererType rdr_type;
 public:
-    Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0) {
+    Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), use_bvh(false) {
         tinyxml2::XMLDocument doc;
         if (doc.LoadFile(path.c_str()) != tinyxml2::XML_SUCCESS) {
             std::cerr << "Failed to load file" << std::endl;
@@ -412,7 +416,8 @@ public:
                                    *shape_elem   = scene_elem->FirstChildElement("shape"),
                                    *emitter_elem = scene_elem->FirstChildElement("emitter"),
                                    *sensor_elem  = scene_elem->FirstChildElement("sensor"), 
-                                   *render_elem  = scene_elem->FirstChildElement("renderer"), *ptr = nullptr;
+                                   *render_elem  = scene_elem->FirstChildElement("renderer"), 
+                                   *bool_elem    = scene_elem->FirstChildElement("bool"), *ptr = nullptr;
 
         std::unordered_map<std::string, int> bsdf_map, emitter_map, emitter_obj_map;
         std::vector<std::string> emitter_names;
@@ -420,11 +425,26 @@ public:
         emitter_map.reserve(9);
         bsdf_map.reserve(32);
 
+
         // ------------------------- (0) parse the renderer -------------------------
         std::string render_type = render_elem != nullptr ? render_elem->Attribute("type") : "megakernel";
         if      (render_type == "megakernel") rdr_type = RendererType::MegaKernelPT;
         else if (render_type == "wavefront")  rdr_type = RendererType::WavefrontPT;
         else                                  rdr_type = RendererType::MegaKernelPT;
+       
+        {       // local field starts
+        auto& use_bvh_ref = const_cast<bool&>(use_bvh);
+        while (bool_elem) {
+            std::string name = bool_elem->Attribute("name");
+            std::string value = bool_elem->Attribute("value");
+            if (name == "use_bvh") {
+                std::transform(value.begin(), value.end(), value.begin(),
+                        [](unsigned char c){ return std::tolower(c); });
+                use_bvh_ref = value == "true";
+            }
+            bool_elem = bool_elem->NextSiblingElement("bool");
+        }
+        }       // local field ends
 
         // ------------------------- (1) parse all the BSDF -------------------------
         
@@ -500,10 +520,22 @@ public:
                 }
             }
         }
+
+        if (use_bvh) {
+            printf("[BVH] Linear SAH-BVH is being built...\n");
+            Vec3 world_min(1e4, 1e4, 1e4), world_max(-1e4, -1e4, -1e4);
+            for (const auto& obj: objects)
+                obj.export_bound(world_min, world_max);
+            
+            // TODO: timer here
+            bvh_build(
+                verts_list[0], verts_list[1], verts_list[2], 
+                objects, sphere_objs, world_min, world_max, lin_bvhs, lin_nodes
+            );
+        }
     }
 
     ~Scene() {
-        clear_vector();
         destroy_gpu_alloc<<<1, num_bsdfs>>>(bsdfs);
         destroy_gpu_alloc<<<1, num_emitters + 1>>>(emitters);
 
@@ -517,21 +549,15 @@ public:
         uvs.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
     }
 
-    void clear_vector() noexcept {
-        for (int i = 0; i < 3; i++) {
-            verts_list[i].clear();
-            norms_list[i].clear();
-            uvs_list[i].clear();
-
-            verts_list[i].shrink_to_fit();
-            norms_list[i].shrink_to_fit();
-            uvs_list[i].shrink_to_fit();
-        }
+    void export_bvh(LinearBVH* bvhs, LinearNode* nodes) const {
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(bvhs, lin_bvhs.data(), sizeof(LinearBVH) * lin_bvhs.size(), cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(nodes, lin_nodes.data(), sizeof(LinearNode) * lin_nodes.size(), cudaMemcpyHostToDevice));
     }
 
     void print() const noexcept {
         std::cout << " Scene:\n";
         std::cout << "\tRenderer type:\t\t" << RENDER_TYPE_STR[rdr_type] << std::endl;
+        std::cout << "\tUse SAH-BVH:\t\t" << use_bvh << std::endl;
         std::cout << "\tNumber of objects: \t" << num_objects << std::endl;
         std::cout << "\tNumber of primitives: \t" << num_prims << std::endl;
         std::cout << "\tNumber of emitters: \t" << num_emitters << std::endl;

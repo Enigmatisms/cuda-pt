@@ -85,4 +85,9 @@ public:
     CPT_CPU_GPU ObjInfo(int bsdf_id, int prim_off, int prim_num, uint8_t emitter_id = 0):
         bsdf_id(bsdf_id), prim_offset(prim_off), prim_num(prim_num), emitter_id(emitter_id)
     {}
+
+    CPT_CPU void export_bound(Vec3& mini, Vec3& maxi) const noexcept {
+        mini.minimized(_aabb.mini);
+        maxi.maximized(_aabb.maxi);
+    }
 };

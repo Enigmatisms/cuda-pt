@@ -1,13 +1,14 @@
 /**
- * @file bvh_helper.h
+ * @file bvh.h
  * @author Qianyue He
  * @brief BVH utilities
- * @copyright Copyright (c) 2023
+ * @copyright Copyright (c) 2023-2024
  */
 
 #pragma once
 #include <algorithm>
 #include "core/shapes.cuh"
+#include "core/object.cuh"
 #include "core/constants.cuh"
 
 enum SplitAxis: int {AXIS_X, AXIS_Y, AXIS_Z, AXIS_NONE};
@@ -17,11 +18,9 @@ struct BVHInfo {
     AABB bound;
     Vec3 centroid;
 
-    BVHInfo(): bound(), centroid(Vec3::Zero()) {}
-
-    
+    BVHInfo(): bound(), centroid() {}
     BVHInfo(const Vec3& p1, const Vec3& p2, const Vec3& p3, 
-            int prim_idx, int obj_idx, bool is_sphere = false): 
+            int prim_idx, int obj_idx, bool is_sphere = false)
     {
         // Extract two vertices for the primitive, once converted to AABB
         // We don't need to distinguish between mesh or sphere
@@ -86,34 +85,38 @@ public:
  * in this implementation, split axis will not be included (which will not be used anyway).
  * TODO: we can opt for dynamic snode, but I think this would be ugly. Simple unidirectional traversal
  * would be much better than brute-force traversal with only AABB pruning.
+ * 
+ * This is actually borrowed from my AdaPT repo. Now, for CUDA, things are the same:
+ * dynamically indexing a local array will have the data winding up in the GMEM, which can be slow
+ * So, I will still implement a jump-back free version, with no stack 
  */
 class LinearNode {
 public:
-    LinearNode(): base(0), prim_cnt(0) {
-        mini.resize({3});
-        maxi.resize({3});
-    }
-    LinearNode(const BVHNode *const bvh): base(bvh->base), prim_cnt(bvh->prim_num) {
-        mini.resize({3});
-        maxi.resize({3});
-        float *const min_ptr = mini.mutable_data(0), *const max_ptr = maxi.mutable_data(0);
-        for (int i = 0; i < 3; i++) {
-            min_ptr[i] = bvh->bound.mini(i);
-            max_ptr[i] = bvh->bound.maxi(i);
-        }
-    };       // linear nodes are initialized during DFS binary tree traversal
+    CPT_CPU_GPU LinearNode(): aabb(0, 0) {}
+
+    // linear nodes are initialized during DFS binary tree traversal
+    CPT_CPU_GPU LinearNode(const BVHNode *const bvh): aabb(bvh->bound.mini, bvh->bound.maxi, bvh->base, bvh->prim_num) {};       
 public:
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
     AABB aabb;
-    int base, prim_cnt;         // indicate the starting point and the length of the node
     int all_offset;             // indicate the rchild pos and the offset to the next node
 };
 
 class LinearBVH {
 public:
-    LinearBVH(): aabb() {}
-    LinearBVH(const BVHInfo& bvh): aabb(bvh.bound) {}
+    CPT_CPU_GPU LinearBVH(): aabb() {}
+    CPT_CPU_GPU LinearBVH(const BVHInfo& bvh): aabb(bvh.bound) {}
 public:
     // compressed linear BVH
     AABB aabb;
 };
+
+void bvh_build(
+    const std::vector<Vec3>& points1,
+    const std::vector<Vec3>& points2,
+    const std::vector<Vec3>& points3,
+    const std::vector<ObjInfo>& objects,
+    const std::vector<bool>& sphere_flags,
+    const Vec3& world_min, const Vec3& world_max,
+    std::vector<LinearBVH>& lin_bvhs, std::vector<LinearNode>& lin_nodes
+);

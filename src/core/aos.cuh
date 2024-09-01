@@ -8,6 +8,7 @@
 */
 
 #pragma once
+#include "bvh/bvh.cuh"
 #include "core/vec2.cuh"
 #include "core/host_device.cuh"
 
@@ -113,3 +114,5 @@ using ArrayType = AoS3<InnerType>;
 #endif  // USE_AOS
 using ConstPrimPtr = const ArrayType<Vec3>* const;
 using ConstUVPtr   = const ArrayType<Vec2>* const;
+
+// TODO: for wavefront path tracing, we should implement a SoA here

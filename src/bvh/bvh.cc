@@ -1,86 +1,78 @@
 /**
  * @file bvh.cpp
  * @author Qianyue He
- * @date 2023.5
+ * @date 2023.5 -> 2024.9
  * @brief BVH construction main logic
- * @copyright Copyright (c) 2023
+ * @copyright Copyright (c) 2023-2024
  */
 
 #include <stack>
 #include <algorithm>
-#include "bvh_helper.h"
+#include <numeric>
+#include "bvh.cuh"
 
 using IntPair = std::pair<int, int>;
 
-constexpr int num_bins = 12;            // the same as PBR-book 
-constexpr float traverse_cost = 0.1;
+constexpr int num_bins = 16;
+constexpr float traverse_cost = 0.4;
 constexpr float max_node_prim = 1;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const {
-    Eigen::Vector3f min_ctr = bvhs[base].centroid, max_ctr = bvhs[base].centroid;
+    Vec3 min_ctr = bvhs[base].centroid, max_ctr = bvhs[base].centroid;
     for (int i = 1; i < prim_num; i++) {
-        const Eigen::Vector3f& ctr = bvhs[base + i].centroid;
-        min_ctr = min_ctr.cwiseMin(ctr);
-        max_ctr = max_ctr.cwiseMax(ctr);
+        Vec3 ctr = bvhs[base + i].centroid;
+        min_ctr.minimized(ctr);
+        max_ctr.maximized(ctr);
     }
-    Eigen::Vector3f diff = max_ctr - min_ctr;
-    float max_diff = diff(0);
+    Vec3 diff = max_ctr - min_ctr;
+    float max_diff = diff.x();
     int split_axis = 0;
-    for (int i = 1; i < 3; i++) {
-        if (diff(i) > max_diff) {
-            max_diff = diff(i);
-            split_axis = i;
-        }
+    if (diff.y() > max_diff) {
+        max_diff = diff.y();
+        split_axis = 1;
+    }
+    if (diff.z() > max_diff) {
+        max_diff = diff.z();
+        split_axis = 2;
     }
     bins.resize(num_bins);
-    float min_r = min_ctr(split_axis) - 0.001f, interval = (max_diff + 0.002f) / float(num_bins);
+    float min_r = min_ctr[split_axis] - 0.001f, interval = (max_diff + 0.002f) / float(num_bins);
     std::transform(bins.begin(), bins.end(), bins.begin(), [min_r, interval, i = 0] (const float&) mutable {
         i++; return min_r + interval * float(i);
     });
     return SplitAxis(split_axis);
 }
 
-// Convert numpy wavefront obj to eigen vector
-size_t wavefront_input(const py::array_t<float>& obj_array, std::vector<Eigen::Matrix3f>& meshes) {
-    const float* const ptr = obj_array.data(0);
-    size_t num_primitives = obj_array.shape()[0];
-    meshes.resize(num_primitives);
-
-    for (size_t i = 0; i < num_primitives; i++) {
-        Eigen::Matrix3f& mat = meshes[i];
-        float* const mat_data = mat.data();
-        size_t base_index = i * 9;
-        for (size_t j = 0; j < 9; j++) {
-            mat_data[j] = ptr[base_index + j];
-        }
-    }
-    return num_primitives;
-}
-
-void index_input(const py::array_t<int>& obj_info, std::vector<IntPair>& idxs, size_t num_primitives) {
+void index_input(
+    const std::vector<ObjInfo>& objs, 
+    const std::vector<bool>& sphere_flags, 
+    std::vector<IntPair>& idxs, size_t num_primitives
+) {
     // input follow the shape of the number of objects, for each position
     // the number of primitive / whether the primitive is sphere will be stored, the index will be object id
-    size_t result_shape = obj_info.shape()[1];      // shape is (3, obj_num)
-    const int *num_ptr  = obj_info.data(0, 0),
-              *flag_ptr = obj_info.data(1, 0);
+    size_t result_shape = objs.size();      // shape is (3, obj_num)
     idxs.reserve(num_primitives);                   // accumulate(num_ptr, num_ptr + result_shape) = num_primitives
     for (size_t i = 0; i < result_shape; i++) {
-        int prim_num = num_ptr[i], obj_idx = int(i), sphere_flag = flag_ptr[i];
+        const int prim_num = objs[i].prim_num;
+        const bool sphere_flag = sphere_flags[i];
         for (int j = 0; j < prim_num; j++)
-            idxs.emplace_back(obj_idx, sphere_flag);
+            idxs.emplace_back(static_cast<int>(i), sphere_flag);
     }
 }
 
-void create_bvh_info(const std::vector<Eigen::Matrix3f>& meshes, const std::vector<IntPair>& idxs, std::vector<BVHInfo>& bvh_infos) {
-    bvh_infos.resize(meshes.size());
-    std::transform(meshes.begin(), meshes.end(), idxs.begin(), bvh_infos.begin(),
-        [i = 0] (const Eigen::Matrix3f& primitive, const IntPair& idx_info) mutable {
-            return BVHInfo(primitive, i++, idx_info.first, idx_info.second > 0);
-        }
-    ); 
+void create_bvh_info(
+    const std::vector<Vec3>& points1,
+    const std::vector<Vec3>& points2,
+    const std::vector<Vec3>& points3,
+    const std::vector<IntPair>& idxs, std::vector<BVHInfo>& bvh_infos) {
+    bvh_infos.reserve(points1.size());
+    for (size_t i = 0; i < points1.size(); i++) {
+        const IntPair& idx_info = idxs[i];
+        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.first, idx_info.second > 0);
+    }
 }
 
-int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos) {
+int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, int depth = 0) {
     AABB fwd_bound, bwd_bound;
     int child_prim_cnt = 0;                // this index is used for indexing variable `bins`
     const int prim_num = cur_node->prim_num, base = cur_node->base, max_pos = base + prim_num;
@@ -164,12 +156,32 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos) 
         cur_node->axis = max_axis;
         // Step 7: start recursive splitting for the children
         int node_num = 1;
-        if (cur_node->lchild->prim_num > max_node_prim)
-            node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos);
-        else node_num ++;
-        if (cur_node->rchild->prim_num > max_node_prim)
-            node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos);
-        else node_num ++;
+        if (depth == 0) {
+            int local_node_n1 = 0, local_node_n2 = 0;
+            #pragma omp parallel sections       // parallel SAH-BVH
+            {
+                #pragma omp section 
+                {
+                    if (cur_node->lchild->prim_num > max_node_prim)
+                        local_node_n1 = recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
+                    else local_node_n1 = 1;
+                }
+                #pragma omp section 
+                {
+                    if (cur_node->rchild->prim_num > max_node_prim)
+                        local_node_n2 = recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
+                    else local_node_n2 = 1;
+                }
+            }
+            node_num = local_node_n1 + local_node_n2 + 1;
+        } else {
+            if (cur_node->lchild->prim_num > max_node_prim)
+                node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
+            else node_num ++;
+            if (cur_node->rchild->prim_num > max_node_prim)
+                node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
+            else node_num ++;
+        }
         return node_num;
     } else {
         // This is a leaf node, yet this is the only way that a leaf node contains more than one primitive
@@ -178,21 +190,17 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos) 
     }
 }
 
-BVHNode* bvh_root_start(const py::array_t<float>& world_min, const py::array_t<float>& world_max, int& node_num, std::vector<BVHInfo>& bvh_infos) {
+static BVHNode* bvh_root_start(const Vec3& world_min, const Vec3& world_max, int& node_num, std::vector<BVHInfo>& bvh_infos) {
     // Build BVH tree root node and start recursive tree construction
     BVHNode* root_node = new BVHNode(0, bvh_infos.size());
-    Eigen::Vector3f &bound_min = root_node->bound.mini, &bound_max = root_node->bound.maxi;
-    const float* const min_ptr = world_min.data(0), * const max_ptr = world_max.data(0);
-    for (int i = 0; i < 3; i++) {
-        bound_min(i) = min_ptr[i];
-        bound_max(i) = max_ptr[i];
-    }
+    root_node->bound.mini = world_min;
+    root_node->bound.maxi = world_max;
     node_num = recursive_bvh_SAH(root_node, bvh_infos);
     return root_node;
 }
 
 // This is the final function call for `bvh_build`
-int recursive_linearize(BVHNode* cur_node, std::vector<LinearNode>& lin_nodes) {
+static int recursive_linearize(BVHNode* cur_node, std::vector<LinearNode>& lin_nodes) {
     // BVH tree should be linearized to better traverse and fit in the system memory
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
     // Note that if rchild_offset is -1, then the node is leaf. Leaf node points to primitive array
@@ -201,6 +209,7 @@ int recursive_linearize(BVHNode* cur_node, std::vector<LinearNode>& lin_nodes) {
     size_t current_size = lin_nodes.size();
     lin_nodes.emplace_back(cur_node);
     if (cur_node->lchild != nullptr) {
+        // TODO: parallel linearize
         int lnodes = recursive_linearize(cur_node->lchild, lin_nodes);
         lnodes += recursive_linearize(cur_node->rchild, lin_nodes);
         lin_nodes[current_size].all_offset = lnodes + 1;
@@ -211,57 +220,21 @@ int recursive_linearize(BVHNode* cur_node, std::vector<LinearNode>& lin_nodes) {
     }
 }
 
-// convert from LinearBVH and LinearNode to numpy for kernel to process
-std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<int>, py::array_t<int>> 
-    to_numpy(const std::vector<LinearBVH>& lin_bvhs, const std::vector<LinearNode>& lin_nodes
-) {
-    py::array_t<float> bvh_minmax(lin_bvhs.size() * 6);
-    py::array_t<float> nodes_minmax(lin_nodes.size() * 6);
-    py::array_t<int> bvh_info(lin_bvhs.size() * 2);
-    py::array_t<int> nodes_info(lin_nodes.size() * 3);
-    for (size_t i = 0; i < lin_bvhs.size(); i++) {
-        const LinearBVH& bvh_ref = lin_bvhs[i];
-        float* minmax_ptr = bvh_minmax.mutable_data(6 * i);
-        int* info_ptr = bvh_info.mutable_data(2 * i);
-        const float* const mini_ptr = bvh_ref.mini.data(0);
-        const float* const maxi_ptr = bvh_ref.maxi.data(0);
-        for (size_t j = 0; j < 3; j++) {
-            *(minmax_ptr + j) = mini_ptr[j];
-            *(minmax_ptr + j + 3) = maxi_ptr[j];
-        }
-        *info_ptr = bvh_ref.obj_idx;
-        *(info_ptr + 1) = bvh_ref.prim_idx;
-    }
-    for (size_t i = 0; i < lin_nodes.size(); i++) {
-        const LinearNode& node_ref = lin_nodes[i];
-        float* minmax_ptr = nodes_minmax.mutable_data(6 * i);
-        int* info_ptr = nodes_info.mutable_data(3 * i);
-        const float* const mini_ptr = node_ref.mini.data(0);
-        const float* const maxi_ptr = node_ref.maxi.data(0);
-        for (size_t j = 0; j < 3; j++) {
-            *(minmax_ptr + j) = mini_ptr[j];
-            *(minmax_ptr + j + 3) = maxi_ptr[j];
-        }
-        *info_ptr = node_ref.base;
-        *(info_ptr + 1) = node_ref.prim_cnt;
-        *(info_ptr + 2) = node_ref.all_offset;
-    }
-    // Return the resulting arrays, the older versions can be kept for "educational" purposes
-    return std::make_tuple(bvh_minmax, nodes_minmax, bvh_info, nodes_info);
-}
-
-void bvh_build_base(
-    const py::array_t<float>& obj_array, const py::array_t<int>& obj_info,
-    const py::array_t<float>& world_min, const py::array_t<float>& world_max,
+// Try to use two threads to build the BVH
+void bvh_build(
+    const std::vector<Vec3>& points1,
+    const std::vector<Vec3>& points2,
+    const std::vector<Vec3>& points3,
+    const std::vector<ObjInfo>& objects,
+    const std::vector<bool>& sphere_flags,
+    const Vec3& world_min, const Vec3& world_max,
     std::vector<LinearBVH>& lin_bvhs, std::vector<LinearNode>& lin_nodes
 ) {
-    std::vector<Eigen::Matrix3f> meshes;
     std::vector<IntPair> idx_prs;
     std::vector<BVHInfo> bvh_infos;
-    int node_num = 0;
-    size_t num_prim = wavefront_input(obj_array, meshes);
-    index_input(obj_info, idx_prs, num_prim);
-    create_bvh_info(meshes, idx_prs, bvh_infos);
+    int node_num = 0, num_prims_all = points1.size();
+    index_input(objects, sphere_flags, idx_prs, num_prims_all);
+    create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos);
     recursive_linearize(root_node, lin_nodes);
     lin_bvhs.reserve(bvh_infos.size());
@@ -269,44 +242,4 @@ void bvh_build_base(
         lin_bvhs.emplace_back(bvh);
     }
     delete root_node;
-}
-
-std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<int>, py::array_t<int>>
-    bvh_build(
-    const py::array_t<float>& obj_array, const py::array_t<int>& obj_info,
-    const py::array_t<float>& world_min, const py::array_t<float>& world_max
-) {
-    std::vector<LinearBVH> lin_bvhs; 
-    std::vector<LinearNode> lin_nodes;
-    bvh_build_base(obj_array, obj_info, world_min, world_max, lin_bvhs, lin_nodes);
-    return to_numpy(lin_bvhs, lin_nodes);
-    // The old way:
-    // return std::make_tuple(py::cast(lin_nodes), py::cast(lin_bvhs));
-}
-
-PYBIND11_MODULE(bvh_cpp, m) {
-
-    m.doc() = "Build SAH-BVH tree via cpp backend\n";
-
-    m.def("bvh_build", &bvh_build, "Build SAH-BVH tree via cpp backend (return numpy)\n"
-        "Input: obj_array of shape (N_faces, 3, 3), N_faces corresponds to number of primitives (triangles, spheres)\n"
-        "Input: obj_info of shape (2, N_obj), N_obj corresponds to number of object\n"
-        "Input: world_min: world AABB min vertex\n"
-        "Input: world_min: world AABB max vertex"
-    );
-
-    py::class_<LinearBVH>(m, "LinearBVH")
-        .def_readonly("mini", &LinearBVH::mini)
-        .def_readonly("maxi", &LinearBVH::maxi)
-        .def_readonly("obj_idx", &LinearBVH::obj_idx)
-        .def_readonly("prim_idx", &LinearBVH::prim_idx)
-        .def(py::init());
-
-    py::class_<LinearNode>(m, "LinearNode")
-        .def_readonly("mini", &LinearNode::mini)
-        .def_readonly("maxi", &LinearNode::maxi)
-        .def_readonly("base", &LinearNode::base)
-        .def_readonly("prim_cnt", &LinearNode::prim_cnt)
-        .def_readonly("all_offset", &LinearNode::all_offset)
-        .def(py::init());
 }
