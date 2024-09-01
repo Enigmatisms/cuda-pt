@@ -28,17 +28,20 @@ using ConstSharedVec2Ptr = const Vec2 (*)[32];
 class AABB {
 public:
     Vec3 mini;
-    CUDA_PT_PADDING(1, 1)
+    CUDA_PT_SINGLE_PADDING(1)           // used as prim_idx, for BVH
     Vec3 maxi;
-    CUDA_PT_PADDING(1, 2)
+    CUDA_PT_SINGLE_PADDING(2)           // used as obj_idx for BVH
 public:
-    CPT_CPU_GPU AABB(): mini(), maxi() {}
+    CPT_CPU_GPU AABB(): mini(), __bytes1(-1), maxi(), __bytes2(-1) {}
 
     template <typename V1Type, typename V2Type>
     CPT_CPU_GPU AABB(V1Type&& _mini, V2Type&& _maxi):
-        mini(std::forward<V1Type>(_mini)), maxi(std::forward<V2Type>(_maxi)) {}
+        mini(std::forward<V1Type>(_mini)), __bytes1(-1), 
+        maxi(std::forward<V2Type>(_maxi)), __bytes2(-1) {}
 
-    CPT_CPU_GPU AABB(const Vec3& p1, const Vec3& p2, const Vec3& p3) {
+    CPT_CPU_GPU AABB(const Vec3& p1, const Vec3& p2, const Vec3& p3, int _prim_idx = -1, int _obj_idx = -1):
+        __bytes1(_prim_idx), __bytes2(_obj_idx)
+    {
         mini = p1.minimize(p2).minimize(p3);
         mini -= AABB_EPS;
         maxi = p1.maximize(p2).maximize(p3);
@@ -89,6 +92,12 @@ public:
         mini.fill(1e4);
         maxi.fill(-1e4);
     }
+
+    int obj_idx() const { return __bytes1; }
+    int& obj_idx() { return __bytes1; }
+
+    int prim_idx() const { return __bytes2; }
+    int& prim_idx() { return __bytes2; }
 };
 
 struct AABBWrapper {

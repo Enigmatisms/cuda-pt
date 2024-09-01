@@ -16,25 +16,22 @@ struct BVHInfo {
     // BVH is for both triangle meshes and spheres
     AABB bound;
     Vec3 centroid;
-    int prim_idx;
-    int obj_idx;
 
-    BVHInfo(): centroid(Vec3::Zero()), prim_idx(-1), obj_idx(-1) {}
+    BVHInfo(): bound(), centroid(Vec3::Zero()) {}
 
     
     BVHInfo(const Vec3& p1, const Vec3& p2, const Vec3& p3, 
             int prim_idx, int obj_idx, bool is_sphere = false): 
-        bound(p1, p2, p3), prim_idx(prim_idx), obj_idx(obj_idx) 
     {
         // Extract two vertices for the primitive, once converted to AABB
         // We don't need to distinguish between mesh or sphere
         // Note that vertex vectors in the primitive matrix are col-major order
         if (is_sphere) {
             centroid = p1;
-            bound    = AABB(p1 - p2.x() - AABB_EPS, p1 + p2.x() + AABB_EPS);
+            bound    = AABB(p1 - p2.x() - AABB_EPS, p1 + p2.x() + AABB_EPS, prim_idx, obj_idx);
         } else {
             centroid = (p1 + p2 + p3) * 0.33333333333f;      // barycenter
-            bound    = AABB(p1, p2, p3);
+            bound    = AABB(p1, p2, p3, prim_idx, obj_idx);
         }
     }
 };
@@ -107,30 +104,16 @@ public:
     };       // linear nodes are initialized during DFS binary tree traversal
 public:
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
-    py::array_t<float> mini;
-    py::array_t<float> maxi;
+    AABB aabb;
     int base, prim_cnt;         // indicate the starting point and the length of the node
     int all_offset;             // indicate the rchild pos and the offset to the next node
 };
 
 class LinearBVH {
 public:
-    LinearBVH(): obj_idx(-1), prim_idx(-1) {
-        mini.resize({3});
-        maxi.resize({3});
-    }
-    LinearBVH(const BVHInfo& bvh): obj_idx(bvh.obj_idx), prim_idx(bvh.prim_idx) {
-        mini.resize({3});
-        maxi.resize({3});
-        float *const min_ptr = mini.mutable_data(0), *const max_ptr = maxi.mutable_data(0);
-        for (int i = 0; i < 3; i++) {
-            min_ptr[i] = bvh.bound.mini(i);
-            max_ptr[i] = bvh.bound.maxi(i);
-        }
-    }
+    LinearBVH(): aabb() {}
+    LinearBVH(const BVHInfo& bvh): aabb(bvh.bound) {}
 public:
-    int obj_idx;
-    int prim_idx;
-    py::array_t<float> mini;
-    py::array_t<float> maxi;
+    // compressed linear BVH
+    AABB aabb;
 };
