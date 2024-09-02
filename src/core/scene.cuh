@@ -554,6 +554,10 @@ public:
         CUDA_CHECK_RETURN(cudaMemcpyAsync(nodes, lin_nodes.data(), sizeof(LinearNode) * lin_nodes.size(), cudaMemcpyHostToDevice));
     }
 
+    void bvh_available() const noexcept {
+        return !lin_bvhs.empty() && !lin_nodes.empty();
+    }
+
     void print() const noexcept {
         std::cout << " Scene:\n";
         std::cout << "\tRenderer type:\t\t" << RENDER_TYPE_STR[rdr_type] << std::endl;

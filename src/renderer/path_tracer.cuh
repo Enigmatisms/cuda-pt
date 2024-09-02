@@ -221,6 +221,9 @@ protected:
     int*    prim2obj;
     int num_objs;
     int num_emitter;
+
+    LinearBVH* lin_bvhs;
+    LinearNode* lin_nodes;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -244,8 +247,9 @@ public:
     {
         CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
+        CUDA_CHECK_RETURN(cudaMallocManaged(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
+        CUDA_CHECK_RETURN(cudaMallocManaged(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
 
-        // TODO: export BVH here, if the scene BVH is available
         int prim_offset = 0;
         for (int i = 0; i < num_objs; i++) {
             obj_info[i] = scene.objects[i];
@@ -254,6 +258,8 @@ public:
                 prim2obj[prim_offset + j] = i;
             prim_offset += prim_num;
         }
+
+        // TODO: export BVH here, if the scene BVH is available
     }
 
     virtual ~PathTracer() {
