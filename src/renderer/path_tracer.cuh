@@ -212,7 +212,6 @@ CPT_KERNEL static void render_pt_kernel(
     int node_num = -1
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
-    int tid = threadIdx.x + threadIdx.y * blockDim.x;
 
     Sampler sampler(px + py * image.w(), seed_offset);
     // step 1: generate ray
@@ -244,7 +243,7 @@ CPT_KERNEL static void render_pt_kernel(
         min_index = -1;
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
-        float min_dist = ray_intersect_bvh(ray, shapes, nodes, bvhs, visitor, min_index, node_num, min_dist);
+        min_dist = ray_intersect_bvh(ray, shapes, nodes, bvhs, visitor, min_index, node_num, min_dist);
 #else   // RENDERER_USE_BVH
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {

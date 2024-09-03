@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     ArrayType<Vec3> vert_data(scene.num_prims), norm_data(scene.num_prims);
     ArrayType<Vec2> uvs_data(scene.num_prims);
 
-    scene.export(vert_data, norm_data, uvs_data);
+    scene.export_prims(vert_data, norm_data, uvs_data);
 
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));

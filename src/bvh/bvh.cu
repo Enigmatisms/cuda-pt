@@ -6,16 +6,15 @@
  * @copyright Copyright (c) 2023-2024
  */
 
-#include <stack>
 #include <algorithm>
 #include <numeric>
 #include "bvh.cuh"
 
 using IntPair = std::pair<int, int>;
 
-constexpr int num_bins = 16;
-constexpr float traverse_cost = 0.4;
-constexpr float max_node_prim = 1;
+static constexpr int num_bins = 16;
+static constexpr float traverse_cost = 0.4;
+static constexpr float max_node_prim = 1;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const {
     Vec3 min_ctr = bvhs[base].centroid, max_ctr = bvhs[base].centroid;

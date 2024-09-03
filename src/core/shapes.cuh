@@ -32,7 +32,7 @@ public:
     Vec3 maxi;
     CUDA_PT_SINGLE_PADDING(2)           // used as obj_idx for BVH
 public:
-    CPT_CPU_GPU AABB(): mini(), __bytes1(-1), maxi(), __bytes2(-1) {}
+    CPT_CPU_GPU AABB() {}
     CPT_CPU_GPU AABB(int p1, int p2): mini(), __bytes1(p1), maxi(), __bytes2(p2) {}
 
     template <typename V1Type, typename V2Type>
@@ -94,17 +94,17 @@ public:
         maxi.fill(-1e4);
     }
 
-    int obj_idx() const { return __bytes1; }
-    int& obj_idx() { return __bytes1; }
+    CPT_CPU_GPU_INLINE int obj_idx() const { return __bytes1; }
+    CPT_CPU_GPU_INLINE int& obj_idx() { return __bytes1; }
 
-    int prim_idx() const { return __bytes2; }
-    int& prim_idx() { return __bytes2; }
+    CPT_CPU_GPU_INLINE int prim_idx() const { return __bytes2; }
+    CPT_CPU_GPU_INLINE int& prim_idx() { return __bytes2; }
 
-    int base() const { return __bytes1; }
-    int& base() { return __bytes1; }
+    CPT_CPU_GPU_INLINE int base() const { return __bytes1; }
+    CPT_CPU_GPU_INLINE int& base() { return __bytes1; }
 
-    int prim_cnt() const { return __bytes2; }
-    int& prim_cnt() { return __bytes2; }
+    CPT_CPU_GPU_INLINE int prim_cnt() const { return __bytes2; }
+    CPT_CPU_GPU_INLINE int& prim_cnt() { return __bytes2; }
 };
 
 struct AABBWrapper {

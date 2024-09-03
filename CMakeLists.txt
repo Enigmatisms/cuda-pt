@@ -38,19 +38,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 find_package(OpenMP REQUIRED)
 if (OPENMP_FOUND)
-	if (MSVC)
-		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /openmp")
-		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
-		set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler /openmp")
-	else()
-		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-		set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${OpenMP_CXX_FLAGS}")
-	endif ()
-	message(STATUS "OpenMP is found.")
+if (MSVC)
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /openmp")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
+set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler /openmp")
 else()
-    message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif ()
+message(STATUS "OpenMP is found.")
+else()
+message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
 endif()
+set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 include_directories(${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
 
@@ -59,8 +60,8 @@ add_subdirectory(src/ext/tinyobjloader)
 
 set(EXEC1_NAME "depth")
 add_executable(${EXEC1_NAME}
-        app/depth_renderer.cu
-        src/ext/lodepng/lodepng.cpp
+app/depth_renderer.cu
+src/ext/lodepng/lodepng.cpp
 )
 
 target_link_libraries(
@@ -85,6 +86,7 @@ set(EXEC2_NAME "pt")
 add_executable(${EXEC2_NAME}
         app/pt_renderer.cu
         src/ext/lodepng/lodepng.cpp
+		src/bvh/bvh.cu
 )
 
 target_link_libraries(
