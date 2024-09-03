@@ -100,6 +100,15 @@ public:
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
     AABB aabb;
     int all_offset;             // indicate the rchild pos and the offset to the next node
+
+    CPT_CPU_GPU_INLINE bool is_leaf() const noexcept {
+        return all_offset == 1;
+    }
+
+    CPT_CPU_GPU_INLINE void get_range(int& beg, int& end) const noexcept {
+        beg = aabb.base();
+        end = beg + aabb.prim_cnt();
+    }
 };
 
 class LinearBVH {
@@ -109,6 +118,11 @@ public:
 public:
     // compressed linear BVH
     AABB aabb;
+
+    CPT_CPU_GPU_INLINE void get_info(int& obj_idx, int& prim_idx) const noexcept {
+        obj_idx = aabb.obj_idx();
+        prim_idx = aabb.prim_idx();
+    }
 };
 
 void bvh_build(

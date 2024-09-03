@@ -15,6 +15,8 @@ static constexpr int SEED_SCALER = 11451;
 
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
+using ConstBVHPtr  = const LinearBVH* const;
+using ConstNodePtr = const LinearNode* const;
 
 /**
  * Occlusion test, computation is done on global memory
@@ -47,6 +49,68 @@ CPT_GPU bool occlusion_test(
         prim_id = num_prim;
     }
     return true;
+}
+
+/**
+ * Perform ray-intersection test on shared memory primitives
+ * @param ray: the ray for intersection test
+ * @param shapes: scene primitives
+ * @param s_aabbs: scene primitives
+ * @param shape_visitor: encapsulated shape visitor
+ * @param it: interaction info, containing the interacted normal and uv
+ * @param remain_prims: number of primitives to be tested (32 at most)
+ * @param cp_base: shared memory address offset
+ * @param min_dist: current minimal distance
+ *
+ * @return minimum intersection distance
+ * 
+ * compare to the ray_intersect_old, this API almost double the speed
+*/
+CPT_GPU float ray_intersect_bvh(
+    const Ray& ray,
+    ConstShapePtr shapes,
+    ConstNodePtr  nodes,    // tree nodes
+    ConstBVHPtr   bvhs,     // leaf
+    ShapeIntersectVisitor& shape_visitor,
+    int& min_index,
+    const int remain_prims,
+    const int node_num,
+    float min_dist
+) {
+    int node_idx = 0;
+    float aabb_tmin = 0;
+    // There can be much control flow divergence, not good
+    while (node_idx < node_num) {
+        const LinearNode& node = nodes[node_idx];
+        bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        if (!intersect_node) {
+            node_idx += node.all_offset;
+            continue;
+        }
+        if (node.is_leaf()) {
+            int beg_idx = 0, end_idx = 0;
+            BitMask tasks = 0;
+            node.get_range(beg_idx, end_idx);
+            for (int idx = beg_idx; idx < end_idx; idx ++) {
+                // if current ray intersects primitive at [idx], tasks will store it
+                BitMask valid_intr = bvhs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+                tasks |= valid_intr << (BitMask)(idx - beg_idx);
+            }
+            while (tasks) {
+                BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
+                tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
+                const auto& bvh = bvhs[beg_idx + idx];
+                int obj_idx = 0, prim_idx = 0;
+                bvh.get_info(obj_idx, prim_idx);
+                // we might not need an obj_idx stored in shapes, if we use BVH 
+                float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
+                bool valid = dist > EPSILON && dist < min_dist;
+                min_dist = valid ? dist : min_dist;
+                min_index = valid ? prim_idx : min_index;
+            }
+        }
+    }
+    return min_dist;
 }
 
 CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sample) {
@@ -243,12 +307,17 @@ public:
         const ArrayType<Vec2>& _uvs,
         int num_emitter
     ): TracerBase(scene.shapes, _verts, _norms, _uvs, scene.config.width, scene.config.height), 
-        num_objs(scene.objects.size()), num_emitter(num_emitter) 
+        num_objs(scene.objects.size()), num_emitter(num_emitter), lin_bvhs(nullptr), lin_nodes(nullptr)
     {
+        // TODO: export BVH here, if the scene BVH is available
+        if (scene.bvh_available()) {
+            CUDA_CHECK_RETURN(cudaMallocManaged(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
+            CUDA_CHECK_RETURN(cudaMallocManaged(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
+            scene.export_bvh(lin_bvhs, lin_nodes);
+        }
+
         CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
-        CUDA_CHECK_RETURN(cudaMallocManaged(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
-        CUDA_CHECK_RETURN(cudaMallocManaged(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
 
         int prim_offset = 0;
         for (int i = 0; i < num_objs; i++) {
@@ -258,13 +327,17 @@ public:
                 prim2obj[prim_offset + j] = i;
             prim_offset += prim_num;
         }
-
-        // TODO: export BVH here, if the scene BVH is available
     }
 
     virtual ~PathTracer() {
         CUDA_CHECK_RETURN(cudaFree(obj_info));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
+        if (lin_bvhs) {
+            CUDA_CHECK_RETURN(cudaFree(lin_bvhs));
+        }
+        if (lin_nodes) {
+            CUDA_CHECK_RETURN(cudaFree(lin_nodes));
+        }
     }
 
     virtual CPT_CPU std::vector<uint8_t> render(
