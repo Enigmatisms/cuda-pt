@@ -122,29 +122,6 @@ set_target_properties(
         CUDA_ARCHITECTURES native
 )
 
-add_executable(pt_test
-        test/path_tracer_test.cu
-        src/ext/lodepng/lodepng.cpp
-)
-
-target_link_libraries(
-        pt_test PRIVATE
-        tinyxml2 tinyobjloader
-)
-
-set_target_properties(
-        pt_test PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-        CUDA_ARCHITECTURES native
-)
-
-target_compile_options(
-        pt_test PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:
-        --expt-relaxed-constexpr
-        >
-)
-
 add_executable(sensor_test test/parsers/sensor_parse.cc)
 
 target_link_libraries(sensor_test PRIVATE tinyxml2)

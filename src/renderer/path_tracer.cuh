@@ -11,6 +11,8 @@
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
+#define RENDERER_USE_BVH
+
 static constexpr int SEED_SCALER = 11451;
 
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
@@ -51,6 +53,52 @@ CPT_GPU bool occlusion_test(
     return true;
 }
 
+// occlusion test is any hit shader
+CPT_GPU bool occlusion_test_bvh(
+    const Ray& ray,
+    ConstShapePtr shapes,
+    ConstNodePtr  nodes,    // tree nodes
+    ConstBVHPtr   bvhs,     // leaf
+    ShapeIntersectVisitor& shape_visitor,
+    const int node_num,
+    float max_dist
+) {
+    int node_idx = 0;
+    float aabb_tmin = 0;
+    // There can be much control flow divergence, not good
+    while (node_idx < node_num) {
+        LinearNode node;
+        nodes[node_idx].export_to(node);
+        bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
+        if (!intersect_node) {
+            node_idx += node.all_offset;
+            continue;
+        }
+        if (node.is_leaf()) {
+            int beg_idx = 0, end_idx = 0;
+            BitMask tasks = 0;
+            node.get_range(beg_idx, end_idx);
+            for (int idx = beg_idx; idx < end_idx; idx ++) {
+                // if current ray intersects primitive at [idx], tasks will store it
+                BitMask valid_intr = bvhs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
+                tasks |= valid_intr << (BitMask)(idx - beg_idx);
+            }
+            while (tasks) {
+                BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
+                tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
+                const auto& bvh = bvhs[beg_idx + idx];
+                int obj_idx = 0, prim_idx = 0;
+                bvh.get_info(obj_idx, prim_idx);
+                // we might not need an obj_idx stored in shapes, if we use BVH 
+                float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
+                if (dist < max_dist && dist > EPSILON)
+                        return false;
+            }
+        }
+    }
+    return true;
+}
+
 /**
  * Perform ray-intersection test on shared memory primitives
  * @param ray: the ray for intersection test
@@ -64,6 +112,7 @@ CPT_GPU bool occlusion_test(
  *
  * @return minimum intersection distance
  * 
+ * ray_intersect_bvh is closesthit shader
  * compare to the ray_intersect_old, this API almost double the speed
 */
 CPT_GPU float ray_intersect_bvh(
@@ -73,7 +122,6 @@ CPT_GPU float ray_intersect_bvh(
     ConstBVHPtr   bvhs,     // leaf
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
-    const int remain_prims,
     const int node_num,
     float min_dist
 ) {
@@ -81,7 +129,8 @@ CPT_GPU float ray_intersect_bvh(
     float aabb_tmin = 0;
     // There can be much control flow divergence, not good
     while (node_idx < node_num) {
-        const LinearNode& node = nodes[node_idx];
+        LinearNode node;
+        nodes[node_idx].export_to(node);
         bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
         if (!intersect_node) {
             node_idx += node.all_offset;
@@ -152,12 +201,15 @@ CPT_KERNEL static void render_pt_kernel(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
+    ConstNodePtr nodes,
+    ConstBVHPtr bvhs,
     DeviceImage& image,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+    int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
+    int node_num = -1
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
@@ -172,23 +224,28 @@ CPT_KERNEL static void render_pt_kernel(
     // optimization: copy at most 32 prims from global memory to shared memory
 
     // this kinda resembles deferred rendering
+    int min_index = -1;
+#ifdef RENDERER_USE_BVH
+    ShapeIntersectVisitor visitor(*verts, ray, 0);
+#else   // RENDERER_USE_BVH
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
-
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
     ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
+    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
+#endif  // RENDERER_USE_BVH
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
-
-    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR, min_index = -1;   // round up
     bool hit_emitter = false;
     for (int b = 0; b < max_depth; b++) {
         float min_dist = MAX_DIST;
         min_index = -1;
-
         // ============= step 1: ray intersection =================
+#ifdef RENDERER_USE_BVH
+        float min_dist = ray_intersect_bvh(ray, shapes, nodes, bvhs, visitor, min_index, node_num, min_dist);
+#else   // RENDERER_USE_BVH
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
             // memory copy to shared memory
@@ -197,13 +254,13 @@ CPT_KERNEL static void render_pt_kernel(
 
             // huge bug
             if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-#ifdef USE_SOA
+    #ifdef USE_SOA
                 cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
                 cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
                 cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
-#else
+    #else
                 cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
-#endif
+    #endif
                 s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
             }
             pipe.producer_commit();
@@ -213,7 +270,7 @@ CPT_KERNEL static void render_pt_kernel(
             min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, min_dist);
             __syncthreads();
         }
-
+#endif  // RENDERER_USE_BVH
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
             extract.set_index(min_index);
@@ -247,7 +304,13 @@ CPT_KERNEL static void render_pt_kernel(
             shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
 
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
-            if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)) {
+            if (emitter != c_emitter[0] &&
+#ifdef RENDERER_USE_BVH
+            occlusion_test_bvh(shadow_ray, shapes, nodes, bvhs, visitor, node_num, emit_len_mis - EPSILON)
+#else   // RENDERER_USE_BVH
+            occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+#endif  // RENDERER_USE_BVH
+            ) {
                 // MIS for BSDF / light sampling, to achieve better rendering
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
                 emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
@@ -284,6 +347,7 @@ protected:
     ObjInfo* obj_info;
     int*    prim2obj;
     int num_objs;
+    int num_nodes;
     int num_emitter;
 
     LinearBVH* lin_bvhs;
@@ -307,14 +371,19 @@ public:
         const ArrayType<Vec2>& _uvs,
         int num_emitter
     ): TracerBase(scene.shapes, _verts, _norms, _uvs, scene.config.width, scene.config.height), 
-        num_objs(scene.objects.size()), num_emitter(num_emitter), lin_bvhs(nullptr), lin_nodes(nullptr)
+        num_objs(scene.objects.size()), num_nodes(-1), num_emitter(num_emitter), lin_bvhs(nullptr), lin_nodes(nullptr)
     {
         // TODO: export BVH here, if the scene BVH is available
+#ifdef RENDERER_USE_BVH
         if (scene.bvh_available()) {
             CUDA_CHECK_RETURN(cudaMallocManaged(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
             CUDA_CHECK_RETURN(cudaMallocManaged(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
             scene.export_bvh(lin_bvhs, lin_nodes);
+            num_nodes = scene.lin_nodes.size();
+        } else {
+            throw std::runtime_error("BVH not available in scene. Abort.");
         }
+#endif  // RENDERER_USE_BVH
 
         CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
@@ -332,12 +401,12 @@ public:
     virtual ~PathTracer() {
         CUDA_CHECK_RETURN(cudaFree(obj_info));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
-        if (lin_bvhs) {
+#ifdef RENDERER_USE_BVH
+        if (lin_bvhs)
             CUDA_CHECK_RETURN(cudaFree(lin_bvhs));
-        }
-        if (lin_nodes) {
+        if (lin_nodes)
             CUDA_CHECK_RETURN(cudaFree(lin_nodes));
-        }
+#endif  // RENDERER_USE_BVH
     }
 
     virtual CPT_CPU std::vector<uint8_t> render(
@@ -350,8 +419,8 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
-                *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth
+                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, lin_nodes, lin_bvhs,
+                *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth, num_nodes
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
             printProgress(i, num_iter);

@@ -109,6 +109,11 @@ public:
         beg = aabb.base();
         end = beg + aabb.prim_cnt();
     }
+
+    CPT_GPU_INLINE void export_to(LinearNode& node) const noexcept {
+        node.aabb.copy_from(aabb);
+        node.all_offset = all_offset;
+    }
 };
 
 class LinearBVH {
