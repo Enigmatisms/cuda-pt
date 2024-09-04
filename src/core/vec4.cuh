@@ -16,6 +16,11 @@ private:
     float4 _data;
 public:
     CPT_CPU_GPU Vec4() {}
+
+    CPT_CPU_GPU
+    Vec4(float _v): 
+        _data(make_float4(_v, _v, _v, _v)) {}
+
     CPT_CPU_GPU
     Vec4(float _x, float _y, float _z, float _w = 1): 
         _data(make_float4(_x, _y, _z, _w)) {}
@@ -157,7 +162,7 @@ public:
     }
 };
 
-CPT_CPU_GPU void print_Vec4(const Vec4& obj) {
+CPT_CPU_GPU_INLINE void print_Vec4(const Vec4& obj) {
     printf("[%f, %f, %f, %f]\n", obj.x(), obj.y(), obj.z(), obj.w());
 }
 

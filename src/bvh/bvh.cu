@@ -8,11 +8,12 @@
 
 #include <algorithm>
 #include <numeric>
+#include <array>
 #include "bvh.cuh"
 
-using IntPair = std::pair<int, int>;
+using IntPair = std::pair<int, bool>;
 
-static constexpr int num_bins = 16;
+static constexpr int num_bins = 12;
 static constexpr float traverse_cost = 0.4;
 static constexpr float max_node_prim = 1;
 
@@ -65,9 +66,10 @@ void create_bvh_info(
     const std::vector<Vec3>& points3,
     const std::vector<IntPair>& idxs, std::vector<BVHInfo>& bvh_infos) {
     bvh_infos.reserve(points1.size());
+    printf("Point1 size: %lu, idx pair size: %lu\n", points1.size(), points2.size());
     for (size_t i = 0; i < points1.size(); i++) {
         const IntPair& idx_info = idxs[i];
-        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.first, idx_info.second > 0);
+        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.first, idx_info.second);
     }
 }
 
@@ -80,6 +82,7 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
     // Step 1: decide the axis that expands the maximum extent of space
     std::vector<float> bins;        // bins: from (start_pos + interval) to end_pos
     SplitAxis max_axis = cur_node->max_extent_axis(bvh_infos, bins);
+    printf("Max extend axis: %d, %d\n", max_axis, prim_num);
     if (cur_node->prim_num > 4) {   // SAH
 
         // Step 2: binning the space
@@ -127,7 +130,7 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
             fwd_bound += idx_bins[i].bound;
         for (int i = num_bins - 1; i > seg_bin_idx; i--)
             bwd_bound += idx_bins[i].bound;
-    } else {                                    // equal primitive number
+    } else {                                    // equal primitive number split (two nodes have identical primitives)
         int seg_idx = (base + max_pos) >> 1;
         // Step 5: reordering the BVH info in the vector to make the segment contiguous (keep around half of the bvh in lchild)
         std::nth_element(bvh_infos.begin() + base, bvh_infos.begin() + seg_idx, bvh_infos.begin() + max_pos,
@@ -155,32 +158,32 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
         cur_node->axis = max_axis;
         // Step 7: start recursive splitting for the children
         int node_num = 1;
-        if (depth == 0) {
-            int local_node_n1 = 0, local_node_n2 = 0;
-            #pragma omp parallel sections       // parallel SAH-BVH
-            {
-                #pragma omp section 
-                {
-                    if (cur_node->lchild->prim_num > max_node_prim)
-                        local_node_n1 = recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
-                    else local_node_n1 = 1;
-                }
-                #pragma omp section 
-                {
-                    if (cur_node->rchild->prim_num > max_node_prim)
-                        local_node_n2 = recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
-                    else local_node_n2 = 1;
-                }
-            }
-            node_num = local_node_n1 + local_node_n2 + 1;
-        } else {
+        // if (depth == 0) {
+        //     int local_node_n1 = 0, local_node_n2 = 0;
+        //     #pragma omp parallel sections       // parallel SAH-BVH
+        //     {
+        //         #pragma omp section 
+        //         {
+        //             if (cur_node->lchild->prim_num > max_node_prim)
+        //                 local_node_n1 = recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
+        //             else local_node_n1 = 1;
+        //         }
+        //         #pragma omp section 
+        //         {
+        //             if (cur_node->rchild->prim_num > max_node_prim)
+        //                 local_node_n2 = recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
+        //             else local_node_n2 = 1;
+        //         }
+        //     }
+        //     node_num = local_node_n1 + local_node_n2 + 1;
+        // } else {
             if (cur_node->lchild->prim_num > max_node_prim)
                 node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
             else node_num ++;
             if (cur_node->rchild->prim_num > max_node_prim)
                 node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
             else node_num ++;
-        }
+        // }
         return node_num;
     } else {
         // This is a leaf node, yet this is the only way that a leaf node contains more than one primitive
@@ -191,6 +194,10 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
 
 static BVHNode* bvh_root_start(const Vec3& world_min, const Vec3& world_max, int& node_num, std::vector<BVHInfo>& bvh_infos) {
     // Build BVH tree root node and start recursive tree construction
+    printf("World min: ");
+    print_vec3(world_min);
+    printf("World max: ");
+    print_vec3(world_max);
     BVHNode* root_node = new BVHNode(0, bvh_infos.size());
     root_node->bound.mini = world_min;
     root_node->bound.maxi = world_max;
@@ -214,6 +221,7 @@ static int recursive_linearize(BVHNode* cur_node, std::vector<LinearNode>& lin_n
         lin_nodes[current_size].all_offset = lnodes + 1;
         return lnodes + 1;                      // include the cur_node                       
     } else {
+        printf("Lin node size: %lu. Recursive End.\n", lin_nodes.size());
         lin_nodes.back().all_offset = 1;        // to skip the current sub-tree, index should just add 1
         return 1;
     }

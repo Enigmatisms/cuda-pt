@@ -20,6 +20,10 @@ public:
     Vec3(float _x, float _y, float _z): 
         _data(make_float3(_x, _y, _z)) {}
 
+    CPT_CPU_GPU
+    Vec3(float _v): 
+        _data(make_float3(_v, _v, _v)) {}
+
     CPT_CPU_GPU_INLINE 
     float& operator[](int index) {
         return *((&_data.x) + index);
@@ -192,7 +196,7 @@ public:
     float min_elem() const noexcept { return fminf(_data.x, fminf(_data.y, _data.z)); }
 };
 
-CPT_CPU_GPU void print_vec3(const Vec3& obj) {
+CPT_CPU_GPU_INLINE void print_vec3(const Vec3& obj) {
     printf("[%f, %f, %f]\n", obj.x(), obj.y(), obj.z());
 }
 

@@ -7,7 +7,6 @@
 
 #pragma once
 #include <algorithm>
-#include "core/shapes.cuh"
 #include "core/object.cuh"
 #include "core/constants.cuh"
 

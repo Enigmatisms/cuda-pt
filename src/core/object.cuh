@@ -4,9 +4,9 @@
  * @author: Qianyue He
 */
 #pragma once
-#include "core/bsdf.cuh"
+#include <array>
 #include "core/aos.cuh"
-#include "core/shapes.cuh"
+#include "core/aabb.cuh"
 
 class ObjInfo {
 private:
@@ -70,6 +70,7 @@ public:
         if (is_polygon)
             inv_area *= 0.5f;
         inv_area = 1.f / inv_area;
+        
     }
 
     CPT_CPU_GPU_INLINE int sample_emitter_primitive(uint32_t sample, float& pdf) const {
@@ -83,7 +84,8 @@ public:
 
     CPT_CPU_GPU_INLINE bool is_emitter() const noexcept { return this->emitter_id > 0; }
     CPT_CPU_GPU ObjInfo(int bsdf_id, int prim_off, int prim_num, uint8_t emitter_id = 0):
-        bsdf_id(bsdf_id), prim_offset(prim_off), prim_num(prim_num), emitter_id(emitter_id)
+        _aabb(1e5, 1e-5, -1, -1), bsdf_id(bsdf_id), 
+        prim_offset(prim_off), prim_num(prim_num), emitter_id(emitter_id)
     {}
 
     CPT_CPU void export_bound(Vec3& mini, Vec3& maxi) const noexcept {

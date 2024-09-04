@@ -5,11 +5,10 @@
 */
 #pragma once
 #include <vector>
-#include "core/cuda_utils.cuh"
-#include "core/vec4.cuh"
 #include <vector_types.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#include "core/vec4.cuh"
 
 template <typename Ty>
 std::decay_t<Ty>* to_gpu(Ty&& object) {

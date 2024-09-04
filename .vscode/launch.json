@@ -8,7 +8,7 @@
             "name": "(gdb) pt_test",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/pt",
+            "program": "${workspaceFolder}/build/Debug/pt.exe",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}//build/Debug/",
             "args": ["../../scene/xml/cornell-box.xml"],

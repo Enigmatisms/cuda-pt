@@ -12,6 +12,11 @@ private:
     float2 _data;
 public:
     CPT_CPU_GPU Vec2() {}
+
+    CPT_CPU_GPU
+    Vec2(float _v): 
+        _data(make_float2(_v, _v)) {}
+
     CPT_CPU_GPU
     Vec2(float _x, float _y): 
         _data(make_float2(_x, _y)) {}
@@ -113,6 +118,6 @@ public:
     float min_elem() const noexcept { return min(_data.x, _data.y); }
 };
 
-CPT_CPU_GPU void print_vec2(const Vec2& obj) {
+CPT_CPU_GPU_INLINE void print_vec2(const Vec2& obj) {
     printf("[%f, %f]\n", obj.x(), obj.y());
 }

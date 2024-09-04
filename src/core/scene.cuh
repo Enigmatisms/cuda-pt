@@ -524,14 +524,15 @@ public:
         if (use_bvh) {
             printf("[BVH] Linear SAH-BVH is being built...\n");
             Vec3 world_min(1e4, 1e4, 1e4), world_max(-1e4, -1e4, -1e4);
-            for (const auto& obj: objects)
+            for (const auto& obj: objects) {
                 obj.export_bound(world_min, world_max);
+            }
             
-            // TODO: timer here
             bvh_build(
                 verts_list[0], verts_list[1], verts_list[2], 
                 objects, sphere_objs, world_min, world_max, lin_bvhs, lin_nodes
             );
+            printf("[BVH] BVH completed. Total nodes: %lu, leaves: %lu\n", lin_nodes.size(), lin_bvhs.size());
         }
     }
 

@@ -5,6 +5,7 @@
 */
 #pragma once
 #include "core/aos.cuh"
+#include "core/bsdf.cuh"
 #include "core/shapes.cuh"
 #include "core/object.cuh"
 #include "core/host_device.cuh"
