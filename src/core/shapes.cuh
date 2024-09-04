@@ -128,7 +128,7 @@ public:
     }
 
     CPT_CPU_GPU_INLINE void set_index(int i)        noexcept { this->index = i; }
-    CPT_CPU_GPU_INLINE void set_max_range(int max_r) noexcept { this->max_range = max_r; }
+    CPT_CPU_GPU_INLINE void set_max_range(float max_r) noexcept { this->max_range = max_r; }
 };
 
 class ShapeExtractVisitor {

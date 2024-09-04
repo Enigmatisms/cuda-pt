@@ -17,7 +17,7 @@ struct BVHInfo {
     AABB bound;
     Vec3 centroid;
 
-    BVHInfo(): bound(), centroid() {}
+    BVHInfo(): bound(1e5f, -1e5f, 0, 0), centroid() {}
     BVHInfo(const Vec3& p1, const Vec3& p2, const Vec3& p3, 
             int prim_idx, int obj_idx, bool is_sphere = false)
     {
@@ -38,7 +38,7 @@ struct AxisBins {
     AABB bound;
     int prim_cnt;
 
-    AxisBins(): prim_cnt(0.f) {}
+    AxisBins(): bound(1e5f, -1e5f, 0, 0), prim_cnt(0) {}
 
     void push(const BVHInfo& bvh) {
         bound += bvh.bound;
@@ -48,19 +48,22 @@ struct AxisBins {
 
 class BVHNode {
 public:
-    BVHNode(): base(0), prim_num(0), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
-    BVHNode(int base, int prim_num): base(base), prim_num(prim_num), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
+    BVHNode(): bound(1e5f, -1e5f, 0, 0), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
+    BVHNode(int base, int prim_num): bound(1e5f, -1e5f, base, prim_num), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
     ~BVHNode() {
         if (lchild != nullptr) delete lchild;
         if (rchild != nullptr) delete rchild;
     }
+
+    CPT_CPU_GPU int base() const { return bound.base(); }
+    CPT_CPU_GPU int& base() { return bound.base(); }
+
+    CPT_CPU_GPU int prim_num() const { return bound.prim_cnt(); }
+    CPT_CPU_GPU int& prim_num() { return bound.prim_cnt(); }
 public:
     // The axis start and end are scaled up a little bit
     SplitAxis max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const;
 public:
-    int base;
-    int prim_num;
-
     AABB bound;
     SplitAxis axis;
     BVHNode *lchild, *rchild;
@@ -91,33 +94,27 @@ public:
  */
 class LinearNode {
 public:
-    CPT_CPU_GPU LinearNode(): aabb(0, 0) {}
+    CPT_CPU_GPU LinearNode(): aabb(1e5f, -1e5f, 0, 0) {}
 
     // linear nodes are initialized during DFS binary tree traversal
-    CPT_CPU_GPU LinearNode(const BVHNode *const bvh): aabb(bvh->bound.mini, bvh->bound.maxi, bvh->base, bvh->prim_num) {};       
+    CPT_CPU_GPU LinearNode(const BVHNode *const bvh): aabb(bvh->bound.mini, bvh->bound.maxi, bvh->base(), bvh->prim_num()) {};       
 public:
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
     AABB aabb;
-    int all_offset;             // indicate the rchild pos and the offset to the next node
-
-    CPT_CPU_GPU_INLINE bool is_leaf() const noexcept {
-        return all_offset == 1;
-    }
 
     CPT_CPU_GPU_INLINE void get_range(int& beg, int& end) const noexcept {
         beg = aabb.base();
         end = beg + aabb.prim_cnt();
     }
 
-    CPT_GPU_INLINE void export_to(LinearNode& node) const noexcept {
+    CPT_GPU_INLINE void export_aabb(LinearNode& node) const noexcept {
         node.aabb.copy_from(aabb);
-        node.all_offset = all_offset;
     }
 };
 
 class LinearBVH {
 public:
-    CPT_CPU_GPU LinearBVH(): aabb() {}
+    CPT_CPU_GPU LinearBVH(): aabb(1e5f, -1e5f, 0, 0) {}
     CPT_CPU_GPU LinearBVH(const BVHInfo& bvh): aabb(bvh.bound) {}
 public:
     // compressed linear BVH
@@ -136,5 +133,7 @@ void bvh_build(
     const std::vector<ObjInfo>& objects,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
-    std::vector<LinearBVH>& lin_bvhs, std::vector<LinearNode>& lin_nodes
+    std::vector<LinearBVH>& lin_bvhs, 
+    std::vector<LinearNode>& lin_nodes,
+    std::vector<int>& node_offsets
 );

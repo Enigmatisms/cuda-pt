@@ -388,6 +388,7 @@ public:
     std::vector<Shape> shapes;
     std::vector<LinearBVH> lin_bvhs;
     std::vector<LinearNode> lin_nodes;
+    std::vector<int> node_offsets;
 
     std::array<Vec3Arr, 3> verts_list;
     std::array<Vec3Arr, 3> norms_list;
@@ -529,9 +530,14 @@ public:
             }
             
             bvh_build(
-                verts_list[0], verts_list[1], verts_list[2], 
-                objects, sphere_objs, world_min, world_max, lin_bvhs, lin_nodes
+                verts_list[0], verts_list[1], verts_list[2], objects, 
+                sphere_objs, world_min, world_max, lin_bvhs, lin_nodes, node_offsets
             );
+            for (const auto& bvh: lin_bvhs) {
+                int obj_idx, prim_idx;
+                bvh.get_info(obj_idx, prim_idx);
+                printf("BVH: %d, %d\n", obj_idx, prim_idx);
+            }
             printf("[BVH] BVH completed. Total nodes: %lu, leaves: %lu\n", lin_nodes.size(), lin_bvhs.size());
         }
     }
@@ -550,13 +556,8 @@ public:
         uvs.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
     }
 
-    void export_bvh(LinearBVH* bvhs, LinearNode* nodes) const {
-        CUDA_CHECK_RETURN(cudaMemcpyAsync(bvhs, lin_bvhs.data(), sizeof(LinearBVH) * lin_bvhs.size(), cudaMemcpyHostToDevice));
-        CUDA_CHECK_RETURN(cudaMemcpyAsync(nodes, lin_nodes.data(), sizeof(LinearNode) * lin_nodes.size(), cudaMemcpyHostToDevice));
-    }
-
     bool bvh_available() const noexcept {
-        return !lin_bvhs.empty() && !lin_nodes.empty();
+        return !lin_bvhs.empty() && !lin_nodes.empty() && (lin_nodes.size() == node_offsets.size());
     }
 
     void print() const noexcept {

@@ -27,7 +27,7 @@ public:
     CPT_CPU_GPU AABB(float min_v, float max_v, int p1, int p2): 
         mini(min_v), __bytes1(p1), maxi(max_v), __bytes2(p2) {}
 
-    template <typename V1Type, typename V2Type>
+    CONDITION_TEMPLATE_2(V1Type, V2Type, Vec3)
     CPT_CPU_GPU AABB(V1Type&& _mini, V2Type&& _maxi, int _prim_idx = -1, int _obj_idx = -1):
         mini(std::forward<V1Type>(_mini)), __bytes1(_prim_idx), 
         maxi(std::forward<V2Type>(_maxi)), __bytes2(_obj_idx) {}

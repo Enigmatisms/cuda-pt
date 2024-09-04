@@ -58,43 +58,42 @@ CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
     ConstShapePtr shapes,
     ConstNodePtr  nodes,    // tree nodes
+    ConstIndexPtr offsets,    // tree nodes
     ConstBVHPtr   bvhs,     // leaf
-    ShapeIntersectVisitor& shape_visitor,
+    const ArrayType<Vec3>& verts,
     const int node_num,
     float max_dist
 ) {
     int node_idx = 0;
     float aabb_tmin = 0;
     // There can be much control flow divergence, not good
+    ShapeIntersectVisitor shape_visitor(verts, ray, 0, max_dist);
     while (node_idx < node_num) {
         LinearNode node;
-        nodes[node_idx].export_to(node);
-        bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
-        if (!intersect_node) {
-            node_idx += node.all_offset;
-            continue;
-        }
-        if (node.is_leaf()) {
+        nodes[node_idx].export_aabb(node);
+        int all_offset = offsets[node_idx];
+        // bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
+        // if (!intersect_node) {
+        //     node_idx += all_offset;
+        //     continue;
+        // }
+        if (all_offset == 1) {
             int beg_idx = 0, end_idx = 0;
-            BitMask tasks = 0;
             node.get_range(beg_idx, end_idx);
-            for (int idx = beg_idx; idx < end_idx; idx ++) {
+            for (int idx = 0; idx < 36; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                BitMask valid_intr = bvhs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
-                tasks |= valid_intr << (BitMask)(idx - beg_idx);
-            }
-            while (tasks) {
-                BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
-                tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
-                const auto& bvh = bvhs[beg_idx + idx];
-                int obj_idx = 0, prim_idx = 0;
-                bvh.get_info(obj_idx, prim_idx);
-                // we might not need an obj_idx stored in shapes, if we use BVH 
-                float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
-                if (dist < max_dist && dist > EPSILON)
+                // if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
+                    const auto& bvh = bvhs[idx];
+                    int obj_idx = 0, prim_idx = 0;
+                    bvh.get_info(obj_idx, prim_idx);
+                    shape_visitor.set_index(idx);
+                    float dist = variant::apply_visitor(shape_visitor, shapes[idx]);
+                    if (dist > EPSILON && dist < max_dist)
                         return false;
+                // }
             }
         }
+        node_idx ++;
     }
     return true;
 }
@@ -119,6 +118,7 @@ CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
     ConstShapePtr shapes,
     ConstNodePtr  nodes,    // tree nodes
+    ConstIndexPtr offsets,    // tree nodes
     ConstBVHPtr   bvhs,     // leaf
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
@@ -130,34 +130,36 @@ CPT_GPU float ray_intersect_bvh(
     // There can be much control flow divergence, not good
     while (node_idx < node_num) {
         LinearNode node;
-        nodes[node_idx].export_to(node);
-        bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
-        if (!intersect_node) {
-            node_idx += node.all_offset;
-            continue;
-        }
-        if (node.is_leaf()) {
+        nodes[node_idx].export_aabb(node);
+        int all_offset = offsets[node_idx];
+        // bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        // if (!intersect_node) {
+        //     node_idx += 1;
+        //     continue;
+        // }
+        if (all_offset == 1) {                  // all_offset = 1, means the current node is leaf
             int beg_idx = 0, end_idx = 0;
-            BitMask tasks = 0;
             node.get_range(beg_idx, end_idx);
-            for (int idx = beg_idx; idx < end_idx; idx ++) {
+            // printf("Beg: %d, End: %d\n", beg_idx, end_idx);
+            for (int idx = 0; idx < 36; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                BitMask valid_intr = bvhs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
-                tasks |= valid_intr << (BitMask)(idx - beg_idx);
-            }
-            while (tasks) {
-                BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
-                tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
-                const auto& bvh = bvhs[beg_idx + idx];
-                int obj_idx = 0, prim_idx = 0;
-                bvh.get_info(obj_idx, prim_idx);
-                // we might not need an obj_idx stored in shapes, if we use BVH 
-                float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
-                bool valid = dist > EPSILON && dist < min_dist;
-                min_dist = valid ? dist : min_dist;
-                min_index = valid ? prim_idx : min_index;
+                // if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
+                    const auto& bvh = bvhs[idx];
+                    int obj_idx = 0, prim_idx = 0;
+                    bvh.get_info(obj_idx, prim_idx);
+                    // we might not need an obj_idx stored in shapes, if we use BVH 
+                    shape_visitor.set_index(idx);
+                    float dist = variant::apply_visitor(shape_visitor, shapes[idx]);
+                    if (prim_idx != 0) {
+                        printf("node_idx: %d, bvh: %d, Obj: %d, prim: %d, dist: %f, min: %f\n", node_idx, idx, obj_idx, prim_idx, dist, min_dist);
+                    }
+                    bool valid = dist > EPSILON && dist < min_dist;
+                    min_dist = valid ? dist : min_dist;
+                    min_index = valid ? idx : min_index;
+                // }
             }
         }
+        node_idx ++;
     }
     return min_dist;
 }
@@ -202,6 +204,7 @@ CPT_KERNEL static void render_pt_kernel(
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
     ConstNodePtr nodes,
+    ConstIndexPtr offsets,
     ConstBVHPtr bvhs,
     DeviceImage& image,
     int num_prims,
@@ -232,6 +235,7 @@ CPT_KERNEL static void render_pt_kernel(
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
     ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
     ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
@@ -243,7 +247,7 @@ CPT_KERNEL static void render_pt_kernel(
         min_index = -1;
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
-        min_dist = ray_intersect_bvh(ray, shapes, nodes, bvhs, visitor, min_index, node_num, min_dist);
+        min_dist = ray_intersect_bvh(ray, shapes, nodes, offsets, bvhs, visitor, min_index, node_num, min_dist);
 #else   // RENDERER_USE_BVH
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
@@ -305,7 +309,8 @@ CPT_KERNEL static void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, shapes, nodes, bvhs, visitor, node_num, emit_len_mis - EPSILON)
+            
+            occlusion_test_bvh(shadow_ray, shapes, nodes, offsets, bvhs, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -351,6 +356,7 @@ protected:
 
     LinearBVH* lin_bvhs;
     LinearNode* lin_nodes;
+    int* node_offsets;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -370,15 +376,21 @@ public:
         const ArrayType<Vec2>& _uvs,
         int num_emitter
     ): TracerBase(scene.shapes, _verts, _norms, _uvs, scene.config.width, scene.config.height), 
-        num_objs(scene.objects.size()), num_nodes(-1), num_emitter(num_emitter), lin_bvhs(nullptr), lin_nodes(nullptr)
+        num_objs(scene.objects.size()), num_nodes(-1), num_emitter(num_emitter), 
+        lin_bvhs(nullptr), lin_nodes(nullptr), node_offsets(nullptr)
     {
         // TODO: export BVH here, if the scene BVH is available
 #ifdef RENDERER_USE_BVH
         if (scene.bvh_available()) {
-            CUDA_CHECK_RETURN(cudaMallocManaged(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
-            CUDA_CHECK_RETURN(cudaMallocManaged(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
-            scene.export_bvh(lin_bvhs, lin_nodes);
+            printf("BVH start to copy.\n");
+            CUDA_CHECK_RETURN(cudaMalloc(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
+            CUDA_CHECK_RETURN(cudaMalloc(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
+            CUDA_CHECK_RETURN(cudaMalloc(&node_offsets, scene.lin_nodes.size() * sizeof(int)));
+            CUDA_CHECK_RETURN(cudaMemcpy(lin_bvhs, scene.lin_bvhs.data(), sizeof(LinearBVH) * scene.lin_bvhs.size(), cudaMemcpyHostToDevice));
+            CUDA_CHECK_RETURN(cudaMemcpy(lin_nodes, scene.lin_nodes.data(), sizeof(LinearNode) * scene.lin_nodes.size(), cudaMemcpyHostToDevice));
+            CUDA_CHECK_RETURN(cudaMemcpy(node_offsets, scene.node_offsets.data(), sizeof(int) * scene.lin_nodes.size(), cudaMemcpyHostToDevice));
             num_nodes = scene.lin_nodes.size();
+            printf("BVH copied.\n");
         } else {
             throw std::runtime_error("BVH not available in scene. Abort.");
         }
@@ -405,6 +417,8 @@ public:
             CUDA_CHECK_RETURN(cudaFree(lin_bvhs));
         if (lin_nodes)
             CUDA_CHECK_RETURN(cudaFree(lin_nodes));
+        if (node_offsets)
+            CUDA_CHECK_RETURN(cudaFree(node_offsets));
 #endif  // RENDERER_USE_BVH
     }
 
@@ -413,12 +427,13 @@ public:
         int max_depth = 4,
         bool gamma_correction = true
     ) override {
+        printf("Rendering starts.\n");
         TicToc _timer("render_pt_kernel()", num_iter);
         // TODO: stream processing
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, lin_nodes, lin_bvhs,
+                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, lin_nodes, node_offsets, lin_bvhs,
                 *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth, num_nodes
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());

@@ -14,29 +14,32 @@
 using IntPair = std::pair<int, bool>;
 
 static constexpr int num_bins = 12;
-static constexpr float traverse_cost = 0.4;
-static constexpr float max_node_prim = 1;
+static constexpr int max_node_prim = 1;
+static constexpr float traverse_cost = 0.1;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const {
-    Vec3 min_ctr = bvhs[base].centroid, max_ctr = bvhs[base].centroid;
-    for (int i = 1; i < prim_num; i++) {
-        Vec3 ctr = bvhs[base + i].centroid;
+    int _base = base(), _prim_num = prim_num();
+    Vec3 min_ctr = bvhs[_base].centroid, max_ctr = bvhs[_base].centroid;
+    for (int i = 1; i < _prim_num; i++) {
+        Vec3 ctr = bvhs[_base + i].centroid;
         min_ctr.minimized(ctr);
         max_ctr.maximized(ctr);
     }
     Vec3 diff = max_ctr - min_ctr;
-    float max_diff = diff.x();
+    float max_diff = diff.x(), min_r = min_ctr[0] - 0.001f;
     int split_axis = 0;
     if (diff.y() > max_diff) {
         max_diff = diff.y();
         split_axis = 1;
+        min_r = min_ctr[1] - 0.001f;
     }
     if (diff.z() > max_diff) {
         max_diff = diff.z();
         split_axis = 2;
+        min_r = min_ctr[2] - 0.001f;
     }
     bins.resize(num_bins);
-    float min_r = min_ctr[split_axis] - 0.001f, interval = (max_diff + 0.002f) / float(num_bins);
+    float interval = (max_diff + 0.002f) / float(num_bins);
     std::transform(bins.begin(), bins.end(), bins.begin(), [min_r, interval, i = 0] (const float&) mutable {
         i++; return min_r + interval * float(i);
     });
@@ -55,6 +58,9 @@ void index_input(
     for (size_t i = 0; i < result_shape; i++) {
         const int prim_num = objs[i].prim_num;
         const bool sphere_flag = sphere_flags[i];
+        // FIXME: index_input primitive idx not emplaced.
+        // The error is caused by bvh.cuh line 31, int prim_idx, int obj_idx, bool is_sphere = false
+        // we feed object idx to prim_idx, and is_sphere to obj_idx, not good
         for (int j = 0; j < prim_num; j++)
             idxs.emplace_back(static_cast<int>(i), sphere_flag);
     }
@@ -66,7 +72,6 @@ void create_bvh_info(
     const std::vector<Vec3>& points3,
     const std::vector<IntPair>& idxs, std::vector<BVHInfo>& bvh_infos) {
     bvh_infos.reserve(points1.size());
-    printf("Point1 size: %lu, idx pair size: %lu\n", points1.size(), points2.size());
     for (size_t i = 0; i < points1.size(); i++) {
         const IntPair& idx_info = idxs[i];
         bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.first, idx_info.second);
@@ -74,20 +79,19 @@ void create_bvh_info(
 }
 
 int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, int depth = 0) {
-    AABB fwd_bound, bwd_bound;
+    AABB fwd_bound(1e5f, -1e5f, 0, 0), bwd_bound(1e5f, -1e5f, 0, 0);
     int child_prim_cnt = 0;                // this index is used for indexing variable `bins`
-    const int prim_num = cur_node->prim_num, base = cur_node->base, max_pos = base + prim_num;
-    float min_cost = 5e9, node_prim_cnt = float(prim_num), node_inv_area = 1. / cur_node->bound.area();
+    const int prim_num = cur_node->prim_num(), base = cur_node->base(), max_pos = base + prim_num;
+    float min_cost = 5e9f, node_prim_cnt = float(prim_num), node_inv_area = 1. / cur_node->bound.area();
 
     // Step 1: decide the axis that expands the maximum extent of space
     std::vector<float> bins;        // bins: from (start_pos + interval) to end_pos
     SplitAxis max_axis = cur_node->max_extent_axis(bvh_infos, bins);
-    printf("Max extend axis: %d, %d\n", max_axis, prim_num);
-    if (cur_node->prim_num > 4) {   // SAH
+    if (prim_num > 4) {   // SAH
 
         // Step 2: binning the space
         std::array<AxisBins, num_bins> idx_bins;
-        for (int i = cur_node->base; i < max_pos; i++) {
+        for (int i = base; i < max_pos; i++) {
             size_t index = std::lower_bound(bins.begin(), bins.end(), bvh_infos[i].centroid[max_axis]) - bins.begin();
             idx_bins[index].push(bvh_infos[i]);
         }
@@ -153,8 +157,10 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
         cur_node->lchild = new BVHNode(base, child_prim_cnt);
         cur_node->rchild = new BVHNode(base + child_prim_cnt, prim_num - child_prim_cnt);
 
-        cur_node->lchild->bound = fwd_bound;
-        cur_node->rchild->bound = bwd_bound;
+        cur_node->lchild->bound.mini = fwd_bound.mini;
+        cur_node->lchild->bound.maxi = fwd_bound.maxi;
+        cur_node->rchild->bound.mini = bwd_bound.mini;
+        cur_node->rchild->bound.maxi = bwd_bound.maxi;
         cur_node->axis = max_axis;
         // Step 7: start recursive splitting for the children
         int node_num = 1;
@@ -177,10 +183,10 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
         //     }
         //     node_num = local_node_n1 + local_node_n2 + 1;
         // } else {
-            if (cur_node->lchild->prim_num > max_node_prim)
+            if (cur_node->lchild->prim_num() > max_node_prim)
                 node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
             else node_num ++;
-            if (cur_node->rchild->prim_num > max_node_prim)
+            if (cur_node->rchild->prim_num() > max_node_prim)
                 node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
             else node_num ++;
         // }
@@ -194,9 +200,9 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
 
 static BVHNode* bvh_root_start(const Vec3& world_min, const Vec3& world_max, int& node_num, std::vector<BVHInfo>& bvh_infos) {
     // Build BVH tree root node and start recursive tree construction
-    printf("World min: ");
+    printf("[BVH] World min: ");
     print_vec3(world_min);
-    printf("World max: ");
+    printf("[BVH] World max: ");
     print_vec3(world_max);
     BVHNode* root_node = new BVHNode(0, bvh_infos.size());
     root_node->bound.mini = world_min;
@@ -206,7 +212,11 @@ static BVHNode* bvh_root_start(const Vec3& world_min, const Vec3& world_max, int
 }
 
 // This is the final function call for `bvh_build`
-static int recursive_linearize(BVHNode* cur_node, std::vector<LinearNode>& lin_nodes) {
+static int recursive_linearize(
+    BVHNode* cur_node, 
+    std::vector<LinearNode>& lin_nodes,
+    std::vector<int>& node_offsets
+) {
     // BVH tree should be linearized to better traverse and fit in the system memory
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
     // Note that if rchild_offset is -1, then the node is leaf. Leaf node points to primitive array
@@ -214,15 +224,15 @@ static int recursive_linearize(BVHNode* cur_node, std::vector<LinearNode>& lin_n
     // Note that lin_nodes has been reserved
     size_t current_size = lin_nodes.size();
     lin_nodes.emplace_back(cur_node);
+    node_offsets.emplace_back(0);
     if (cur_node->lchild != nullptr) {
         // TODO: parallel linearize
-        int lnodes = recursive_linearize(cur_node->lchild, lin_nodes);
-        lnodes += recursive_linearize(cur_node->rchild, lin_nodes);
-        lin_nodes[current_size].all_offset = lnodes + 1;
+        int lnodes = recursive_linearize(cur_node->lchild, lin_nodes, node_offsets);
+        lnodes += recursive_linearize(cur_node->rchild, lin_nodes, node_offsets);
+        node_offsets[current_size] = lnodes + 1;
         return lnodes + 1;                      // include the cur_node                       
     } else {
-        printf("Lin node size: %lu. Recursive End.\n", lin_nodes.size());
-        lin_nodes.back().all_offset = 1;        // to skip the current sub-tree, index should just add 1
+        node_offsets.back() = 1;        // to skip the current sub-tree, index should just add 1
         return 1;
     }
 }
@@ -235,17 +245,26 @@ void bvh_build(
     const std::vector<ObjInfo>& objects,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
-    std::vector<LinearBVH>& lin_bvhs, std::vector<LinearNode>& lin_nodes
+    std::vector<LinearBVH>& lin_bvhs, 
+    std::vector<LinearNode>& lin_nodes,
+    std::vector<int>& node_offsets
 ) {
     std::vector<IntPair> idx_prs;
     std::vector<BVHInfo> bvh_infos;
     int node_num = 0, num_prims_all = points1.size();
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
     create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
+    for (const BVHInfo& bvh: bvh_infos) {
+        printf("BVHInfo: %d, %d\n", bvh.bound.base(), bvh.bound.prim_cnt());
+        // lin_bvhs.emplace_back(bvh);
+    }
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos);
-    recursive_linearize(root_node, lin_nodes);
+    lin_nodes.reserve(64);
+    node_offsets.reserve(64);
+    recursive_linearize(root_node, lin_nodes, node_offsets);
     lin_bvhs.reserve(bvh_infos.size());
     for (const BVHInfo& bvh: bvh_infos) {
+        printf("BVHInfo: %d, %d\n", bvh.bound.base(), bvh.bound.prim_cnt());
         lin_bvhs.emplace_back(bvh);
     }
     delete root_node;
