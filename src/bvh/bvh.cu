@@ -11,7 +11,7 @@
 #include <array>
 #include "bvh.cuh"
 
-using IntPair = std::pair<int, bool>;
+using IntPair = std::pair<int, int>;
 
 static constexpr int num_bins = 12;
 static constexpr int max_node_prim = 1;
@@ -55,14 +55,16 @@ void index_input(
     // the number of primitive / whether the primitive is sphere will be stored, the index will be object id
     size_t result_shape = objs.size();      // shape is (3, obj_num)
     idxs.reserve(num_primitives);                   // accumulate(num_ptr, num_ptr + result_shape) = num_primitives
+    int prim_num = 0;
     for (size_t i = 0; i < result_shape; i++) {
-        const int prim_num = objs[i].prim_num;
-        const bool sphere_flag = sphere_flags[i];
-        // FIXME: index_input primitive idx not emplaced.
-        // The error is caused by bvh.cuh line 31, int prim_idx, int obj_idx, bool is_sphere = false
-        // we feed object idx to prim_idx, and is_sphere to obj_idx, not good
-        for (int j = 0; j < prim_num; j++)
-            idxs.emplace_back(static_cast<int>(i), sphere_flag);
+        int local_num = objs[i].prim_num;
+        int obj_id = static_cast<int>(i);
+        if (sphere_flags[i])
+            obj_id = -obj_id;
+        for (int j = 0; j < local_num; j++) {
+            idxs.emplace_back(j + prim_num, obj_id);
+        }
+        prim_num += local_num;
     }
 }
 
@@ -74,7 +76,7 @@ void create_bvh_info(
     bvh_infos.reserve(points1.size());
     for (size_t i = 0; i < points1.size(); i++) {
         const IntPair& idx_info = idxs[i];
-        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.first, idx_info.second);
+        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.first, std::abs(idx_info.second), idx_info.second < 0);
     }
 }
 
