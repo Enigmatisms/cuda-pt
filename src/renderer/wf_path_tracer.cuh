@@ -645,6 +645,9 @@ private:
     using PathTracer::prim2obj;
     using PathTracer::num_objs;
     using PathTracer::num_emitter;
+    using PathTracer::lin_bvhs;
+    using PathTracer::lin_nodes;
+    using PathTracer::node_offsets;
 public:
     /**
      * @param shapes    shape information (for ray intersection)

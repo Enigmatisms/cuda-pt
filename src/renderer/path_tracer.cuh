@@ -11,7 +11,7 @@
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
-// #define RENDERER_USE_BVH
+#define RENDERER_USE_BVH
 
 static constexpr int SEED_SCALER = 11451;
 
@@ -137,10 +137,9 @@ CPT_GPU float ray_intersect_bvh(
             node_idx += all_offset;
             continue;
         }
-        if (all_offset == 1) {                  // all_offset = 1, means the current node is leaf
+        if (all_offset == 1) {
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
-            // printf("Beg: %d, End: %d\n", beg_idx, end_idx);
             for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
                 if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
@@ -150,9 +149,6 @@ CPT_GPU float ray_intersect_bvh(
                     // we might not need an obj_idx stored in shapes, if we use BVH 
                     shape_visitor.set_index(prim_idx);
                     float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
-                    // if (prim_idx != 0) {
-                    //     printf("node_idx: %d, bvh: %d, Obj: %d, prim: %d, dist: %f, min: %f\n", node_idx, idx, obj_idx, prim_idx, dist, min_dist);
-                    // }
                     bool valid = dist > EPSILON && dist < min_dist;
                     min_dist = valid ? dist : min_dist;
                     min_index = valid ? prim_idx : min_index;
@@ -382,7 +378,6 @@ public:
         // TODO: export BVH here, if the scene BVH is available
 #ifdef RENDERER_USE_BVH
         if (scene.bvh_available()) {
-            printf("BVH start to copy.\n");
             CUDA_CHECK_RETURN(cudaMalloc(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
             CUDA_CHECK_RETURN(cudaMalloc(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
             CUDA_CHECK_RETURN(cudaMalloc(&node_offsets, scene.lin_nodes.size() * sizeof(int)));
@@ -390,7 +385,6 @@ public:
             CUDA_CHECK_RETURN(cudaMemcpy(lin_nodes, scene.lin_nodes.data(), sizeof(LinearNode) * scene.lin_nodes.size(), cudaMemcpyHostToDevice));
             CUDA_CHECK_RETURN(cudaMemcpy(node_offsets, scene.node_offsets.data(), sizeof(int) * scene.lin_nodes.size(), cudaMemcpyHostToDevice));
             num_nodes = scene.lin_nodes.size();
-            printf("BVH copied.\n");
         } else {
             throw std::runtime_error("BVH not available in scene. Abort.");
         }

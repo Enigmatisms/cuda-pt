@@ -6,6 +6,7 @@
  * @date:   5.13.2024
 */
 #pragma once
+#include "core/aos.cuh"
 #include "core/vec3.cuh"
 #include "core/vec4.cuh"
 #include "core/sampling.cuh"

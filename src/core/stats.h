@@ -18,7 +18,9 @@ private:
     std::chrono::system_clock::time_point tp;
 public:
     TicToc(std::string name, int n = 1) : name(name), num(n), tp(std::chrono::system_clock::now()) {}
-
+    void tic() {
+        tp = std::chrono::system_clock::now();
+    }
     ~TicToc() {
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();

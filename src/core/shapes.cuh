@@ -61,7 +61,6 @@ public:
 };
 
 class TriangleShape {
-    
 public:
     // TODO: this obj_idx might be deprecated in the future
     int obj_idx;            // object of the current shape

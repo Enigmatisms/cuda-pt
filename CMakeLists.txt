@@ -58,19 +58,19 @@ ENDIF()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-
-
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 include_directories(${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
 
 add_subdirectory(src/ext/tinyxml2)
 add_subdirectory(src/ext/tinyobjloader)
+aux_source_directory(src/impl CUDA_PT_SRC)
 
 set(EXEC1_NAME "depth")
-add_executable(${EXEC1_NAME}
-app/depth_renderer.cu
-src/ext/lodepng/lodepng.cpp
+        add_executable(${EXEC1_NAME}
+        app/depth_renderer.cu
+        src/ext/lodepng/lodepng.cpp
+        ${CUDA_PT_SRC}
 )
 
 target_link_libraries(
@@ -95,7 +95,7 @@ set(EXEC2_NAME "pt")
 add_executable(${EXEC2_NAME}
         app/pt_renderer.cu
         src/ext/lodepng/lodepng.cpp
-		src/bvh/bvh.cu
+        ${CUDA_PT_SRC}
 )
 
 target_link_libraries(
@@ -117,10 +117,6 @@ target_compile_options(
 )
 
 # ========================================= unit-test ===============================================
-set(TEST1_NAME "test_so3")
-add_executable(${TEST1_NAME}
-        test/test_so3.cu
-)
 
 set(TEST2_NAME "variant_test")
 add_executable(${TEST2_NAME}

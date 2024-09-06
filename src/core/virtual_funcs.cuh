@@ -20,25 +20,11 @@ CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex
     }
 }
 
-CPT_KERNEL void create_point_source(Emitter* &dst, Vec4 le, Vec3 pos) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        dst = new PointSource(std::move(le), std::move(pos));
-    }
-}
-
-CPT_KERNEL void create_area_source(Emitter* &dst, Vec4 le, int obj_ref, bool is_sphere) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        dst = new AreaSource(std::move(le), obj_ref, is_sphere);
-    }
-}
-
-CPT_KERNEL void create_abstract_source(Emitter* &dst) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        dst = new Emitter(Vec4(0, 0, 0));
-    }
-}
-
 template <typename Ty>
 CPT_KERNEL void destroy_gpu_alloc(Ty** dst) {
     delete dst[threadIdx.x];
 }
+
+CPT_KERNEL void create_point_source(Emitter* &dst, Vec4 le, Vec3 pos);
+CPT_KERNEL void create_area_source(Emitter* &dst, Vec4 le, int obj_ref, bool is_sphere);
+CPT_KERNEL void create_abstract_source(Emitter* &dst);

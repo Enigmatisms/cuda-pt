@@ -9,13 +9,14 @@
 #include <algorithm>
 #include <numeric>
 #include <array>
-#include "bvh.cuh"
+#include "core/bvh.cuh"
 
 using IntPair = std::pair<int, int>;
 
 static constexpr int num_bins = 12;
-static constexpr int max_node_prim = 1;
-static constexpr float traverse_cost = 0.1;
+static constexpr int max_node_prim = 4;
+static constexpr int sah_split_threshold = 8;
+static constexpr float traverse_cost = 0.15;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const {
     int _base = base(), _prim_num = prim_num();
@@ -89,8 +90,7 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
     // Step 1: decide the axis that expands the maximum extent of space
     std::vector<float> bins;        // bins: from (start_pos + interval) to end_pos
     SplitAxis max_axis = cur_node->max_extent_axis(bvh_infos, bins);
-    if (prim_num > 4) {   // SAH
-
+    if (prim_num > sah_split_threshold) {   // SAH
         // Step 2: binning the space
         std::array<AxisBins, num_bins> idx_bins;
         for (int i = base; i < max_pos; i++) {
@@ -208,13 +208,14 @@ static int recursive_linearize(
     lin_nodes.emplace_back(cur_node);
     node_offsets.emplace_back(0);
     if (cur_node->lchild != nullptr) {
-        // TODO: parallel linearize
+        // non-leaf node
         int lnodes = recursive_linearize(cur_node->lchild, lin_nodes, node_offsets);
         lnodes += recursive_linearize(cur_node->rchild, lin_nodes, node_offsets);
         node_offsets[current_size] = lnodes + 1;
         return lnodes + 1;                      // include the cur_node                       
     } else {
-        node_offsets.back() = 1;        // to skip the current sub-tree, index should just add 1
+        // leaf node has negative offset
+        node_offsets.back() = 1;        
         return 1;
     }
 }
