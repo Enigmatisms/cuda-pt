@@ -12,55 +12,65 @@ else()
 	message(STATUS "Using AoS3 (array of structs) for GPU containers.")
 endif()
 
+find_package(Threads REQUIRED)
+find_package(OpenMP REQUIRED)
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG")
-	set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -g -G -O0 -arch=native")
-	set(CMAKE_CUDA_FLAGS_DEBUG "-G -g -arch=native")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
-	set(CMAKE_BUILD_TYPE Debug)
-	message(STATUS "Building project in DEBUG mode.")
+        set(CMAKE_BUILD_TYPE Debug)
+        if (MSVC)
+                message(STATUS "MSVC: Building project in DEBUG mode.")
+                set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -maxrregcount=64 -lineinfo -arch=native -g -G")
+                set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -G -g -lineinfo")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 /g /Od /Zi /MDd")
+        else()
+                message(STATUS "GCC & G++: Building project in DEBUG mode.")
+                set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -G -O0 -lineinfo -maxrregcount=64 -arch=native")
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
+	endif ()
 ELSE()
 	# to check register usage, please set "-Xptxas -v"
 	# to cap the register usage to boost occupancy, set ""
 	set(CMAKE_BUILD_TYPE Release)
 	if (MSVC)
+                if (OPENMP_FOUND)
+                        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /openmp")
+                        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
+                        set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler /openmp")
+                else()
+                        message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
+                endif()
+                message(STATUS "MSVC: Building project in RELEASE mode.")
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -maxrregcount=64 -lineinfo -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2")
 	else()
+                message(STATUS "GCC & G++: Building project in RELEASE mode.")
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --maxrregcount=64 -lineinfo -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+                if (OPENMP_FOUND)
+                        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+                        set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+                        set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${OpenMP_CXX_FLAGS}")
+                else()
+                        message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
+                endif()
 	endif ()
-	message(STATUS "Building project in RELEASE mode.")
 ENDIF()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Threads REQUIRED)
-find_package(OpenMP REQUIRED)
-if (OPENMP_FOUND)
-	if (MSVC)
-		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /openmp")
-		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp")
-		set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler /openmp")
-	else()
-		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-		set (CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${OpenMP_CXX_FLAGS}")
-	endif ()
-	message(STATUS "OpenMP is found.")
-else()
-    message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
-endif()
+set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 include_directories(${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/ext/variant)
 
 add_subdirectory(src/ext/tinyxml2)
 add_subdirectory(src/ext/tinyobjloader)
+aux_source_directory(src/impl CUDA_PT_SRC)
 
 set(EXEC1_NAME "depth")
-add_executable(${EXEC1_NAME}
+        add_executable(${EXEC1_NAME}
         app/depth_renderer.cu
         src/ext/lodepng/lodepng.cpp
+        ${CUDA_PT_SRC}
 )
 
 target_link_libraries(
@@ -85,6 +95,7 @@ set(EXEC2_NAME "pt")
 add_executable(${EXEC2_NAME}
         app/pt_renderer.cu
         src/ext/lodepng/lodepng.cpp
+        ${CUDA_PT_SRC}
 )
 
 target_link_libraries(
@@ -106,10 +117,6 @@ target_compile_options(
 )
 
 # ========================================= unit-test ===============================================
-set(TEST1_NAME "test_so3")
-add_executable(${TEST1_NAME}
-        test/test_so3.cu
-)
 
 set(TEST2_NAME "variant_test")
 add_executable(${TEST2_NAME}
@@ -120,29 +127,6 @@ set_target_properties(
         ${TEST1_NAME} PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES native
-)
-
-add_executable(pt_test
-        test/path_tracer_test.cu
-        src/ext/lodepng/lodepng.cpp
-)
-
-target_link_libraries(
-        pt_test PRIVATE
-        tinyxml2 tinyobjloader
-)
-
-set_target_properties(
-        pt_test PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-        CUDA_ARCHITECTURES native
-)
-
-target_compile_options(
-        pt_test PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:
-        --expt-relaxed-constexpr
-        >
 )
 
 add_executable(sensor_test test/parsers/sensor_parse.cc)

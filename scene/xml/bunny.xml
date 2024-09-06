@@ -4,11 +4,12 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
-	<renderer type="wavefront"/>
+	<renderer type="megakernel"/>
+	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
-        <integer name="sample_count" value="32"/>
+        <integer name="sample_count" value="8"/>
         <integer name="max_bounce" value="8"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
@@ -73,6 +74,11 @@
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/cbox/bunny.obj"/>
+		<ref type="material" id="bunny"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/bunny-full.obj"/>
 		<ref type="material" id="bunny"/>
 	</shape>
 

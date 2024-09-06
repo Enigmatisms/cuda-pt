@@ -3,5 +3,3 @@ build_debug/*
 **/build
 **/*.db
 **/*.out
-.vs
-!.vs/*.json

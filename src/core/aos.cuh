@@ -105,11 +105,11 @@ public:
 };
 
 #ifdef USE_SOA
-template<typename InnerType>
-using ArrayType = SoA3<InnerType>;
+    template<typename InnerType>
+    using ArrayType = SoA3<InnerType>;
 #else
-template<typename InnerType>
-using ArrayType = AoS3<InnerType>;
+    template<typename InnerType>
+    using ArrayType = AoS3<InnerType>;
 #endif  // USE_AOS
 using ConstPrimPtr = const ArrayType<Vec3>* const;
 using ConstUVPtr   = const ArrayType<Vec2>* const;

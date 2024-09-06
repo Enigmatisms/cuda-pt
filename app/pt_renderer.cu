@@ -28,11 +28,9 @@ int main(int argc, char** argv) {
 
     std::unique_ptr<PathTracer> renderer = nullptr;
     if (scene.rdr_type == RendererType::MegaKernelPT) {
-        renderer = std::make_unique<PathTracer>(scene.objects, scene.shapes, 
-            vert_data, norm_data, uvs_data, 1, scene.config.width, scene.config.height);
+        renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, 1);
     } else {
-        renderer = std::make_unique<WavefrontPathTracer>(scene.objects, scene.shapes, 
-            vert_data, norm_data, uvs_data, 1, scene.config.width, scene.config.height);
+        renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, 1);
     }
 
     printf("Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.max_depth, scene.config.spp);

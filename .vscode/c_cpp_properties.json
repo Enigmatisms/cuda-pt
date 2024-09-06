@@ -21,7 +21,7 @@
             "includePath": [
                 "${workspaceFolder}\\src\\",
                 "${workspaceFolder}\\src\\ext\\**",
-                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\include"
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\include\\**"
             ],
             "defines": ["USE_SOA"],
             "intelliSenseMode": "windows-msvc-x64",

@@ -133,7 +133,7 @@ public:
     friend CPT_CPU_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
 };
 
-CPT_CPU_GPU SO3 skew_symmetry(const Vec3& v) {
+CPT_CPU_GPU_INLINE SO3 skew_symmetry(const Vec3& v) {
     return SO3(
         Vec3(0, -v.z(), v.y()),
         Vec3(v.z(), 0, -v.x()),
@@ -141,7 +141,7 @@ CPT_CPU_GPU SO3 skew_symmetry(const Vec3& v) {
     );
 }
 
-CPT_CPU_GPU SO3 vec_mul(const Vec3& v1, const Vec3& v2) {
+CPT_CPU_GPU_INLINE SO3 vec_mul(const Vec3& v1, const Vec3& v2) {
     return SO3(
         v2 * v1.x(),
         v2 * v1.y(),
@@ -150,7 +150,7 @@ CPT_CPU_GPU SO3 vec_mul(const Vec3& v1, const Vec3& v2) {
 }
 
 // This can be improved (maybe not, Rodrigues tranformation is already good enough)
-CPT_CPU_GPU SO3 rotation_between(Vec3&& from, const Vec3& to) {
+CPT_CPU_GPU_INLINE SO3 rotation_between(Vec3&& from, const Vec3& to) {
     auto axis = from.cross(to);
     float cos_theta = from.dot(to);
     SO3 R{};

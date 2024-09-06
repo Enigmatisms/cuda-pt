@@ -29,6 +29,7 @@
 #include "core/progress.h"
 #include "core/emitter.cuh"
 #include "core/object.cuh"
+#include "core/scene.cuh"
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
@@ -644,6 +645,9 @@ private:
     using PathTracer::prim2obj;
     using PathTracer::num_objs;
     using PathTracer::num_emitter;
+    using PathTracer::lin_bvhs;
+    using PathTracer::lin_nodes;
+    using PathTracer::node_offsets;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -657,14 +661,12 @@ public:
      * @todo: initialize objects
     */
     WavefrontPathTracer(
-        const std::vector<ObjInfo>& _objs,
-        const std::vector<Shape>& _shapes,
+        const Scene& scene,
         const ArrayType<Vec3>& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
-        int num_emitter,
-        int width, int height
-    ): PathTracer(_objs, _shapes, _verts, _norms, _uvs, num_emitter, width, height) {}
+        int num_emitter
+    ): PathTracer(scene, _verts, _norms, _uvs, num_emitter) {}
     
     CPT_CPU std::vector<uint8_t> render(
         int num_iter = 64,
