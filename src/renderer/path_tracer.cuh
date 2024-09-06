@@ -11,7 +11,7 @@
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
-#define RENDERER_USE_BVH
+// #define RENDERER_USE_BVH
 
 static constexpr int SEED_SCALER = 11451;
 
@@ -72,25 +72,25 @@ CPT_GPU bool occlusion_test_bvh(
         LinearNode node;
         nodes[node_idx].export_aabb(node);
         int all_offset = offsets[node_idx];
-        // bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
-        // if (!intersect_node) {
-        //     node_idx += all_offset;
-        //     continue;
-        // }
+        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
+        if (!intersect_node) {
+            node_idx += all_offset;
+            continue;
+        }
         if (all_offset == 1) {
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
-            for (int idx = 0; idx < 36; idx ++) {
+            for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                // if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
+                if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
                     const auto& bvh = bvhs[idx];
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
-                    shape_visitor.set_index(idx);
-                    float dist = variant::apply_visitor(shape_visitor, shapes[idx]);
+                    shape_visitor.set_index(prim_idx);
+                    float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
                     if (dist > EPSILON && dist < max_dist)
                         return false;
-                // }
+                }
             }
         }
         node_idx ++;
@@ -132,31 +132,31 @@ CPT_GPU float ray_intersect_bvh(
         LinearNode node;
         nodes[node_idx].export_aabb(node);
         int all_offset = offsets[node_idx];
-        // bool intersect_node = nodes->aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
-        // if (!intersect_node) {
-        //     node_idx += 1;
-        //     continue;
-        // }
+        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        if (!intersect_node) {
+            node_idx += all_offset;
+            continue;
+        }
         if (all_offset == 1) {                  // all_offset = 1, means the current node is leaf
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
             // printf("Beg: %d, End: %d\n", beg_idx, end_idx);
-            for (int idx = 0; idx < 36; idx ++) {
+            for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                // if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
+                if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
                     const auto& bvh = bvhs[idx];
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
                     // we might not need an obj_idx stored in shapes, if we use BVH 
-                    shape_visitor.set_index(idx);
-                    float dist = variant::apply_visitor(shape_visitor, shapes[idx]);
-                    if (prim_idx != 0) {
-                        printf("node_idx: %d, bvh: %d, Obj: %d, prim: %d, dist: %f, min: %f\n", node_idx, idx, obj_idx, prim_idx, dist, min_dist);
-                    }
+                    shape_visitor.set_index(prim_idx);
+                    float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
+                    // if (prim_idx != 0) {
+                    //     printf("node_idx: %d, bvh: %d, Obj: %d, prim: %d, dist: %f, min: %f\n", node_idx, idx, obj_idx, prim_idx, dist, min_dist);
+                    // }
                     bool valid = dist > EPSILON && dist < min_dist;
                     min_dist = valid ? dist : min_dist;
-                    min_index = valid ? idx : min_index;
-                // }
+                    min_index = valid ? prim_idx : min_index;
+                }
             }
         }
         node_idx ++;

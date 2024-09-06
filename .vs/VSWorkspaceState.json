@@ -13,10 +13,11 @@
     "\\scene",
     "\\scene\\xml",
     "\\src",
+    "\\src\\bvh",
     "\\src\\core",
     "\\src\\renderer",
     "\\test"
   ],
-  "SelectedNode": "\\CMakeLists.txt",
+  "SelectedNode": "\\src\\renderer\\path_tracer.cuh",
   "PreviewInSolutionExplorer": false
 }

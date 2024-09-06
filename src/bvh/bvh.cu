@@ -166,32 +166,12 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
         cur_node->axis = max_axis;
         // Step 7: start recursive splitting for the children
         int node_num = 1;
-        // if (depth == 0) {
-        //     int local_node_n1 = 0, local_node_n2 = 0;
-        //     #pragma omp parallel sections       // parallel SAH-BVH
-        //     {
-        //         #pragma omp section 
-        //         {
-        //             if (cur_node->lchild->prim_num > max_node_prim)
-        //                 local_node_n1 = recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
-        //             else local_node_n1 = 1;
-        //         }
-        //         #pragma omp section 
-        //         {
-        //             if (cur_node->rchild->prim_num > max_node_prim)
-        //                 local_node_n2 = recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
-        //             else local_node_n2 = 1;
-        //         }
-        //     }
-        //     node_num = local_node_n1 + local_node_n2 + 1;
-        // } else {
-            if (cur_node->lchild->prim_num() > max_node_prim)
-                node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
-            else node_num ++;
-            if (cur_node->rchild->prim_num() > max_node_prim)
-                node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
-            else node_num ++;
-        // }
+        if (cur_node->lchild->prim_num() > max_node_prim)
+            node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
+        else node_num ++;
+        if (cur_node->rchild->prim_num() > max_node_prim)
+            node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
+        else node_num ++;
         return node_num;
     } else {
         // This is a leaf node, yet this is the only way that a leaf node contains more than one primitive
@@ -256,17 +236,12 @@ void bvh_build(
     int node_num = 0, num_prims_all = points1.size();
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
     create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
-    for (const BVHInfo& bvh: bvh_infos) {
-        printf("BVHInfo: %d, %d\n", bvh.bound.base(), bvh.bound.prim_cnt());
-        // lin_bvhs.emplace_back(bvh);
-    }
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos);
     lin_nodes.reserve(64);
     node_offsets.reserve(64);
     recursive_linearize(root_node, lin_nodes, node_offsets);
     lin_bvhs.reserve(bvh_infos.size());
     for (const BVHInfo& bvh: bvh_infos) {
-        printf("BVHInfo: %d, %d\n", bvh.bound.base(), bvh.bound.prim_cnt());
         lin_bvhs.emplace_back(bvh);
     }
     delete root_node;

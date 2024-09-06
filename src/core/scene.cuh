@@ -536,7 +536,6 @@ public:
             for (const auto& bvh: lin_bvhs) {
                 int obj_idx, prim_idx;
                 bvh.get_info(obj_idx, prim_idx);
-                printf("BVH: %d, %d\n", obj_idx, prim_idx);
             }
             printf("[BVH] BVH completed. Total nodes: %lu, leaves: %lu\n", lin_nodes.size(), lin_bvhs.size());
         }

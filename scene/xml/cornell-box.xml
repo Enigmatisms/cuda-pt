@@ -5,11 +5,11 @@
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
 	<renderer type="megakernel"/>
-	<bool name="use_bvh" value="true"/>
+	<bool name="use_bvh" value="false"/>
 
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
-        <integer name="sample_count" value="16"/>
+        <integer name="sample_count" value="128"/>
         <integer name="max_bounce" value="8"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>

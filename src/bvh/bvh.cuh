@@ -19,7 +19,7 @@ struct BVHInfo {
 
     BVHInfo(): bound(1e5f, -1e5f, 0, 0), centroid() {}
     BVHInfo(const Vec3& p1, const Vec3& p2, const Vec3& p3, 
-            int prim_idx, int obj_idx, bool is_sphere = false)
+            int obj_idx, int prim_idx, bool is_sphere = false)
     {
         // Extract two vertices for the primitive, once converted to AABB
         // We don't need to distinguish between mesh or sphere
