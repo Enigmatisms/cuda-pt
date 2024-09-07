@@ -82,8 +82,8 @@ CPT_GPU bool occlusion_test_bvh(
             node.get_range(beg_idx, end_idx);
             for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
-                    const auto& bvh = bvhs[idx];
+                const auto bvh = bvhs[idx];
+                if (bvh.aabb.intersect(ray, aabb_tmin)) {
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
                     shape_visitor.set_index(prim_idx);
@@ -99,6 +99,7 @@ CPT_GPU bool occlusion_test_bvh(
 }
 
 /**
+ * Stackless BVH (should use tetxure memory?)
  * Perform ray-intersection test on shared memory primitives
  * @param ray: the ray for intersection test
  * @param shapes: scene primitives
@@ -142,8 +143,8 @@ CPT_GPU float ray_intersect_bvh(
             node.get_range(beg_idx, end_idx);
             for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                if (bvhs[idx].aabb.intersect(ray, aabb_tmin)) {
-                    const auto& bvh = bvhs[idx];
+                const auto bvh = bvhs[idx];
+                if (bvh.aabb.intersect(ray, aabb_tmin)) {
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
                     // we might not need an obj_idx stored in shapes, if we use BVH 
@@ -305,7 +306,6 @@ CPT_KERNEL static void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
-            
             occlusion_test_bvh(shadow_ray, shapes, nodes, offsets, bvhs, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
@@ -407,12 +407,15 @@ public:
         CUDA_CHECK_RETURN(cudaFree(obj_info));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
 #ifdef RENDERER_USE_BVH
-        if (lin_bvhs)
+        if (lin_bvhs) {
             CUDA_CHECK_RETURN(cudaFree(lin_bvhs));
-        if (lin_nodes)
+        }
+        if (lin_nodes) {
             CUDA_CHECK_RETURN(cudaFree(lin_nodes));
-        if (node_offsets)
+        }
+        if (node_offsets) {
             CUDA_CHECK_RETURN(cudaFree(node_offsets));
+        }
 #endif  // RENDERER_USE_BVH
     }
 

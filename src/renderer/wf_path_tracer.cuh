@@ -255,10 +255,13 @@ CPT_KERNEL void raygen_primary_hit_shader(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
+    ConstNodePtr  nodes,    // tree nodes
+    ConstIndexPtr offsets,    // tree nodes
+    ConstBVHPtr   bvhs,     // leaf
     const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
-    int stream_id, int width
+    int stream_id, int width, int node_num = -1
 ) {
     // stream and patch related offset
     const int sx = x_patch * PATCH_X, sy = y_patch * PATCH_Y, buffer_xoffset = stream_id * PATCH_X;
@@ -266,29 +269,34 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     // linear idx_buffer position
     const int block_index = py * blockDim.x * gridDim.x + px;
-    const int tid = threadIdx.x + threadIdx.y * blockDim.x;
 
     Sampler sg = Sampler(px + sx + (py + sy) * width, iter * SEED_SCALER);
     Ray ray = dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
 
     PDFInteraction it;            // To local register
-    
+    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
+
+    int min_index = -1;   // round up
+    ray.hit_t = MAX_DIST;
+
+    #ifdef FUSED_MISS_SHADER
+    ray.set_active(false);
+    #endif   // FUSED_MISS_SHADER
+
+    payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
+    idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
+#ifdef RENDERER_USE_BVH 
+    ShapeIntersectVisitor visitor(*verts, ray, 0);
+    ray.hit_t = ray_intersect_bvh(ray, shapes, nodes, offsets, bvhs, visitor, min_index, node_num, ray.hit_t);
+#else   // RENDERER_USE_BVH
+    const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
     ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
-    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
+    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
-    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR, min_index = -1;   // round up
-    ray.hit_t = MAX_DIST;
-
-#ifdef FUSED_MISS_SHADER
-    ray.set_active(false);
-#endif   // FUSED_MISS_SHADER
-
-    payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
-    idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;     
     // ============= step 1: ray intersection =================
     #pragma unroll
     for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
@@ -296,17 +304,17 @@ CPT_KERNEL void raygen_primary_hit_shader(
         int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
         cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
         if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-#ifdef USE_SOA          // SOA is actually better
+    #ifdef USE_SOA          // SOA is actually better
             cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
             cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
             cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
-#else
+    #else
             // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
             // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
             // since our step is Vec3, this will lead to uncoalesced access
             // shared memory is enough. Though padding is not easy to implement
             cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
-#endif
+    #endif
             // This memory op is not fully coalesced, since AABB container is not a complete SOA
             s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
         }
@@ -317,7 +325,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
         ray.hit_t = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, ray.hit_t);
         __syncthreads();
     }
-
+#endif  // RENDERER_USE_BVH
     // ============= step 2: local shading for indirect bounces ================
     payloads.L(px + buffer_xoffset, py)   = Vec4(0, 0, 0, 1);
     payloads.set_sampler(px + buffer_xoffset, py, sg);
@@ -360,15 +368,19 @@ CPT_KERNEL void closesthit_shader(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
+    ConstNodePtr  nodes,    // tree nodes
+    ConstIndexPtr offsets,    // tree nodes
+    ConstBVHPtr   bvhs,     // leaf
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
-    int num_valid
+    int num_valid,
+    int node_num = -1
 ) {
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
                             blockDim.x * gridDim.x +                            // cols
-                            threadIdx.x + blockIdx.x * blockDim.x,              // px
-                            tid = threadIdx.x + threadIdx.y * blockDim.x;
+                            threadIdx.x + blockIdx.x * blockDim.x;              // px
+                            
     
     uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
     py >>= 16;
@@ -376,19 +388,22 @@ CPT_KERNEL void closesthit_shader(
     PDFInteraction it = payloads.get_interaction(px, py);            // To local register
     ray.reset();
     
+    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
+
+    int min_index = -1;   // round up
+    ray.hit_t = MAX_DIST;
+
+#ifdef RENDERER_USE_BVH 
+    ShapeIntersectVisitor visitor(*verts, ray, 0);
+    ray.hit_t = ray_intersect_bvh(ray, shapes, nodes, offsets, bvhs, visitor, min_index, node_num, ray.hit_t);
+#else   // RENDERER_USE_BVH
+    const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
     ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
-    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
-
-    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR, min_index = -1;   // round up
-    ray.hit_t = MAX_DIST;
-
-#ifdef FUSED_MISS_SHADER
-    ray.set_active(false);
-#endif   // FUSED_MISS_SHADER
+    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
     // ============= step 1: ray intersection =================
     #pragma unroll
@@ -397,17 +412,17 @@ CPT_KERNEL void closesthit_shader(
         int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
         cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
         if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-#ifdef USE_SOA          // SOA is actually better
+    #ifdef USE_SOA          // SOA is actually better
             cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
             cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
             cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
-#else
+    #else
             // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
             // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
             // since our step is Vec3, this will lead to uncoalesced access
             // shared memory is enough. Though padding is not easy to implement
             cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
-#endif
+    #endif
             // This memory op is not fully coalesced, since AABB container is not a complete SOA
             s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
         }
@@ -418,6 +433,7 @@ CPT_KERNEL void closesthit_shader(
         ray.hit_t = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, ray.hit_t);
         __syncthreads();
     }
+#endif  // RENDERER_USE_BVH
 
     // ============= step 2: local shading for indirect bounces ================
     if (block_index < num_valid && min_index >= 0) {
@@ -449,12 +465,16 @@ CPT_KERNEL void nee_shader(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr,         
+    ConstNodePtr  nodes,    // tree nodes
+    ConstIndexPtr offsets,    // tree nodes
+    ConstBVHPtr   bvhs,     // leaf
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
     int num_objects,
     int num_emitter,
-    int num_valid
+    int num_valid,
+    int node_num = -1
 ) {
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
                             blockDim.x * gridDim.x +                            // cols
@@ -484,7 +504,13 @@ CPT_KERNEL void nee_shader(
         float emit_len_mis = shadow_ray.d.length();
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
         // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
-        if (emitter != c_emitter[0] && occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)) {
+        if (emitter != c_emitter[0] && 
+#ifdef RENDERER_USE_BVH
+            occlusion_test_bvh(shadow_ray, shapes, nodes, offsets, bvhs, *verts, node_num, emit_len_mis - EPSILON)
+#else   // RENDERER_USE_BVH
+            occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+#endif  // RENDERER_USE_BVH
+        ) {
             // MIS for BSDF / light sampling, to achieve better rendering
             // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
             emit_len_mis = direct_pdf + c_material[material_id]->pdf(it.it_const(), shadow_ray.d, ray.d) * emitter->non_delta();
@@ -705,8 +731,9 @@ public:
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
                 raygen_primary_hit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                     payload_buffer, obj_info, prim2obj, shapes, aabbs, 
-                    verts, norms, uvs, ray_idx_buffer, stream_offset, 
-                    num_prims, patch_x, patch_y, i, stream_id, image.w());
+                    verts, norms, uvs, lin_nodes, node_offsets, lin_bvhs,
+                    ray_idx_buffer, stream_offset, num_prims, 
+                    patch_x, patch_y, i, stream_id, image.w(), num_nodes);
                 int num_valid_ray = TOTAL_RAY;
                 auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
@@ -745,8 +772,9 @@ public:
 
                     // step5: NEE shader
                     nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, ray_idx_buffer,
-                        stream_offset, num_prims, num_objs, num_emitter, num_valid_ray
+                        payload_buffer, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                        lin_nodes, node_offsets, lin_bvhs, ray_idx_buffer, stream_offset, 
+                        num_prims, num_objs, num_emitter, num_valid_ray, num_nodes
                     );
 
                     // step6: emission shader + ray update shader
@@ -759,8 +787,8 @@ public:
                     if (bounce + 1 >= max_depth) break;
                     closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         payload_buffer, obj_info, prim2obj, shapes, aabbs, 
-                        verts, norms, uvs, ray_idx_buffer,
-                        stream_offset, num_prims, num_valid_ray
+                        verts, norms, uvs, lin_nodes, node_offsets, lin_bvhs,
+                        ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes
                     );
                 }
 
