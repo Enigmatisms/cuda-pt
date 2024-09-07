@@ -255,9 +255,11 @@ CPT_KERNEL void raygen_primary_hit_shader(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
-    ConstNodePtr  nodes,    // tree nodes
-    ConstIndexPtr offsets,    // tree nodes
-    ConstBVHPtr   bvhs,     // leaf
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
     const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
@@ -287,7 +289,8 @@ CPT_KERNEL void raygen_primary_hit_shader(
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
 #ifdef RENDERER_USE_BVH 
     ShapeIntersectVisitor visitor(*verts, ray, 0);
-    ray.hit_t = ray_intersect_bvh(ray, shapes, nodes, offsets, bvhs, visitor, min_index, node_num, ray.hit_t);
+    ray.hit_t = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, node_fronts, 
+                    node_backs, node_offsets, visitor, min_index, node_num, ray.hit_t);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
@@ -368,9 +371,11 @@ CPT_KERNEL void closesthit_shader(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
-    ConstNodePtr  nodes,    // tree nodes
-    ConstIndexPtr offsets,    // tree nodes
-    ConstBVHPtr   bvhs,     // leaf
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
@@ -395,7 +400,8 @@ CPT_KERNEL void closesthit_shader(
 
 #ifdef RENDERER_USE_BVH 
     ShapeIntersectVisitor visitor(*verts, ray, 0);
-    ray.hit_t = ray_intersect_bvh(ray, shapes, nodes, offsets, bvhs, visitor, min_index, node_num, ray.hit_t);
+    ray.hit_t = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, 
+                    node_fronts, node_backs, node_offsets, visitor, min_index, node_num, ray.hit_t);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
@@ -465,9 +471,11 @@ CPT_KERNEL void nee_shader(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr,         
-    ConstNodePtr  nodes,    // tree nodes
-    ConstIndexPtr offsets,    // tree nodes
-    ConstBVHPtr   bvhs,     // leaf
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
@@ -506,7 +514,8 @@ CPT_KERNEL void nee_shader(
         // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
         if (emitter != c_emitter[0] && 
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, shapes, nodes, offsets, bvhs, *verts, node_num, emit_len_mis - EPSILON)
+            occlusion_test_bvh(shadow_ray, shapes, bvh_fronts, bvh_backs, 
+                        node_fronts, node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -671,8 +680,10 @@ private:
     using PathTracer::prim2obj;
     using PathTracer::num_objs;
     using PathTracer::num_emitter;
-    using PathTracer::lin_bvhs;
-    using PathTracer::lin_nodes;
+    using PathTracer::bvh_fronts;
+    using PathTracer::bvh_backs;
+    using PathTracer::node_fronts;
+    using PathTracer::node_backs;
     using PathTracer::node_offsets;
 public:
     /**
@@ -731,8 +742,8 @@ public:
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
                 raygen_primary_hit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                     payload_buffer, obj_info, prim2obj, shapes, aabbs, 
-                    verts, norms, uvs, lin_nodes, node_offsets, lin_bvhs,
-                    ray_idx_buffer, stream_offset, num_prims, 
+                    verts, norms, uvs, bvh_fronts, bvh_backs, node_fronts, 
+                    node_backs, node_offsets, ray_idx_buffer, stream_offset, num_prims, 
                     patch_x, patch_y, i, stream_id, image.w(), num_nodes);
                 int num_valid_ray = TOTAL_RAY;
                 auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
@@ -773,8 +784,8 @@ public:
                     // step5: NEE shader
                     nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
                         payload_buffer, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
-                        lin_nodes, node_offsets, lin_bvhs, ray_idx_buffer, stream_offset, 
-                        num_prims, num_objs, num_emitter, num_valid_ray, num_nodes
+                        bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, ray_idx_buffer, 
+                        stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes
                     );
 
                     // step6: emission shader + ray update shader
@@ -786,8 +797,8 @@ public:
                     // step2: closesthit shader
                     if (bounce + 1 >= max_depth) break;
                     closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, prim2obj, shapes, aabbs, 
-                        verts, norms, uvs, lin_nodes, node_offsets, lin_bvhs,
+                        payload_buffer, obj_info, prim2obj, shapes, aabbs, verts, 
+                        norms, uvs, bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
                         ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes
                     );
                 }

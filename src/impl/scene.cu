@@ -478,13 +478,14 @@ const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT
             auto tp = std::chrono::system_clock::now();
             bvh_build(
                 verts_list[0], verts_list[1], verts_list[2], objects, 
-                sphere_objs, world_min, world_max, lin_bvhs, lin_nodes, node_offsets
+                sphere_objs, world_min, world_max, bvh_fronts, 
+                bvh_backs, node_fronts, node_backs, node_offsets
             );
             auto dur = std::chrono::system_clock::now() - tp;
             auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
             auto elapsed = static_cast<double>(count) / 1e3;
             printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
-            printf("[BVH]Total nodes: %lu, leaves: %lu\n", lin_nodes.size(), lin_bvhs.size());
+            printf("[BVH] Total nodes: %lu, leaves: %lu\n", node_fronts.size(), bvh_fronts.size());
         }
     }
 

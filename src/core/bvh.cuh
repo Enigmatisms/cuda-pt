@@ -32,6 +32,17 @@ struct BVHInfo {
             bound    = AABB(p1, p2, p3, prim_idx, obj_idx);
         }
     }
+
+    void get_float4(float4& node_f, float4& node_b) const {
+        node_f.x = bound.mini.x();
+        node_f.y = bound.mini.y();
+        node_f.z = bound.mini.z();
+        node_f.w = *reinterpret_cast<const float*>(&bound.__bytes1);
+        node_b.x = bound.maxi.x();
+        node_b.y = bound.maxi.y();
+        node_b.z = bound.maxi.z();
+        node_b.w = *reinterpret_cast<const float*>(&bound.__bytes2);
+    }
 };
 
 struct AxisBins {
@@ -60,6 +71,17 @@ public:
 
     CPT_CPU_GPU int prim_num() const { return bound.prim_cnt(); }
     CPT_CPU_GPU int& prim_num() { return bound.prim_cnt(); }
+
+    CPT_CPU void get_float4(float4& node_f, float4& node_b) const {
+        node_f.x = bound.mini.x();
+        node_f.y = bound.mini.y();
+        node_f.z = bound.mini.z();
+        node_f.w = *reinterpret_cast<const float*>(&bound.__bytes1);
+        node_b.x = bound.maxi.x();
+        node_b.y = bound.maxi.y();
+        node_b.z = bound.maxi.z();
+        node_b.w = *reinterpret_cast<const float*>(&bound.__bytes2);
+    }
 public:
     // The axis start and end are scaled up a little bit
     SplitAxis max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const;
@@ -98,6 +120,11 @@ public:
 
     // linear nodes are initialized during DFS binary tree traversal
     CPT_CPU_GPU LinearNode(const BVHNode *const bvh): aabb(bvh->bound.mini, bvh->bound.maxi, bvh->base(), bvh->prim_num()) {};       
+
+    CPT_GPU LinearNode(float4 p1, float4 p2) {
+        FLOAT4(aabb.mini) = p1;
+        FLOAT4(aabb.maxi) = p2;
+    }
 public:
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
     AABB aabb;
@@ -116,6 +143,11 @@ class LinearBVH {
 public:
     CPT_CPU_GPU LinearBVH(): aabb(1e5f, -1e5f, 0, 0) {}
     CPT_CPU_GPU LinearBVH(const BVHInfo& bvh): aabb(bvh.bound) {}
+
+    CPT_GPU LinearBVH(float4 p1, float4 p2) {
+        FLOAT4(aabb.mini) = p1;
+        FLOAT4(aabb.maxi) = p2;
+    }
 public:
     // compressed linear BVH
     AABB aabb;
@@ -133,7 +165,9 @@ void bvh_build(
     const std::vector<ObjInfo>& objects,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
-    std::vector<LinearBVH>& lin_bvhs, 
-    std::vector<LinearNode>& lin_nodes,
+    std::vector<float4>& bvh_fronts, 
+    std::vector<float4>& bvh_backs, 
+    std::vector<float4>& node_fronts,
+    std::vector<float4>& node_backs,
     std::vector<int>& node_offsets
 );

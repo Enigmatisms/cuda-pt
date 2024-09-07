@@ -57,9 +57,11 @@ CPT_GPU bool occlusion_test(
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
     ConstShapePtr shapes,
-    ConstNodePtr  nodes,    // tree nodes
-    ConstIndexPtr offsets,    // tree nodes
-    ConstBVHPtr   bvhs,     // leaf
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
     const ArrayType<Vec3>& verts,
     const int node_num,
     float max_dist
@@ -69,9 +71,10 @@ CPT_GPU bool occlusion_test_bvh(
     // There can be much control flow divergence, not good
     ShapeIntersectVisitor shape_visitor(verts, ray, 0, max_dist);
     while (node_idx < node_num) {
-        LinearNode node;
-        nodes[node_idx].export_aabb(node);
-        int all_offset = offsets[node_idx];
+        float4 node_f = tex1Dfetch<float4>(node_fronts, node_idx),
+               node_b = tex1Dfetch<float4>(node_backs, node_idx);
+        LinearNode node(node_f, node_b);
+        int all_offset = tex1Dfetch<int>(node_offsets, node_idx);
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
         if (!intersect_node) {
             node_idx += all_offset;
@@ -82,7 +85,9 @@ CPT_GPU bool occlusion_test_bvh(
             node.get_range(beg_idx, end_idx);
             for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                const auto bvh = bvhs[idx];
+                float4 bvh_f = tex1Dfetch<float4>(bvh_fronts, idx),
+                       bvh_b = tex1Dfetch<float4>(bvh_backs,  idx);
+                const LinearBVH bvh(bvh_f, bvh_b);
                 if (bvh.aabb.intersect(ray, aabb_tmin)) {
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
@@ -118,9 +123,11 @@ CPT_GPU bool occlusion_test_bvh(
 CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
     ConstShapePtr shapes,
-    ConstNodePtr  nodes,    // tree nodes
-    ConstIndexPtr offsets,    // tree nodes
-    ConstBVHPtr   bvhs,     // leaf
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
     ShapeIntersectVisitor& shape_visitor,
     int& min_index,
     const int node_num,
@@ -130,9 +137,10 @@ CPT_GPU float ray_intersect_bvh(
     float aabb_tmin = 0;
     // There can be much control flow divergence, not good
     while (node_idx < node_num) {
-        LinearNode node;
-        nodes[node_idx].export_aabb(node);
-        int all_offset = offsets[node_idx];
+        float4 node_f = tex1Dfetch<float4>(node_fronts, node_idx),
+               node_b = tex1Dfetch<float4>(node_backs, node_idx);
+        LinearNode node(node_f, node_b);
+        int all_offset = tex1Dfetch<int>(node_offsets, node_idx);
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
         if (!intersect_node) {
             node_idx += all_offset;
@@ -143,7 +151,9 @@ CPT_GPU float ray_intersect_bvh(
             node.get_range(beg_idx, end_idx);
             for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
-                const auto bvh = bvhs[idx];
+                float4 bvh_f = tex1Dfetch<float4>(bvh_fronts, idx),
+                       bvh_b = tex1Dfetch<float4>(bvh_backs,  idx);
+                const LinearBVH bvh(bvh_f, bvh_b);
                 if (bvh.aabb.intersect(ray, aabb_tmin)) {
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
@@ -200,9 +210,11 @@ CPT_KERNEL static void render_pt_kernel(
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
     ConstUVPtr uvs,
-    ConstNodePtr nodes,
-    ConstIndexPtr offsets,
-    ConstBVHPtr bvhs,
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
     DeviceImage& image,
     int num_prims,
     int num_objects,
@@ -244,7 +256,7 @@ CPT_KERNEL static void render_pt_kernel(
         min_index = -1;
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
-        min_dist = ray_intersect_bvh(ray, shapes, nodes, offsets, bvhs, visitor, min_index, node_num, min_dist);
+        min_dist = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, visitor, min_index, node_num, min_dist);
 #else   // RENDERER_USE_BVH
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
@@ -306,7 +318,8 @@ CPT_KERNEL static void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, shapes, nodes, offsets, bvhs, *verts, node_num, emit_len_mis - EPSILON)
+            occlusion_test_bvh(shadow_ray, shapes, bvh_fronts, bvh_backs, node_fronts, 
+                        node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -332,6 +345,12 @@ CPT_KERNEL static void render_pt_kernel(
 }
 
 class PathTracer: public TracerBase {
+private:
+    const float4* _bvh_fronts;
+    const float4* _bvh_backs;
+    const float4* _node_fronts;
+    const float4* _node_backs;
+    const int* _node_offsets;
 protected:
     using TracerBase::shapes;
     using TracerBase::aabbs;
@@ -350,9 +369,11 @@ protected:
     int num_nodes;
     int num_emitter;
 
-    LinearBVH* lin_bvhs;
-    LinearNode* lin_nodes;
-    int* node_offsets;
+    cudaTextureObject_t bvh_fronts;
+    cudaTextureObject_t bvh_backs;
+    cudaTextureObject_t node_fronts;
+    cudaTextureObject_t node_backs;
+    cudaTextureObject_t node_offsets;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -372,19 +393,18 @@ public:
         const ArrayType<Vec2>& _uvs,
         int num_emitter
     ): TracerBase(scene.shapes, _verts, _norms, _uvs, scene.config.width, scene.config.height), 
-        num_objs(scene.objects.size()), num_nodes(-1), num_emitter(num_emitter), 
-        lin_bvhs(nullptr), lin_nodes(nullptr), node_offsets(nullptr)
+        num_objs(scene.objects.size()), num_nodes(-1), num_emitter(num_emitter)
     {
         // TODO: export BVH here, if the scene BVH is available
 #ifdef RENDERER_USE_BVH
         if (scene.bvh_available()) {
-            CUDA_CHECK_RETURN(cudaMalloc(&lin_bvhs, scene.lin_bvhs.size() * sizeof(LinearBVH)));
-            CUDA_CHECK_RETURN(cudaMalloc(&lin_nodes, scene.lin_nodes.size() * sizeof(LinearNode)));
-            CUDA_CHECK_RETURN(cudaMalloc(&node_offsets, scene.lin_nodes.size() * sizeof(int)));
-            CUDA_CHECK_RETURN(cudaMemcpy(lin_bvhs, scene.lin_bvhs.data(), sizeof(LinearBVH) * scene.lin_bvhs.size(), cudaMemcpyHostToDevice));
-            CUDA_CHECK_RETURN(cudaMemcpy(lin_nodes, scene.lin_nodes.data(), sizeof(LinearNode) * scene.lin_nodes.size(), cudaMemcpyHostToDevice));
-            CUDA_CHECK_RETURN(cudaMemcpy(node_offsets, scene.node_offsets.data(), sizeof(int) * scene.lin_nodes.size(), cudaMemcpyHostToDevice));
-            num_nodes = scene.lin_nodes.size();
+            size_t num_bvh  = scene.bvh_fronts.size();
+            num_nodes = scene.node_fronts.size();
+            PathTracer::createTexture1D(scene.bvh_fronts.data(),  num_bvh,   _bvh_fronts,  bvh_fronts);
+            PathTracer::createTexture1D(scene.bvh_backs.data(),   num_bvh,   _bvh_backs,   bvh_backs);
+            PathTracer::createTexture1D(scene.node_fronts.data(), num_nodes, _node_fronts, node_fronts);
+            PathTracer::createTexture1D(scene.node_backs.data(),  num_nodes, _node_backs,  node_backs);
+            PathTracer::createTexture1D(scene.node_offsets.data(), num_nodes, _node_offsets, node_offsets);
         } else {
             throw std::runtime_error("BVH not available in scene. Abort.");
         }
@@ -407,15 +427,17 @@ public:
         CUDA_CHECK_RETURN(cudaFree(obj_info));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
 #ifdef RENDERER_USE_BVH
-        if (lin_bvhs) {
-            CUDA_CHECK_RETURN(cudaFree(lin_bvhs));
-        }
-        if (lin_nodes) {
-            CUDA_CHECK_RETURN(cudaFree(lin_nodes));
-        }
-        if (node_offsets) {
-            CUDA_CHECK_RETURN(cudaFree(node_offsets));
-        }
+        CUDA_CHECK_RETURN(cudaDestroyTextureObject(bvh_fronts));
+        CUDA_CHECK_RETURN(cudaDestroyTextureObject(bvh_backs));
+        CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_fronts));
+        CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_backs));
+        CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_offsets));
+
+        CUDA_CHECK_RETURN(cudaFree((void *)_bvh_fronts));
+        CUDA_CHECK_RETURN(cudaFree((void *)_bvh_backs));
+        CUDA_CHECK_RETURN(cudaFree((void *)_node_fronts));
+        CUDA_CHECK_RETURN(cudaFree((void *)_node_backs));
+        CUDA_CHECK_RETURN(cudaFree((void *)_node_offsets));
 #endif  // RENDERER_USE_BVH
     }
 
@@ -430,7 +452,8 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, lin_nodes, node_offsets, lin_bvhs,
+                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
                 *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth, num_nodes
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -438,5 +461,32 @@ public:
         }
         printf("\n");
         return image.export_cpu(1.f / num_iter, gamma_correction);
+    }
+
+    template <typename TexType>
+    static void createTexture1D(TexType* tex_src, size_t size, TexType* tex_dst, cudaTextureObject_t& tex_obj) {
+        cudaChannelFormatDesc channel_desc;
+        if constexpr (std::is_same_v<std::decay_t<TexType>, int>) {
+            channel_desc = cudaCreateChannelDesc<int>();
+        } else {
+            channel_desc = cudaCreateChannelDesc<float4>();
+        }
+        printf("texture size: %llu\n", size);
+        CUDA_CHECK_RETURN(cudaMalloc(&tex_dst, size * sizeof(TexType)));
+        CUDA_CHECK_RETURN(cudaMemcpy((void *)tex_dst, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
+        cudaResourceDesc res_desc;
+        memset(&res_desc, 0, sizeof(res_desc));
+        res_desc.resType = cudaResourceTypeLinear;
+        res_desc.res.linear.devPtr = (void *)tex_dst;
+        res_desc.res.linear.desc   = channel_desc;
+        res_desc.res.linear.sizeInBytes = size * sizeof(TexType);
+
+        cudaTextureDesc tex_desc;
+        memset(&tex_desc, 0, sizeof(tex_desc));
+        tex_desc.addressMode[0] = cudaAddressModeClamp;
+        tex_desc.filterMode = cudaFilterModePoint;
+        tex_desc.readMode = cudaReadModeElementType;
+
+        CUDA_CHECK_RETURN(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
     }
 };

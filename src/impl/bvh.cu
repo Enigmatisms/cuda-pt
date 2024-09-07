@@ -196,7 +196,8 @@ static BVHNode* bvh_root_start(const Vec3& world_min, const Vec3& world_max, int
 // This is the final function call for `bvh_build`
 static int recursive_linearize(
     BVHNode* cur_node, 
-    std::vector<LinearNode>& lin_nodes,
+    std::vector<float4>& node_fronts,
+    std::vector<float4>& node_backs,
     std::vector<int>& node_offsets
 ) {
     // BVH tree should be linearized to better traverse and fit in the system memory
@@ -204,13 +205,16 @@ static int recursive_linearize(
     // Note that if rchild_offset is -1, then the node is leaf. Leaf node points to primitive array
     // which is already sorted during BVH construction, containing primitive_id and obj_id for true intersection
     // Note that lin_nodes has been reserved
-    size_t current_size = lin_nodes.size();
-    lin_nodes.emplace_back(cur_node);
+    size_t current_size = node_fronts.size();
+    float4 node_f, node_b;
+    cur_node->get_float4(node_f, node_b);
+    node_fronts.push_back(node_f);
+    node_backs.push_back(node_b);
     node_offsets.emplace_back(0);
     if (cur_node->lchild != nullptr) {
         // non-leaf node
-        int lnodes = recursive_linearize(cur_node->lchild, lin_nodes, node_offsets);
-        lnodes += recursive_linearize(cur_node->rchild, lin_nodes, node_offsets);
+        int lnodes = recursive_linearize(cur_node->lchild, node_fronts, node_backs, node_offsets);
+        lnodes += recursive_linearize(cur_node->rchild, node_fronts, node_backs, node_offsets);
         node_offsets[current_size] = lnodes + 1;
         return lnodes + 1;                      // include the cur_node                       
     } else {
@@ -228,8 +232,10 @@ void bvh_build(
     const std::vector<ObjInfo>& objects,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
-    std::vector<LinearBVH>& lin_bvhs, 
-    std::vector<LinearNode>& lin_nodes,
+    std::vector<float4>& bvh_fronts, 
+    std::vector<float4>& bvh_backs, 
+    std::vector<float4>& node_fronts,
+    std::vector<float4>& node_backs,
     std::vector<int>& node_offsets
 ) {
     std::vector<IntPair> idx_prs;
@@ -238,12 +244,17 @@ void bvh_build(
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
     create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos);
-    lin_nodes.reserve(64);
+    node_fronts.reserve(64);
+    node_backs.reserve(64);
     node_offsets.reserve(64);
-    recursive_linearize(root_node, lin_nodes, node_offsets);
-    lin_bvhs.reserve(bvh_infos.size());
-    for (const BVHInfo& bvh: bvh_infos) {
-        lin_bvhs.emplace_back(bvh);
+    recursive_linearize(root_node, node_fronts, node_backs, node_offsets);
+    bvh_fronts.reserve(bvh_infos.size());
+    bvh_backs.reserve(bvh_infos.size());
+    for (BVHInfo& bvh: bvh_infos) {
+        float4 node_f, node_b;
+        bvh.get_float4(node_f, node_b);
+        bvh_fronts.push_back(node_f);
+        bvh_backs.push_back(node_b);
     }
     delete root_node;
 }

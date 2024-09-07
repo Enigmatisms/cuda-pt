@@ -41,8 +41,10 @@ public:
     Emitter** emitters;
     std::vector<ObjInfo> objects;
     std::vector<Shape> shapes;
-    std::vector<LinearBVH> lin_bvhs;
-    std::vector<LinearNode> lin_nodes;
+    std::vector<float4> bvh_fronts;
+    std::vector<float4> bvh_backs;
+    std::vector<float4> node_fronts;
+    std::vector<float4> node_backs;
     std::vector<int> node_offsets;
 
     std::array<Vec3Arr, 3> verts_list;
@@ -66,7 +68,7 @@ public:
     void export_prims(ArrayType<Vec3>& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const;
 
     bool bvh_available() const noexcept {
-        return !lin_bvhs.empty() && !lin_nodes.empty() && (lin_nodes.size() == node_offsets.size());
+        return !node_offsets.empty();
     }
 
     void print() const noexcept;
