@@ -5,44 +5,40 @@ Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 trait
 
 This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).
 
-This repo currently has no plan for OptiX, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated in the experimental path tracer AdaPT. Check my github homepage for more information.
+This repo currently **has no plan for OptiX**, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated in the experimental path tracer AdaPT. Check my github homepage for more information.
 
-Since I have no intention making this a extensive project (like AdaPT, taking care of all the user-friendly aspect) and I am doing this just to challenge myself for more difficult parallel program design, this repo will not be so user friendly and the scalability will be far worse than that of AdaPT. I will try to keep the chores minimal and focus on heterogeneous program design. 
+The scalability of this repo might be worse than that of AdaPT, but it will improve over time, since I plan to migrate from Taichi Lang to a pure-CUDA code base. Currently, this repo supports:
 
 - [x] Toy CUDA depth renderer with profiling
-
-- [x] Unidirectional path tracing with AABB culling. Full traversal without spatial partition. In this stage, shared memory and constant memory will be made use of. Special kind of `variant` will be of use (since `std::variant` is not supported by CUDA, for `std::visit` will either crash or be rejected by the compiler). This version of UDPT can be 3-8x faster than my [AdaPT](https://github.com/Enigmatisms/AdaPT) renderer (Taichi lang, JIT CUDA backend).
+- [x] Megakernel unidirectional path tracing. Two major ray-scene intersection schemes are employed: shared-memory based AABB culling, and GPU BVH (see below).
+- [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is not as fast as megakernel PT due to the simplicity of the test scenes (and maybe, coalesced GMEM access problems, being working on this).
+- [x] GPU BVH: A stackless GPU surface area heuristic BVH. The current implementation is not optimal (since the ordering of left-child and right child is left unaccounted for, and there is no 'look-back' op), but fast enough. Profiling for this part is not every complete. 1D CUDA texture is used to store the BVH nodes, for better cache performance.
 
 |Depth Renderer|Unidirection PT|
 |:--:|:--:|
 |![](assets/depth-render.png)|![](assets/pt-render.png)|
-|![](assets/render-balls.png)|![](assets/render-bunny.png)|
+|![](assets/render-balls.png)|![](assets/render-bvh-50.png)|
 
-- [ ] CUDA texture bindings (with normal or UV maps)
-- [ ] GPU side BVH implementation. This will be the most difficult part, since "it is always easy to write your program with parallelism, but difficult to make it fast".
+##### TODO
 
-##### shared / constant / texture memory acceleration
+- [ ] (Recent) An `imgui` based interactive UI.
+- [ ] (Around 2024.11, stay tuned) Benchmarking with AdaPT (Taichi lang based renderer) and OptiX (optional). More profiling, and finally, I think I will write several blog posts on "How to implement an efficient software path tracing renderer with CUDA". The blog posts will be more focused on the soft(and hard)-ware related analysis-driven-optimization, so they will actually be posts that summarize (and teach) some best practices for programming the tasks with extremely imbalanced workloads.
+- [ ] CUDA texture for texture mapping. I have UV, but I didn't write texture loading currently. What a sad state of affairs.
 
-- For naive full-traversal based implementation, multiple threads can batch geometries (together with UV-coords, normals, etc.) and copy them to shared memory. Since shared memory is limited (on my device, 49152 Bytes) and we need appropriate number of blocks to occupy the stream processors, batch size should be experimented with.
-- constant memory can be used to store object information (color, emission), since it will not occupy too much memory (65536 Bytes constant memory on my device is obviously sufficient).
-- texture memory: I have never tried this before. Excited! CUDA texture bindings offer hardware BILERP, amazing.
+##### Tricks (that will be covered in my incoming blog posts)
 
-##### warp level operations & stream multi-processing
+I've tried a handful of tricks, unfortunately, due to the limitation of time I haven't document any of these (including statistical profiling and analysis) and I currently only have vague (somewhat) concepts of DOs and DON'Ts. Emmm... I really want to summarize all of them, in November, after landing on a good job. So wish me good luck.
 
-For now, not applicable it seems.
-
-##### `variant` based polymorphism
-
-Polymorphism can be easily achieved with virtual functions/classes, yet I don't think this is a good choice for GPU programming: extra `vptr` will 
-
-- Add another global memory access, which can be slow (without possibility to coalesce memory access for fewer memory transactions) 
-- Prevent compiler from inlining the function, and the stack procedures for calling a non-inline function can introduce overhead.
-
-Polymorphism based on `variant` (union like type) might avoid the above overhead.
-
-##### Spatial partition
-
-For a scene with complex geometries, BVH (or KD-tree) should be implemented to accelerate ray-intersection. For CPUs, these acceleration structures are easy to implement and can be fast naturally, while for GPUs, branching efficiency and memory access pattern should be carefully considered, in order to run as fast as it can.
+- [x] Divergence control part I (loop 'pre-converge')
+- [x] Divergence control part II: megakernel or wavefront? 
+- [x] Stream compaction for WFPT. Shader Execution Reordering (SER) on Ada Lovelace architecture (NVIDIA 40x GPU) (More in-depth reading on this topic, since NVIDIA said almost nothing important in their SER white-book).
+- [x] Coalesced access: SoA in WFPT and lg-throttle problem for AoS
+- [x] Local memory: dynamic indexing considered harmful
+- [x] Dynamic polymorphism: GPU based `variant` or device-side inheritance (virtual functions and their pointers) ?
+- [x] Avoiding bank conflicts & Use vectorized load / store
+- [x] IMC (constant cache miss): when should you use constant cache
+- [x] CPU multi-threading and GPU stream-based concurrency (maybe Hyper-Q).
+- [ ] (More in-depth reading on this topic) What makes a good GPU based spatially-partitioning data structures (like BVH): well I am no expert in this, should more papers on this topic.
 
 ---
 

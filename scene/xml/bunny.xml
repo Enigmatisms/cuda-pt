@@ -9,7 +9,7 @@
 
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
-        <integer name="sample_count" value="8"/>
+        <integer name="sample_count" value="1024"/>
         <integer name="max_bounce" value="8"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
@@ -21,7 +21,7 @@
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
-			<bool name="gamma_correction" value="true"/>
+			<bool name="gamma_correction" value="false"/>
 		</film>
 	</sensor>
 
