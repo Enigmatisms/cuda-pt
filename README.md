@@ -18,8 +18,9 @@ Since I have no intention making this a extensive project (like AdaPT, taking ca
 |![](assets/depth-render.png)|![](assets/pt-render.png)|
 |![](assets/render-balls.png)|![](assets/render-bunny.png)|
 
-- [ ] CUDA texture bindings (with normal or UV maps)
-- [ ] GPU side BVH implementation. This will be the most difficult part, since "it is always easy to write your program with parallelism, but difficult to make it fast".
+- [x] Wavefront path tracing (profiled) with stream compaction.
+- [x] CUDA texture bindings (for BVH nodes)
+- [x] GPU side BVH implementation. This will be the most difficult part, since "it is always easy to write your program with parallelism, but difficult to make it fast".
 
 ##### shared / constant / texture memory acceleration
 
