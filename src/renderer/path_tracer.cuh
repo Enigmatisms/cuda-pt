@@ -346,11 +346,11 @@ CPT_KERNEL static void render_pt_kernel(
 
 class PathTracer: public TracerBase {
 private:
-    const float4* _bvh_fronts;
-    const float4* _bvh_backs;
-    const float4* _node_fronts;
-    const float4* _node_backs;
-    const int* _node_offsets;
+    float4* _bvh_fronts;
+    float4* _bvh_backs;
+    float4* _node_fronts;
+    float4* _node_backs;
+    int* _node_offsets;
 protected:
     using TracerBase::shapes;
     using TracerBase::aabbs;
@@ -400,11 +400,16 @@ public:
         if (scene.bvh_available()) {
             size_t num_bvh  = scene.bvh_fronts.size();
             num_nodes = scene.node_fronts.size();
-            PathTracer::createTexture1D(scene.bvh_fronts.data(),  num_bvh,   _bvh_fronts,  bvh_fronts);
-            PathTracer::createTexture1D(scene.bvh_backs.data(),   num_bvh,   _bvh_backs,   bvh_backs);
-            PathTracer::createTexture1D(scene.node_fronts.data(), num_nodes, _node_fronts, node_fronts);
-            PathTracer::createTexture1D(scene.node_backs.data(),  num_nodes, _node_backs,  node_backs);
-            PathTracer::createTexture1D(scene.node_offsets.data(), num_nodes, _node_offsets, node_offsets);
+            CUDA_CHECK_RETURN(cudaMalloc(&_bvh_fronts,  num_bvh * sizeof(float4)));
+            CUDA_CHECK_RETURN(cudaMalloc(&_bvh_backs,   num_bvh * sizeof(float4)));
+            CUDA_CHECK_RETURN(cudaMalloc(&_node_fronts, num_nodes * sizeof(float4)));
+            CUDA_CHECK_RETURN(cudaMalloc(&_node_backs,  num_nodes * sizeof(float4)));
+            CUDA_CHECK_RETURN(cudaMalloc(& _node_offsets, num_nodes * sizeof(int)));
+            PathTracer::createTexture1D<float4>(scene.bvh_fronts.data(),  num_bvh,   _bvh_fronts,  bvh_fronts);
+            PathTracer::createTexture1D<float4>(scene.bvh_backs.data(),   num_bvh,   _bvh_backs,   bvh_backs);
+            PathTracer::createTexture1D<float4>(scene.node_fronts.data(), num_nodes, _node_fronts, node_fronts);
+            PathTracer::createTexture1D<float4>(scene.node_backs.data(),  num_nodes, _node_backs,  node_backs);
+            PathTracer::createTexture1D<int>(scene.node_offsets.data(), num_nodes, _node_offsets, node_offsets);
         } else {
             throw std::runtime_error("BVH not available in scene. Abort.");
         }
@@ -432,12 +437,11 @@ public:
         CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_fronts));
         CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_backs));
         CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_offsets));
-
-        CUDA_CHECK_RETURN(cudaFree((void *)_bvh_fronts));
-        CUDA_CHECK_RETURN(cudaFree((void *)_bvh_backs));
-        CUDA_CHECK_RETURN(cudaFree((void *)_node_fronts));
-        CUDA_CHECK_RETURN(cudaFree((void *)_node_backs));
-        CUDA_CHECK_RETURN(cudaFree((void *)_node_offsets));
+        CUDA_CHECK_RETURN(cudaFree(_bvh_fronts));
+        CUDA_CHECK_RETURN(cudaFree(_bvh_backs));
+        CUDA_CHECK_RETURN(cudaFree(_node_fronts));
+        CUDA_CHECK_RETURN(cudaFree(_node_backs));
+        CUDA_CHECK_RETURN(cudaFree(_node_offsets));
 #endif  // RENDERER_USE_BVH
     }
 
@@ -464,20 +468,18 @@ public:
     }
 
     template <typename TexType>
-    static void createTexture1D(TexType* tex_src, size_t size, TexType* tex_dst, cudaTextureObject_t& tex_obj) {
+    static void createTexture1D(const TexType* tex_src, size_t size, TexType* tex_dst, cudaTextureObject_t& tex_obj) {
         cudaChannelFormatDesc channel_desc;
         if constexpr (std::is_same_v<std::decay_t<TexType>, int>) {
             channel_desc = cudaCreateChannelDesc<int>();
         } else {
             channel_desc = cudaCreateChannelDesc<float4>();
         }
-        printf("texture size: %llu\n", size);
-        CUDA_CHECK_RETURN(cudaMalloc(&tex_dst, size * sizeof(TexType)));
-        CUDA_CHECK_RETURN(cudaMemcpy((void *)tex_dst, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemcpy(tex_dst, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
         cudaResourceDesc res_desc;
         memset(&res_desc, 0, sizeof(res_desc));
         res_desc.resType = cudaResourceTypeLinear;
-        res_desc.res.linear.devPtr = (void *)tex_dst;
+        res_desc.res.linear.devPtr = tex_dst;
         res_desc.res.linear.desc   = channel_desc;
         res_desc.res.linear.sizeInBytes = size * sizeof(TexType);
 
