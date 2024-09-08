@@ -19,8 +19,9 @@ The scalability of this repo might be worse than that of AdaPT, but it will impr
 |![](assets/depth-render.png)|![](assets/pt-render.png)|
 |![](assets/render-balls.png)|![](assets/render-bvh-50.png)|
 
-##### TODO
-
+- [x] Wavefront path tracing (profiled) with stream compaction.
+- [x] CUDA texture bindings (for BVH nodes)
+- [x] GPU side BVH implementation. This will be the most difficult part, since "it is always easy to write your program with parallelism, but difficult to make it fast".
 - [ ] (Recent) An `imgui` based interactive UI.
 - [ ] (Around 2024.11, stay tuned) Benchmarking with AdaPT (Taichi lang based renderer) and OptiX (optional). More profiling, and finally, I think I will write several blog posts on "How to implement an efficient software path tracing renderer with CUDA". The blog posts will be more focused on the soft(and hard)-ware related analysis-driven-optimization, so they will actually be posts that summarize (and teach) some best practices for programming the tasks with extremely imbalanced workloads.
 - [ ] CUDA texture for texture mapping. I have UV, but I didn't write texture loading currently. What a sad state of affairs.
