@@ -46,7 +46,7 @@ public:
 
     CPT_CPU_GPU bool intersect(const Ray& ray, float& t_near) const {
         auto invDir = 1.0f / ray.d;
-
+        // long scoreboard
         auto t1s = (mini - ray.o) * invDir;
         auto t2s = (maxi - ray.o) * invDir;
 
