@@ -234,9 +234,6 @@ namespace {
     constexpr int TOTAL_RAY = PATCH_X * PATCH_Y;
 }
 
-// camera is defined in the global constant memory
-// extern __constant__ DeviceCamera dev_cam;
-
 /**
  * @brief ray generation kernel 
  * note that, all the kernels are called per stream, each stream can have multiple blocks (since it is a kernel call)
@@ -247,6 +244,7 @@ namespace {
  * @note we pass payloads in by value
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
+    const DeviceCamera& dev_cam,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
@@ -685,6 +683,7 @@ private:
     using PathTracer::node_fronts;
     using PathTracer::node_backs;
     using PathTracer::node_offsets;
+    using PathTracer::camera;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -741,7 +740,7 @@ public:
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
                 raygen_primary_hit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer, obj_info, prim2obj, shapes, aabbs, 
+                    *camera, payload_buffer, obj_info, prim2obj, shapes, aabbs, 
                     verts, norms, uvs, bvh_fronts, bvh_backs, node_fronts, 
                     node_backs, node_offsets, ray_idx_buffer, stream_offset, num_prims, 
                     patch_x, patch_y, i, stream_id, image.w(), num_nodes);

@@ -2,7 +2,6 @@
 #include "renderer/wf_path_tracer.cuh"
 #include <ext/lodepng/lodepng.h>
 
-__constant__ DeviceCamera dev_cam;
 __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
@@ -24,7 +23,6 @@ int main(int argc, char** argv) {
 
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
-    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(dev_cam, &scene.cam, sizeof(DeviceCamera)));
 
     std::unique_ptr<PathTracer> renderer = nullptr;
     if (scene.rdr_type == RendererType::MegaKernelPT) {

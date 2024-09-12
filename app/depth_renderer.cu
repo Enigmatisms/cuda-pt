@@ -3,8 +3,6 @@
 #include "renderer/depth.cuh"
 #include <ext/lodepng/lodepng.h>
 
-__constant__ DeviceCamera dev_cam;
-
 int main() {
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
@@ -27,7 +25,6 @@ int main() {
     int width = 1024, height = 1024;
     float fov = 55;
     DeviceCamera camera(from, to, fov, width, height);
-    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(dev_cam, &camera, sizeof(DeviceCamera)));
 
     // shape setup
     std::vector<Shape> shapes(num_prims);
@@ -36,7 +33,7 @@ int main() {
     for (int i = num_triangle; i < num_prims; i++)
         shapes[i] = SphereShape(i >> 1);
     
-    DepthTracer dtracer(shapes, vert_data, norm_data, uvs_data, width, height);
+    DepthTracer dtracer(shapes, vert_data, norm_data, uvs_data, std::move(camera), width, height);
     auto bytes_buffer = dtracer.render(spp);
 
     std::string file_name = "depth-render.png";

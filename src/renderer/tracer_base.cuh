@@ -11,8 +11,6 @@
 #include "core/host_device.cuh"
 #include "core/camera_model.cuh"
 
-extern __constant__ DeviceCamera dev_cam;
-
 // #define CP_BASE_6
 #ifdef CP_BASE_6
 static constexpr int BASE_SHFL = 6;

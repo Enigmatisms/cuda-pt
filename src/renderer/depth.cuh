@@ -8,8 +8,6 @@
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
-extern __constant__ DeviceCamera dev_cam;
-
 /**
  * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
@@ -20,6 +18,7 @@ extern __constant__ DeviceCamera dev_cam;
  * @param max_depth maximum allowed bounce
 */
 CPT_KERNEL static void render_depth_kernel(
+    const DeviceCamera& dev_cam,
     ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
@@ -86,6 +85,8 @@ using TracerBase::dev_image;
 using TracerBase::num_prims;
 using TracerBase::w;
 using TracerBase::h;
+
+DeviceCamera* camera;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -100,8 +101,16 @@ public:
         const ArrayType<Vec3>& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
+        DeviceCamera&& cam,
         int width, int height
-    ): TracerBase(_shapes, _verts, _norms, _uvs, width, height) {}
+    ): TracerBase(_shapes, _verts, _norms, _uvs, width, height) {
+        CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
+        CUDA_CHECK_RETURN(cudaMemcpy(camera, &cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
+    }
+
+    ~DepthTracer() {
+        CUDA_CHECK_RETURN(cudaFree(camera));
+    }
 
     CPT_CPU std::vector<uint8_t> render(
         int num_iter = 64,
@@ -112,10 +121,12 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_depth_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                    shapes, aabbs, verts, norms, uvs, *dev_image, num_prims, max_depth); 
+                    *camera, shapes, aabbs, verts, norms, uvs, *dev_image, num_prims, max_depth); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         return image.export_cpu(1.f / (5.f * num_iter), gamma_correction);
     }
+
+
 };
 

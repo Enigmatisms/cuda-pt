@@ -203,6 +203,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param max_depth maximum allowed bounce
 */
 CPT_KERNEL static void render_pt_kernel(
+    const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     ConstShapePtr shapes,
@@ -374,6 +375,8 @@ protected:
     cudaTextureObject_t node_fronts;
     cudaTextureObject_t node_backs;
     cudaTextureObject_t node_offsets;
+
+    DeviceCamera* camera;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -417,6 +420,8 @@ public:
 
         CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
         CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
+        CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
+        CUDA_CHECK_RETURN(cudaMemcpy(camera, &scene.cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
 
         int prim_offset = 0;
         for (int i = 0; i < num_objs; i++) {
@@ -431,6 +436,7 @@ public:
     virtual ~PathTracer() {
         CUDA_CHECK_RETURN(cudaFree(obj_info));
         CUDA_CHECK_RETURN(cudaFree(prim2obj));
+        CUDA_CHECK_RETURN(cudaFree(camera));
 #ifdef RENDERER_USE_BVH
         CUDA_CHECK_RETURN(cudaDestroyTextureObject(bvh_fronts));
         CUDA_CHECK_RETURN(cudaDestroyTextureObject(bvh_backs));
@@ -456,7 +462,7 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                *camera, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
                 bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
                 *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth, num_nodes
             ); 
@@ -465,6 +471,10 @@ public:
         }
         printf("\n");
         return image.export_cpu(1.f / num_iter, gamma_correction);
+    }
+
+    CPT_CPU void update_camera(const DeviceCamera& cam) {
+        // TODO: copy camera to device
     }
 
     template <typename TexType>
