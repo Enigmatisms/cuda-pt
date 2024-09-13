@@ -4,6 +4,9 @@
  * @author: Qianyue He
 */
 #pragma once
+#include <mutex>
+#include <thread>
+#include <condition_variable>
 #include <cuda/pipeline>
 #include "core/scene.cuh"
 #include "core/progress.h"
@@ -202,6 +205,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param num_prims number of primitives (to be intersected with)
  * @param max_depth maximum allowed bounce
 */
+template <bool render_once>
 CPT_KERNEL static void render_pt_kernel(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
@@ -342,7 +346,12 @@ CPT_KERNEL static void render_pt_kernel(
         }
     }
     __syncthreads();
-    image(px, py) += radiance;
+    if constexpr (render_once) {
+        // image will be the output buffer, there will be double buffering
+        image(px, py) = radiance;
+    } else {
+        image(px, py) += radiance;
+    }
 }
 
 class PathTracer: public TracerBase {
@@ -377,6 +386,10 @@ protected:
     cudaTextureObject_t node_offsets;
 
     DeviceCamera* camera;
+
+    // used for double buffering
+    std::condition_variable _cv;
+    std::mutex _mtx;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -458,10 +471,9 @@ public:
     ) override {
         printf("Rendering starts.\n");
         TicToc _timer("render_pt_kernel()", num_iter);
-        // TODO: stream processing
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
-            render_pt_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+            render_pt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
                 *camera, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
                 bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
                 *dev_image, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth, num_nodes
@@ -471,6 +483,20 @@ public:
         }
         printf("\n");
         return image.export_cpu(1.f / num_iter, gamma_correction);
+    }
+
+    virtual CPT_CPU void render_online(
+        int max_depth = 4
+    ) override {
+        static int render_cnt = 0;
+        render_pt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+            *camera, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+            bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
+            *dev_image, num_prims, num_objs, num_emitter, render_cnt * SEED_SCALER, max_depth, num_nodes
+        ); 
+        render_cnt ++;
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        // Notify once
     }
 
     CPT_CPU void update_camera(const DeviceCamera& cam) {

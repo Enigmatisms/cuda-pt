@@ -10,3 +10,6 @@
 [submodule "src/ext/tinyobjloader"]
 	path = src/ext/tinyobjloader
 	url = git@gitee.com:Enigmatisms/tinyobjloader.git
+[submodule "src/ext/imgui"]
+	path = src/ext/imgui
+	url = git@github.com:ocornut/imgui.git

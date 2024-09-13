@@ -169,4 +169,10 @@ public:
         throw std::runtime_error("Not implemented.\n");
         return {};
     }
+
+    CPT_CPU virtual void render_online(
+        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+    ) {
+        throw std::runtime_error("Not implemented.\n");
+    }
 };
