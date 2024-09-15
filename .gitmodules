@@ -13,3 +13,9 @@
 [submodule "src/ext/imgui"]
 	path = src/ext/imgui
 	url = git@github.com:ocornut/imgui.git
+[submodule "src/ext/glew"]
+	path = src/ext/glew
+	url = git@github.com:Enigmatisms/glew.git
+[submodule "src/ext/glfw"]
+	path = src/ext/glfw
+	url = git@github.com:glfw/glfw.git
