@@ -23,10 +23,6 @@ CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffs(bits); }
 #endif
 static constexpr int BASE_ADDR = 1 << BASE_SHFL;
 
-using ConstObjPtr   = const ObjInfo* const;
-using ConstBSDFPtr  = const BSDF* const;
-using ConstIndexPtr = const int* const;
-
 /**
  * This API is deprecated, due to the performance bounded by BSYNC
  * which is the if branch barrier synchronization (convergence problem)
