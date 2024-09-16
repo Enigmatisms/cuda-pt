@@ -64,7 +64,6 @@ include_directories(
 	${CMAKE_CURRENT_LIST_DIR}/src 
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/variant
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/glew/include
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/glfw/include
 )
 
@@ -76,8 +75,6 @@ add_subdirectory(src/ext/glfw)
 find_package(OpenGL REQUIRED)
 if (MSVC)
 	list(APPEND CMAKE_PREFIX_PATH "E:\\glew-2.2.0\\glew")
-	set(GLEW_VERBOSE True)
-	# set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_LIST_DIR}/src/ext/glew/build/cmake)
 	set(GLEW_USE_STATIC_LIBS false)
 	find_package(GLEW REQUIRED)
 else()
