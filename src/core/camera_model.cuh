@@ -46,4 +46,20 @@ public:
     }
 
     CPT_CPU static DeviceCamera from_xml(const tinyxml2::XMLElement* sensorElement);
+
+    CPT_CPU void move_forward(float step = 0.1) {
+        t += step * R.rotate(Vec3(0, 0, 1));
+    }
+
+    CPT_CPU void move_backward(float step = 0.1) {
+        t += step * R.rotate(Vec3(0, 0, -1));
+    }
+
+    CPT_CPU void move_left(float step = 0.1) {
+        t += step * R.rotate(Vec3(-signs.x(), 0, 0));
+    }
+
+    CPT_CPU void move_right(float step = 0.1) {
+        t += step * R.rotate(Vec3(signs.x(), 0, 0));
+    }
 };

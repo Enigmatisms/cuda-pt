@@ -62,23 +62,37 @@ set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 include_directories(
 	${CMAKE_CURRENT_LIST_DIR}/src 
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/variant
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/glew/include
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/glfw/include
 )
 
 add_subdirectory(src/ext/tinyxml2)
 add_subdirectory(src/ext/tinyobjloader)
-add_subdirectory(src/ext/glew/build/cmake)
 add_subdirectory(src/ext/imgui)
 add_subdirectory(src/ext/glfw)
 
-aux_source_directory(src/impl CUDA_PT_SRC)
+find_package(OpenGL REQUIRED)
+if (MSVC)
+	list(APPEND CMAKE_PREFIX_PATH "E:\\glew-2.2.0\\glew")
+	set(GLEW_VERBOSE True)
+	# set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_LIST_DIR}/src/ext/glew/build/cmake)
+	set(GLEW_USE_STATIC_LIBS false)
+	find_package(GLEW REQUIRED)
+else()
+	find_package(GLEW REQUIRED)
+endif()
+
+aux_source_directory(src/impl CPT_IMPL_SRC)
+aux_source_directory(src/pt_impl CPT_PT_IMPL_SRC)
+aux_source_directory(src/viewer_impl CPT_VIEWER_IMPL_SRC)
 
 set(EXEC1_NAME "depth")
 	add_executable(${EXEC1_NAME}
 	app/depth_renderer.cu
 	src/ext/lodepng/lodepng.cpp
-	${CUDA_PT_SRC}
+	${CPT_IMPL_SRC}
 )
 
 target_link_libraries(
@@ -103,7 +117,8 @@ set(EXEC2_NAME "pt")
 add_executable(${EXEC2_NAME}
 	app/pt_renderer.cu
 	src/ext/lodepng/lodepng.cpp
-	${CUDA_PT_SRC}
+	${CPT_IMPL_SRC}
+	${CPT_PT_IMPL_SRC}
 )
 
 target_link_libraries(
@@ -119,6 +134,36 @@ set_target_properties(
 
 target_compile_options(
 	${EXEC2_NAME} PRIVATE
+	$<$<COMPILE_LANGUAGE:CUDA>:
+	--expt-relaxed-constexpr
+	>
+)
+
+set(EXEC3_NAME "cpt")
+add_executable(${EXEC3_NAME}
+	app/viewer.cu
+	${CPT_VIEWER_IMPL_SRC}
+	${CPT_IMPL_SRC}
+	${CPT_PT_IMPL_SRC}
+)
+
+target_link_libraries(
+	${EXEC3_NAME} PRIVATE
+	tinyxml2 tinyobjloader
+	GLEW::glew
+	glfw
+	imgui
+	${OPENGL_gl_LIBRARY}
+)
+
+set_target_properties(
+	${EXEC3_NAME} PROPERTIES
+	CUDA_SEPARABLE_COMPILATION ON
+	CUDA_ARCHITECTURES native
+)
+
+target_compile_options(
+	${EXEC3_NAME} PRIVATE
 	$<$<COMPILE_LANGUAGE:CUDA>:
 	--expt-relaxed-constexpr
 	>

@@ -3,6 +3,7 @@
  * @date: 9.15.2024
  * @author: Qianyue He
 */
+#include "renderer/base_pt.cuh"
 #include "renderer/megakernel_pt.cuh"
 
 /**
@@ -188,7 +189,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param max_depth maximum allowed bounce
 */
 template <bool render_once>
-CPT_KERNEL static void render_pt_kernel(
+CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
@@ -208,9 +209,9 @@ CPT_KERNEL static void render_pt_kernel(
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
-    int node_num = -1,
-    int accum_cnt = 1
+    int max_depth,/* max depth, useless for depth renderer, 1 anyway */
+    int node_num,
+    int accum_cnt
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
 
@@ -334,8 +335,59 @@ CPT_KERNEL static void render_pt_kernel(
         // image will be the output buffer, there will be double buffering
         auto local_v = image(px, py) + radiance;
         image(px, py) = local_v;
-        FLOAT4(output_buffer[(px + py * image.w()) << 2]) = local_v * (1.f / float(accum_cnt)); 
+        local_v *= 1.f / float(accum_cnt);
+        FLOAT4(output_buffer[(px + py * image.w()) << 2]) = float4(local_v); 
     } else {
         image(px, py) += radiance;
     }
 }
+
+template CPT_KERNEL void render_pt_kernel<true>(
+    const DeviceCamera& dev_cam, 
+    ConstObjPtr objects,
+    ConstIndexPtr prim2obj,
+    ConstShapePtr shapes,
+    ConstAABBPtr aabbs,
+    ConstPrimPtr verts,
+    ConstPrimPtr norms, 
+    ConstUVPtr uvs,
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
+    DeviceImage& image,
+    float* output_buffer,
+    int num_prims,
+    int num_objects,
+    int num_emitter,
+    int seed_offset,
+    int max_depth,
+    int node_num,
+    int accum_cnt
+);
+
+template CPT_KERNEL void render_pt_kernel<false>(
+    const DeviceCamera& dev_cam, 
+    ConstObjPtr objects,
+    ConstIndexPtr prim2obj,
+    ConstShapePtr shapes,
+    ConstAABBPtr aabbs,
+    ConstPrimPtr verts,
+    ConstPrimPtr norms, 
+    ConstUVPtr uvs,
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
+    DeviceImage& image,
+    float* output_buffer,
+    int num_prims,
+    int num_objects,
+    int num_emitter,
+    int seed_offset,
+    int max_depth,
+    int node_num,
+    int accum_cnt
+);

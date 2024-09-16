@@ -12,7 +12,6 @@
 #include "renderer/tracer_base.cuh"
 #include "renderer/megakernel_pt.cuh"
 
-#define RENDERER_USE_BVH
 static constexpr int SEED_SCALER = 11451;
 
 class PathTracer: public TracerBase {
@@ -160,7 +159,7 @@ public:
         CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
         accum_cnt ++;
-        render_pt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
+        render_pt_kernel<true><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
             *camera, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
             bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
             *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
@@ -179,8 +178,10 @@ public:
         executor(output_buffer, pbo_resc, pbo_id, cuda_texture_id, w, h);
     }
 
-    CPT_CPU void update_camera(const DeviceCamera& cam) {
-        // TODO: copy camera to device
+    CPT_CPU void update_camera(const DeviceCamera* const cam) {
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemset2D(image.data(), image.get_pitch(), 0, w * sizeof(float4), h));    // reset image buffer
+        accum_cnt = 0;                                                                  // reset accumulation counter
     }
 
     template <typename TexType>

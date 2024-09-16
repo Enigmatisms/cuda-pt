@@ -3,12 +3,12 @@
  * @date: 9.15.2024
  * @author: Qianyue He
 */
+#include "renderer/base_pt.cuh"
 #include "renderer/wavefront_pt.cuh"
 
 namespace {
     using PayLoadBuffer      = PayLoadBufferSoA* const;
     using ConstPayLoadBuffer = const PayLoadBuffer;
-    using IndexBuffer        = uint32_t* const;
 }
 
 /**
@@ -38,7 +38,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
-    int stream_id, int width, int node_num = -1
+    int stream_id, int width, int node_num
 ) {
     // stream and patch related offset
     const int sx = x_patch * PATCH_X, sy = y_patch * PATCH_Y, buffer_xoffset = stream_id * PATCH_X;
@@ -155,7 +155,7 @@ CPT_KERNEL void closesthit_shader(
     int stream_offset,
     int num_prims,
     int num_valid,
-    int node_num = -1
+    int node_num
 ) {
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
                             blockDim.x * gridDim.x +                            // cols
@@ -257,7 +257,7 @@ CPT_KERNEL void nee_shader(
     int num_objects,
     int num_emitter,
     int num_valid,
-    int node_num = -1
+    int node_num
 ) {
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
                             blockDim.x * gridDim.x +                            // cols

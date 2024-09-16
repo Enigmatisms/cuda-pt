@@ -53,7 +53,7 @@ public:
 
     RenderingConfig config;
 
-    DeviceCamera cam;
+    DeviceCamera* cam;
     int num_bsdfs;
     int num_prims;
     int num_emitters;

@@ -12,6 +12,7 @@ __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
 int main(int argc, char** argv) {
+    std::cerr << "Path tracing IMGUI viewer.\n";
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
         exit(1);
@@ -31,19 +32,25 @@ int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
     std::unique_ptr<PathTracer> renderer = nullptr;
+    std::cout << "Path tracer loaded: ";
     if (scene.rdr_type == RendererType::MegaKernelPT) {
         renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, 1);
+        std::cout << "Megakernel PT.\n";
     } else {
         renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, 1);
+        std::cout << "Wavefront PT.\n";
     }
 
-    renderer->graphics_resc_init(gui::init_texture_and_pbo);
     auto window = gui::create_window(scene.config.width, scene.config.height);
+    renderer->graphics_resc_init(gui::init_texture_and_pbo);
+    renderer->update_camera(scene.cam);
 
-    // 主循环
     while (!glfwWindowShouldClose(window.get())) {
         glfwPollEvents();
-
+        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1);
+        if (cam_updated) {
+            renderer->update_camera(scene.cam);
+        }
         renderer->render_online(scene.config.max_depth);
         gui::update_texture(
             renderer->get_pbo_id(),
@@ -54,7 +61,8 @@ int main(int argc, char** argv) {
         gui::window_render(
             renderer->get_texture_id(),
             scene.config.width,
-            scene.config.height
+            scene.config.height,
+            true
         );
 
         // swap the buffer

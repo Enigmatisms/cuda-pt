@@ -42,6 +42,10 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 
 ---
 
+### Visualizer Notes
+- [x] `imgui` has no CMakeLists.txt so we should write it ourselves.
+- [x] I think it is painful to use GLEW for windows: after compilation, `glew32.dll` should be manually copied to `Windows/System32`. Also, we should build GLEW manually.   
+
 ### Misc
 
 This repo originated from: [w3ntao/smallpt-megakernel](https://github.com/w3ntao/smallpt-megakernel), but now it is very different from it. I answered [his question on stackexchange computer graphics](https://computergraphics.stackexchange.com/questions/14000/why-is-my-ray-tracer-not-accelerated-by-cuda/14003#14003) and tweaked his code, so I thought to myself... why not base on this repo and try to make it better (though, I won't call it small-pt, since it definitely won't be small after I heavily optimize the code).

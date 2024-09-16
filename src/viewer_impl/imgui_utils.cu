@@ -1,19 +1,19 @@
 #include <GL/glew.h>
-#include <GLFW/glfw3.h>
 #include <ext/imgui/imgui.h>
 #include <ext/imgui/backends/imgui_impl_glfw.h>
 #include <ext/imgui/backends/imgui_impl_opengl3.h>
 #include <cuda_gl_interop.h>
 #include "core/cuda_utils.cuh"
+#include "core/camera_model.cuh"
 #include "core/imgui_utils.cuh"
 
 namespace gui {
 
 // initialize GL texture and PBO (pixel buffer object)
-void init_gl_texture_and_pbo(
+void init_texture_and_pbo(
     float* output_buffer,
     cudaGraphicsResource_t& pbo_resc, 
-    GLuint& pbo_id, GLuint& cuda_texture_id,
+    gl_uint& pbo_id, gl_uint& cuda_texture_id,
     int width, int height
 ) {
     // create PBO
@@ -37,12 +37,12 @@ void init_gl_texture_and_pbo(
     CUDA_CHECK_RETURN(cudaMemset(output_buffer, 0, width * height * 4 * sizeof(float)));
 }
 
-void imgui_window_render(GLuint cuda_texture_id, int width, int height) {
+void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int width, int height) {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::Begin("CUDA-PT Rendering Output");
+    ImGui::Begin(sub_win_name.c_str());
     ImGui::Image((void*)(intptr_t)cuda_texture_id, ImVec2(width, height));
     ImGui::End();
 
@@ -50,8 +50,37 @@ void imgui_window_render(GLuint cuda_texture_id, int width, int height) {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-void gl_update_texture(
-    GLuint pbo_id, GLuint cuda_texture_id,
+void window_render(
+    GLuint cuda_texture_id, int width, int height,
+    bool show_fps
+) {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+    ImVec2 top_left(0, 0);
+    ImVec2 bottom_right(width, height);
+
+    // splat pixel buffer outputs
+    draw_list->AddImage((void*)(intptr_t)cuda_texture_id, top_left, bottom_right);
+    if (show_fps) {
+        const char* window_title = "Statistics";
+        ImVec2 text_size = ImGui::CalcTextSize(window_title);
+        float padding = ImGui::GetStyle().WindowPadding.x * 2;
+        float min_width = text_size.x * 1.2f + padding; 
+        ImGui::SetNextWindowSizeConstraints(ImVec2(min_width, 0), ImVec2(FLT_MAX, FLT_MAX));
+        ImGui::Begin(window_title, nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGuiIO& io = ImGui::GetIO();
+        ImGui::Text("FPS: %.2f", io.Framerate);
+        ImGui::End();
+    }
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void update_texture(
+    gl_uint pbo_id, gl_uint cuda_texture_id,
     int width, int height
 ) {
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_id);
@@ -60,9 +89,9 @@ void gl_update_texture(
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 }
 
-void imgui_clean_up(
+void clean_up(
     GLFWwindow* window,
-    GLuint& pbo_id, GLuint& cuda_texture_id
+    gl_uint& pbo_id, gl_uint& cuda_texture_id
 ) {
     glDeleteBuffers(1, &pbo_id);
     glDeleteTextures(1, &cuda_texture_id);
@@ -73,7 +102,7 @@ void imgui_clean_up(
     glfwTerminate();
 }
 
-std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_imgui_window(int width, int height) {
+std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int height) {
     // initialize GLFW
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
@@ -108,6 +137,29 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_imgui_window(int width, in
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
     return std::unique_ptr<GLFWwindow, GLFWWindowDeleter>(window);
+}
+
+bool keyboard_camera_update(DeviceCamera& camera, float step)
+{
+    ImGuiIO& io = ImGui::GetIO();
+    bool update = false;
+    if (io.KeysDown[ImGuiKey_W]) {
+        update = true;
+        camera.move_forward(step);
+    }
+    if (io.KeysDown[ImGuiKey_S]) {
+        update = true;
+        camera.move_backward(step);
+    }
+    if (io.KeysDown[ImGuiKey_A]) {
+        update = true;
+        camera.move_left(step);
+    }
+    if (io.KeysDown[ImGuiKey_D]) {
+        update = true;
+        camera.move_right(step);
+    }
+    return update;
 }
 
 }   // namespace gui

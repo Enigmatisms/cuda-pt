@@ -52,6 +52,8 @@ namespace {
     constexpr int PATCH_X = BLOCK_X * THREAD_X;
     constexpr int PATCH_Y = BLOCK_Y * THREAD_Y;
     constexpr int TOTAL_RAY = PATCH_X * PATCH_Y;
+
+    using IndexBuffer = uint32_t* const;
 }
 
 union PDFInteraction {
@@ -252,7 +254,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     cudaTextureObject_t node_fronts,
     cudaTextureObject_t node_backs,
     cudaTextureObject_t node_offsets,
-    const uint32_t* const idx_buffer,
+    const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
     int stream_id, int width, int node_num = -1
@@ -279,7 +281,7 @@ CPT_KERNEL void closesthit_shader(
     cudaTextureObject_t node_fronts,
     cudaTextureObject_t node_backs,
     cudaTextureObject_t node_offsets,
-    const uint32_t* const idx_buffer,
+    const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
     int num_valid,
@@ -304,7 +306,7 @@ CPT_KERNEL void nee_shader(
     cudaTextureObject_t node_fronts,
     cudaTextureObject_t node_backs,
     cudaTextureObject_t node_offsets,
-    const uint32_t* const idx_buffer,
+    const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
     int num_objects,
@@ -322,7 +324,7 @@ CPT_KERNEL void bsdf_local_shader(
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
     ConstUVPtr,         
-    const uint32_t* const idx_buffer,
+    const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims, 
     int num_valid,
@@ -342,7 +344,7 @@ CPT_KERNEL void bsdf_local_shader(
 */
 CPT_KERNEL void miss_shader(
     PayLoadBufferSoA payloads,
-    const uint32_t* const idx_buffer,
+    const IndexBuffer idx_buffer,
     int stream_offset,
     int num_valid
 );

@@ -160,6 +160,8 @@ public:
     bool good() const noexcept {
         return _data.x > THP_EPS || _data.y > THP_EPS || _data.z > THP_EPS;
     }
+
+    CPT_CPU_GPU_INLINE operator float4() const {return _data;}
 };
 
 CPT_CPU_GPU_INLINE void print_Vec4(const Vec4& obj) {

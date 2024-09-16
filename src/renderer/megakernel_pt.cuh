@@ -11,6 +11,8 @@
 #include "core/emitter.cuh"
 #include "core/camera_model.cuh"
 
+#define RENDERER_USE_BVH
+
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
 
@@ -97,7 +99,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param max_depth maximum allowed bounce
 */
 template <bool render_once>
-CPT_KERNEL static void render_pt_kernel(
+CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
     ConstIndexPtr prim2obj,
