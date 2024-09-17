@@ -49,4 +49,10 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
 // process keyboard input and update camera position (host side)
 bool keyboard_camera_update(DeviceCamera& camera, float step = 0.1);
 
+// process mouse input and update camera orientation (host side)
+bool mouse_camera_update(DeviceCamera& cam, float sensitivity = 1);
+
+// settings UI
+bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_fps, bool& render_settings_interface);
+
 }   // namespace gui

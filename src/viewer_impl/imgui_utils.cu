@@ -54,10 +54,6 @@ void window_render(
     GLuint cuda_texture_id, int width, int height,
     bool show_fps
 ) {
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     ImVec2 top_left(0, 0);
     ImVec2 bottom_right(width, height);
@@ -70,7 +66,7 @@ void window_render(
         float padding = ImGui::GetStyle().WindowPadding.x * 2;
         float min_width = text_size.x * 1.2f + padding; 
         ImGui::SetNextWindowSizeConstraints(ImVec2(min_width, 0), ImVec2(FLT_MAX, FLT_MAX));
-        ImGui::Begin(window_title, nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Begin(window_title, &show_fps, ImGuiWindowFlags_AlwaysAutoResize);
         ImGuiIO& io = ImGui::GetIO();
         ImGui::Text("FPS: %.2f", io.Framerate);
         ImGui::End();
@@ -158,6 +154,83 @@ bool keyboard_camera_update(DeviceCamera& camera, float step)
     if (io.KeysDown[ImGuiKey_D]) {
         update = true;
         camera.move_right(step);
+    }
+    return update;
+}
+
+bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
+    ImGuiIO& io = ImGui::GetIO();
+    // Left button is pressed?
+    if (io.MouseDown[0]) {
+        // get current mouse pos
+
+        // whether the mouse is being dragged
+        if (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f) {
+            float deltaX = io.MouseDelta.x;
+            float deltaY = io.MouseDelta.y;
+
+            float yaw = deltaX * sensitivity * M_Pi / 180.0f;
+            float pitch = deltaY * sensitivity * M_Pi / 180.0f;
+
+            cam.rotate(yaw, pitch);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_fps, bool& sub_window_process)
+{
+    // Begin the main menu bar at the top of the window
+    sub_window_process = false;
+    if (ImGui::BeginMainMenuBar()) {
+        // Create a menu item called "Options" in the main menu bar
+        if (ImGui::BeginMenu("Options")) {
+            // Add a checkbox in the menu to toggle the visibility of the collapsible window
+            ImGui::MenuItem("Show Settings Window", NULL, &show_window);
+            ImGui::MenuItem("Show Frame Rate Bar", NULL, &show_fps);
+            ImGui::EndMenu(); // End the "Options" menu
+        }
+        if (ImGui::IsWindowFocused()) {
+            sub_window_process = true;
+        }
+        ImGui::EndMainMenuBar(); // End the main menu bar
+    }
+
+    // Check if the collapsible window should be shown
+    bool update = false;
+    if (show_window) {
+        // Begin the collapsible window
+        if (ImGui::Begin("Settings", &show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
+            // Collapsible group for Camera Settings
+            if (ImGui::CollapsingHeader("Camera Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
+                update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
+
+                float value = focal2fov(cam.inv_focal, cam._hw);
+                ImGui::Text("camera FoV");
+                update |= ImGui::SliderFloat("##slider", &value, 1.0f, 100.0f, "%.2f", ImGuiSliderFlags_None);
+                ImGui::SameLine();
+                update |= ImGui::InputFloat("##input", &value, 1.0f, 100.0f, "%.2f");
+                cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
+
+                bool temp = false;
+                ImGui::Checkbox("temp placeholder", &temp);
+            }
+
+            if (ImGui::CollapsingHeader("Scene Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
+                // Empty placeholder for future Scene Settings
+                ImGui::Text("Scene settings go here...");
+            }
+
+            if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
+                // Empty placeholder for future Renderer Settings
+                ImGui::Text("Renderer settings go here...");
+            }
+            if (ImGui::IsWindowFocused()) {
+                sub_window_process = true;
+            }
+            ImGui::End();
+        }
     }
     return update;
 }

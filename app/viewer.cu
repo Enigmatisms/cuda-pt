@@ -45,9 +45,22 @@ int main(int argc, char** argv) {
     renderer->graphics_resc_init(gui::init_texture_and_pbo);
     renderer->update_camera(scene.cam);
 
+    bool show_main_settings  = true;
+    bool show_frame_rate_bar = true;
+    bool skip_mouse_event    = false;
+
     while (!glfwWindowShouldClose(window.get())) {
         glfwPollEvents();
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
         bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1);
+        cam_updated     |= gui::render_settings_interface(*scene.cam, show_main_settings, show_frame_rate_bar, skip_mouse_event);
+        if (!skip_mouse_event) {        // no sub window (setting window or main menu) is focused
+            cam_updated     |= gui::mouse_camera_update(*scene.cam, 0.5);
+        }
         if (cam_updated) {
             renderer->update_camera(scene.cam);
         }
@@ -62,7 +75,7 @@ int main(int argc, char** argv) {
             renderer->get_texture_id(),
             scene.config.width,
             scene.config.height,
-            true
+            show_frame_rate_bar
         );
 
         // swap the buffer

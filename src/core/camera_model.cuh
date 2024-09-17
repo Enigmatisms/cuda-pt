@@ -13,16 +13,19 @@
 
 // convert fov in degree to focal length
 CPT_CPU_GPU float fov2focal(float fov, float img_size);
+// convert focal length to degree angle 
+CPT_CPU_GPU float focal2fov(float focal, float img_size);
 
 CPT_CPU Vec3 parseVec3(const std::string& str);
 
 class DeviceCamera {
-private:
+public:
     SO3 R;              // camera rotation
-    Vec3 t, dir;        // camera translation (world frame) and orientation
+    Vec3 t;        // camera translation (world frame) and orientation
     float inv_focal;    // focal length
     float _hw, _hh;     // pixel plane 
     Vec2 signs;
+    bool use_orthogonal;
 public:
     CPT_CPU_GPU DeviceCamera() {}
 
@@ -34,14 +37,18 @@ public:
     CPT_GPU Ray generate_ray(int x, int y, Sampler& sampler) const {
         float x_pos = sampler.next1D() + float(x),
                 y_pos = sampler.next1D() + float(y);
-        Vec3 ndc_dir((x_pos - _hw) * inv_focal * signs.x(), (y_pos - _hh) * inv_focal * signs.y(), 1.f);
+        Vec3 ndc_dir(
+            (x_pos - _hw) * inv_focal * signs.x() * (!use_orthogonal), 
+            (y_pos - _hh) * inv_focal * signs.y() * (!use_orthogonal), 1.f);
         return Ray(t, R.rotate(ndc_dir.normalized()));
     }
 
     CPT_GPU Ray generate_ray(int x, int y, Vec2&& sample) const {
         float x_pos = sample.x() + float(x),
                 y_pos = sample.y() + float(y);
-        Vec3 ndc_dir((x_pos - _hw) * inv_focal * signs.x(), (y_pos - _hh) * inv_focal * signs.y(), 1.f);
+        Vec3 ndc_dir(
+            (x_pos - _hw) * inv_focal * signs.x() * (!use_orthogonal), 
+            (y_pos - _hh) * inv_focal * signs.y() * (!use_orthogonal), 1.f);
         return Ray(t, R.rotate(ndc_dir.normalized()));
     }
 
@@ -62,4 +69,6 @@ public:
     CPT_CPU void move_right(float step = 0.1) {
         t += step * R.rotate(Vec3(signs.x(), 0, 0));
     }
+
+    CPT_CPU void rotate(float yaw, float pitch);
 };
