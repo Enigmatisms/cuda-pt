@@ -139,6 +139,7 @@ target_compile_options(
 set(EXEC3_NAME "cpt")
 add_executable(${EXEC3_NAME}
 	app/viewer.cu
+	src/ext/lodepng/lodepng.cpp
 	${CPT_VIEWER_IMPL_SRC}
 	${CPT_IMPL_SRC}
 	${CPT_PT_IMPL_SRC}

@@ -38,7 +38,17 @@ struct GLFWWindowDeleter {
 };
 
 // draw images on the background of the main window
-void window_render(gl_uint cuda_texture_id, int width, int height, bool show_fps = true);
+void window_render(
+    gl_uint cuda_texture_id, 
+    int width, int height
+);
+
+// window for displaying FPS & SPP
+void show_render_statistics(
+    int num_sample, 
+    bool& sub_window_proc,
+    bool show_fps
+);
 
 // create a floating window (collapse-able) and draw image in it
 void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int width, int height);
@@ -53,6 +63,6 @@ bool keyboard_camera_update(DeviceCamera& camera, float step = 0.1);
 bool mouse_camera_update(DeviceCamera& cam, float sensitivity = 1);
 
 // settings UI
-bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_fps, bool& render_settings_interface);
+bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_fps, bool& render_settings_interface, bool& capture);
 
 }   // namespace gui

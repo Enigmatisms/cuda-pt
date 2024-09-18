@@ -184,6 +184,15 @@ public:
         accum_cnt = 0;                                                                  // reset accumulation counter
     }
 
+    CPT_CPU int get_num_sample() const noexcept {
+        return accum_cnt;
+    }
+
+    CPT_CPU std::vector<uint8_t> get_image_buffer() const {
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        return image.export_cpu(1.f / accum_cnt, false);
+    }
+
     template <typename TexType>
     static void createTexture1D(const TexType* tex_src, size_t size, TexType* tex_dst, cudaTextureObject_t& tex_obj) {
         cudaChannelFormatDesc channel_desc;

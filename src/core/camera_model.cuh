@@ -37,19 +37,19 @@ public:
     CPT_GPU Ray generate_ray(int x, int y, Sampler& sampler) const {
         float x_pos = sampler.next1D() + float(x),
                 y_pos = sampler.next1D() + float(y);
-        Vec3 ndc_dir(
-            (x_pos - _hw) * inv_focal * signs.x() * (!use_orthogonal), 
-            (y_pos - _hh) * inv_focal * signs.y() * (!use_orthogonal), 1.f);
-        return Ray(t, R.rotate(ndc_dir.normalized()));
+        float ndc_dir_x = (x_pos - _hw) * inv_focal * signs.x();
+        float ndc_dir_y = (y_pos - _hh) * inv_focal * signs.y();
+        Vec3 origin = t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
+        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)));
     }
 
     CPT_GPU Ray generate_ray(int x, int y, Vec2&& sample) const {
         float x_pos = sample.x() + float(x),
                 y_pos = sample.y() + float(y);
-        Vec3 ndc_dir(
-            (x_pos - _hw) * inv_focal * signs.x() * (!use_orthogonal), 
-            (y_pos - _hh) * inv_focal * signs.y() * (!use_orthogonal), 1.f);
-        return Ray(t, R.rotate(ndc_dir.normalized()));
+        float ndc_dir_x = (x_pos - _hw) * inv_focal * signs.x();
+        float ndc_dir_y = (y_pos - _hh) * inv_focal * signs.y();
+        Vec3 origin = t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
+        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)));
     }
 
     CPT_CPU static DeviceCamera from_xml(const tinyxml2::XMLElement* sensorElement);

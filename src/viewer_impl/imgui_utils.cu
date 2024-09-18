@@ -51,28 +51,40 @@ void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int wi
 }
 
 void window_render(
-    GLuint cuda_texture_id, int width, int height,
-    bool show_fps
+    GLuint cuda_texture_id, 
+    int width, 
+    int height
 ) {
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     ImVec2 top_left(0, 0);
     ImVec2 bottom_right(width, height);
-
     // splat pixel buffer outputs
     draw_list->AddImage((void*)(intptr_t)cuda_texture_id, top_left, bottom_right);
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void show_render_statistics(
+    int num_sample, 
+    bool& sub_window_proc,
+    bool show_fps
+) {
+    sub_window_proc = false;
     if (show_fps) {
         const char* window_title = "Statistics";
         ImVec2 text_size = ImGui::CalcTextSize(window_title);
         float padding = ImGui::GetStyle().WindowPadding.x * 2;
         float min_width = text_size.x * 1.2f + padding; 
         ImGui::SetNextWindowSizeConstraints(ImVec2(min_width, 0), ImVec2(FLT_MAX, FLT_MAX));
-        ImGui::Begin(window_title, &show_fps, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Begin(window_title, &show_fps);
         ImGuiIO& io = ImGui::GetIO();
         ImGui::Text("FPS: %.2f", io.Framerate);
+        ImGui::Text("SPP: %4d", num_sample);
+        if (ImGui::IsWindowFocused()) {
+            sub_window_proc = true;
+        }
         ImGui::End();
     }
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 void update_texture(
@@ -179,10 +191,11 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
     return false;
 }
 
-bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_fps, bool& sub_window_process)
-{
+bool render_settings_interface(
+    DeviceCamera& cam, bool& show_window, bool& show_fps, bool& sub_window_process, bool& capture
+) {
     // Begin the main menu bar at the top of the window
-    sub_window_process = false;
+    capture            = false;
     if (ImGui::BeginMainMenuBar()) {
         // Create a menu item called "Options" in the main menu bar
         if (ImGui::BeginMenu("Options")) {
@@ -208,9 +221,9 @@ bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_
 
                 float value = focal2fov(cam.inv_focal, cam._hw);
                 ImGui::Text("camera FoV");
-                update |= ImGui::SliderFloat("##slider", &value, 1.0f, 100.0f, "%.2f", ImGuiSliderFlags_None);
+                update |= ImGui::SliderFloat("##slider", &value, 1.0f, 150.0f, "%.2f", ImGuiSliderFlags_None);
                 ImGui::SameLine();
-                update |= ImGui::InputFloat("##input", &value, 1.0f, 100.0f, "%.2f");
+                update |= ImGui::InputFloat("##input", &value, 1.0f, 150.0f, "%.2f");
                 cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
 
                 bool temp = false;
@@ -225,6 +238,9 @@ bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_
             if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
                 // Empty placeholder for future Renderer Settings
                 ImGui::Text("Renderer settings go here...");
+            }
+            if (ImGui::CollapsingHeader("Screen Capture", ImGuiWindowFlags_AlwaysAutoResize)) {
+                capture = ImGui::Button("Capture Frame");
             }
             if (ImGui::IsWindowFocused()) {
                 sub_window_process = true;
