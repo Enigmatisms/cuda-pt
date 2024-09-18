@@ -5,15 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(gdb) pt_test",
+            "name": "(gdb) viewer",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/pt.exe",
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}//build/Debug/",
+            "program": "${workspaceFolder}/build_debug/Debug/cpt.exe",
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}/build_debug/Debug/",
             "args": ["../../scene/xml/cornell-box.xml"],
             "environment": [],
-            "externalConsole": false,
+            "externalConsole": true,
             "MIMode": "gdb",
             "setupCommands": [
                 {

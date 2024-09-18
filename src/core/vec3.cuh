@@ -194,6 +194,8 @@ public:
 
     CPT_CPU_GPU_INLINE
     float min_elem() const noexcept { return fminf(_data.x, fminf(_data.y, _data.z)); }
+
+    CPT_CPU_GPU_INLINE operator float3() const {return _data;}
 };
 
 CPT_CPU_GPU_INLINE void print_vec3(const Vec3& obj) {

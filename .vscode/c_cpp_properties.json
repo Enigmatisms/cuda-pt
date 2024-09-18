@@ -7,6 +7,8 @@
             "includePath": [
                 "${workspaceFolder}/src/*",
                 "${workspaceFolder}/src/ext/**",
+                "${workspaceFolder}/src/ext/imgui",
+                "${workspaceFolder}/src/ext/glew/include",
                 "/usr/local/cuda-11.8/include/"
             ],
             "defines": ["USE_SOA"],
@@ -21,6 +23,8 @@
             "includePath": [
                 "${workspaceFolder}\\src\\",
                 "${workspaceFolder}\\src\\ext\\**",
+                "${workspaceFolder}\\src\\ext\\imgui",
+                "${workspaceFolder}\\src\\ext\\glew\\include",
                 "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\include\\**"
             ],
             "defines": ["USE_SOA"],

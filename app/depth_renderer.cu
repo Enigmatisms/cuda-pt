@@ -1,6 +1,6 @@
 #include "core/aos.cuh"
-#include "core/camera_model.cuh"
 #include "renderer/depth.cuh"
+#include "core/camera_model.cuh"
 #include <ext/lodepng/lodepng.h>
 
 int main() {

@@ -452,7 +452,8 @@ const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
         // ------------------------- (5) parse camera & scene config -------------------------
-        cam = DeviceCamera::from_xml(sensor_elem);
+        CUDA_CHECK_RETURN(cudaMallocHost(&cam, sizeof(DeviceCamera)));
+        *cam = DeviceCamera::from_xml(sensor_elem);
         config = RenderingConfig::from_xml(sensor_elem);
 
         // ------------------------- (6) initialize shapes -------------------------
@@ -495,6 +496,8 @@ const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT
 
         CUDA_CHECK_RETURN(cudaFree(bsdfs));
         CUDA_CHECK_RETURN(cudaFree(emitters));
+        CUDA_CHECK_RETURN(cudaFreeHost(cam));
+
     }
 
     void Scene::export_prims(ArrayType<Vec3>& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const {

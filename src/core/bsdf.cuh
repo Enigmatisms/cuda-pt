@@ -52,17 +52,22 @@ public:
         return max(it.shading_norm.dot(out), 0.f) * M_1_Pi;
     }
 
-    CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& /*in */, bool is_mi = false) const override {
-        float cosine_term = it.shading_norm.dot(out);
+    CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+        float cos_term = it.shading_norm.dot(out);
+        float dot_in  = it.shading_norm.dot(in);
+        float same_side = (dot_in > 0) ^ (cos_term > 0);     // should be positive or negative at the same time
         // printf("%f, k_d: %f, %f, %f\n", cosine_term, k_d.x(), k_d.y(), k_d.z());
-        return k_d * max(0.f, cosine_term) * M_1_Pi;
+        return k_d * max(0.f, cos_term) * M_1_Pi * same_side;
     }
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
         auto local_ray = sample_cosine_hemisphere(std::move(uv), pdf);
+        auto out_ray = delocalize_rotate(Vec3(0, 0, 1), it.shading_norm, local_ray);
         // throughput *= f / pdf --> k_d * cos / pi / (pdf = cos / pi) == k_d
-        throughput *= k_d;
-        return delocalize_rotate(Vec3(0, 0, 1), it.shading_norm, local_ray);;
+        float dot_in  = it.shading_norm.dot(indir);
+        float dot_out = it.shading_norm.dot(out_ray);
+        throughput *= k_d * ((dot_in > 0) ^ (dot_out > 0));
+        return out_ray;
     }
 };
 

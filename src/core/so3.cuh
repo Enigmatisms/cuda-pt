@@ -7,6 +7,7 @@
 #pragma once
 #include <iostream>
 #include "core/vec3.cuh"
+#include "core/quaternion.cuh"
 
 /**
  * Though I say this is SO3 (orthogonal Matrix for rotation representation)
@@ -93,6 +94,10 @@ public:
                rows[0].z() * fmaf(rows[1].x(), rows[2].y(), - rows[1].y() * rows[2].x());
     }
 
+    CPT_CPU_GPU_INLINE Vec3 col(int index) const {
+        return Vec3(rows[0][index], rows[1][index], rows[2][index]);
+    }
+
     /**
      * Do not use this for rotation matrix
      * for rotation matrix inverse, please use .T()
@@ -128,6 +133,50 @@ public:
         temp3[1] = fmaf(rows[0].y(), rows[2].x(), - rows[0].x() * rows[2].y());
         temp3[2] = fmaf(rows[0].x(), rows[1].y(), - rows[0].y() * rows[1].x());
         return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, temp3.dot(v) * inv_det);
+    }
+    CPT_CPU_GPU SO3 operator*(const SO3& R2) {
+        SO3 output;
+        for (int i = 0; i < 3; i++) {
+            auto row = rows[i];
+            output[i] = Vec3(
+                row.x() * R2[0][0] + row.y() * R2[1][0] + row.z() * R2[2][0],
+                row.x() * R2[0][1] + row.y() * R2[1][1] + row.z() * R2[2][1],
+                row.x() * R2[0][2] + row.y() * R2[1][2] + row.z() * R2[2][2]
+            );
+        }
+        return output;
+    }
+
+    // to rotation matrix
+    CONDITION_TEMPLATE(QuatType, Quaternion)
+    CPT_CPU_GPU static SO3 from_quat(QuatType&& quat) {
+        float xx = quat.x * quat.x;
+        float yy = quat.y * quat.y;
+        float zz = quat.z * quat.z;
+        float xy = quat.x * quat.y;
+        float xz = quat.x * quat.z;
+        float yz = quat.y * quat.z;
+        float wx = quat.w * quat.x;
+        float wy = quat.w * quat.y;
+        float wz = quat.w * quat.z;
+        SO3 output(
+            Vec3(
+                1.0f - 2.0f * (yy + zz),
+                2.0f * (xy - wz),
+                2.0f * (xz + wy)
+            ),
+            Vec3(
+                2.0f * (xy + wz),
+                1.0f - 2.0f * (xx + zz),
+                2.0f * (yz - wx)
+            ),
+            Vec3(
+                2.0f * (xz - wy),
+                2.0f * (yz + wx),
+                1.0f - 2.0f * (xx + yy)
+            )
+        );
+        return output;
     }
 
     friend CPT_CPU_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
