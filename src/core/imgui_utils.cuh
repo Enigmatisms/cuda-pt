@@ -57,7 +57,7 @@ void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int wi
 std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int height);
 
 // process keyboard input and update camera position (host side)
-bool keyboard_camera_update(DeviceCamera& camera, float step = 0.1);
+bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap);
 
 // process mouse input and update camera orientation (host side)
 bool mouse_camera_update(DeviceCamera& cam, float sensitivity = 1);

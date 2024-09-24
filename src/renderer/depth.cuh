@@ -69,6 +69,7 @@ CPT_KERNEL static void render_depth_kernel(
 
             int min_index = 0;
             min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base_5, min_dist);
+            __syncthreads();
         }
     }
     image(px, py) += min_dist * (min_dist < MAX_DIST);
@@ -101,7 +102,7 @@ public:
         const ArrayType<Vec3>& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
-        DeviceCamera&& cam,
+        const DeviceCamera& cam,
         int width, int height
     ): TracerBase(_shapes, _verts, _norms, _uvs, width, height) {
         CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
@@ -117,6 +118,7 @@ public:
         int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
         bool gamma_correction = true
     ) override {
+        printf("Depth tracing. Num primitives: %d, max_depth: %d\n", num_prims, max_depth);
         TicToc _timer("render_kernel()", num_iter);
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used

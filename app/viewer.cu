@@ -68,6 +68,7 @@ int main(int argc, char** argv) {
     bool frame_capture       = false;
 
     while (!glfwWindowShouldClose(window.get())) {
+        frame_capture = false;
         glfwPollEvents();
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -79,7 +80,7 @@ int main(int argc, char** argv) {
             skip_mouse_event,
             show_frame_rate_bar
         );
-        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1);
+        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1, frame_capture);
         cam_updated     |= gui::render_settings_interface(*scene.cam, show_main_settings, 
                             show_frame_rate_bar, skip_mouse_event, frame_capture);
         if (!skip_mouse_event) {        // no sub window (setting window or main menu) is focused

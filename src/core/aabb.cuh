@@ -28,12 +28,12 @@ public:
         mini(min_v), __bytes1(p1), maxi(max_v), __bytes2(p2) {}
 
     CONDITION_TEMPLATE_2(V1Type, V2Type, Vec3)
-    CPT_CPU_GPU AABB(V1Type&& _mini, V2Type&& _maxi, int _prim_idx = -1, int _obj_idx = -1):
-        mini(std::forward<V1Type>(_mini)), __bytes1(_prim_idx), 
-        maxi(std::forward<V2Type>(_maxi)), __bytes2(_obj_idx) {}
+    CPT_CPU_GPU AABB(V1Type&& _mini, V2Type&& _maxi, int _obj_idx, int _prim_idx):
+        mini(std::forward<V1Type>(_mini)), __bytes1(_obj_idx), 
+        maxi(std::forward<V2Type>(_maxi)), __bytes2(_prim_idx) {}
 
-    CPT_CPU_GPU AABB(const Vec3& p1, const Vec3& p2, const Vec3& p3, int _prim_idx = -1, int _obj_idx = -1):
-        __bytes1(_prim_idx), __bytes2(_obj_idx)
+    CPT_CPU_GPU AABB(const Vec3& p1, const Vec3& p2, const Vec3& p3, int _obj_idx, int _prim_idx):
+        __bytes1(_obj_idx), __bytes2(_prim_idx)
     {
         mini = p1.minimize(p2).minimize(p3);
         mini -= AABB_EPS;

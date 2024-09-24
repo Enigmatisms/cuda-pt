@@ -26,10 +26,10 @@ struct BVHInfo {
         // Note that vertex vectors in the primitive matrix are col-major order
         if (is_sphere) {
             centroid = p1;
-            bound    = AABB(p1 - p2.x() - AABB_EPS, p1 + p2.x() + AABB_EPS, prim_idx, obj_idx);
+            bound    = AABB(p1 - p2.x() - AABB_EPS, p1 + p2.x() + AABB_EPS, obj_idx, prim_idx);
         } else {
             centroid = (p1 + p2 + p3) * 0.33333333333f;      // barycenter
-            bound    = AABB(p1, p2, p3, prim_idx, obj_idx);
+            bound    = AABB(p1, p2, p3, obj_idx, prim_idx);
         }
     }
 
