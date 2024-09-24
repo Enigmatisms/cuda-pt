@@ -34,11 +34,12 @@ public:
         float min_range = EPSILON, float max_range = std::numeric_limits<float>::infinity()
     ) const {
         auto op = verts.x(index) - ray.o; 
+        auto _pt = verts.x(index);
         float b = op.dot(ray.d);
         float determinant = b * b - op.dot(op) + verts.y(index).x() * verts.y(index).x(), result = 0;
         if (determinant >= 0) {
             determinant = sqrtf(determinant);
-            result = b - determinant > min_range ? b - determinant : 0;
+            result = (b - determinant > min_range) ? b - determinant : 0;
             result = (result == 0 && b + determinant > min_range) ? b + determinant : result;
         }
         return result;
@@ -54,7 +55,7 @@ public:
         auto op = verts.x(index) - ray.o; 
         float b = op.dot(ray.d);
         float determinant = sqrtf(b * b - op.dot(op) + verts.y(index).x() * verts.y(index).x());
-        float result = b - determinant > EPSILON ? b - determinant : 0;
+        float result = (b - determinant > EPSILON) ? b - determinant : 0;
         result = (result == 0 && b + determinant > EPSILON) ? b + determinant : result;
         return Interaction((ray.d * result - op).normalized(), Vec2(0, 0));
     }
@@ -169,11 +170,11 @@ public:
     ): verts(verts), aabb_ptr(aabb), index(0) {}
 
     CPT_CPU void operator()(const TriangleShape& shape) const { 
-        aabb_ptr[index] = AABB(verts.x(index), verts.y(index), verts.z(index));
+        aabb_ptr[index] = AABB(verts.x(index), verts.y(index), verts.z(index), -1, -1);
     }
 
     CPT_CPU void operator()(const SphereShape& shape) const { 
-        aabb_ptr[index] = AABB(verts.x(index) - verts.y(index).x(), verts.x(index) + verts.y(index).x());
+        aabb_ptr[index] = AABB(verts.x(index) - verts.y(index).x(), verts.x(index) + verts.y(index).x(), -1, -1);
     }
 
     CPT_CPU void set_index(int i)        noexcept { this->index = i; }

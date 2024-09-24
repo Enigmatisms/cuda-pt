@@ -36,10 +36,12 @@ CPT_CPU static Vec3 parseVec3(const std::string& str) {
 
 CPT_CPU_GPU DeviceCamera::DeviceCamera(
     const Vec3& from, const Vec3& lookat, float fov, 
-    float w, float h, float hsign, float vsign
+    float w, float h, float hsign, float vsign, Vec3 up
 ): t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f), signs(hsign, vsign), use_orthogonal(false) {
-    Vec3 dir = (lookat - from).normalized();
-    R   = rotation_between(Vec3(0, 0, 1), dir);      
+    Vec3 forward = (lookat - from).normalized();
+    up.normalize();
+    Vec3 right = up.cross(forward).normalized();
+    R = SO3(right, up, forward, false);
 }
 
 CPT_CPU void DeviceCamera::rotate(float yaw, float pitch) {
@@ -60,6 +62,7 @@ CPT_CPU DeviceCamera DeviceCamera::from_xml(const tinyxml2::XMLElement* sensorEl
     int width = 512, height = 512;
     Vec3 lookat_target;
     Vec3 lookat_origin;
+    Vec3 lookat_up(0, 1, 0);
     const tinyxml2::XMLElement* element = nullptr;
 
     // Read float and integer values
@@ -79,6 +82,15 @@ CPT_CPU DeviceCamera DeviceCamera::from_xml(const tinyxml2::XMLElement* sensorEl
         if (lookatElement) {
             lookat_target = parseVec3(lookatElement->Attribute("target"));
             lookat_origin = parseVec3(lookatElement->Attribute("origin"));
+            auto element_ptr = lookatElement->Attribute("up");
+            if (element_ptr == NULL) {
+                std::cout << "Up vector no specified. Using default up vector [0, 1, 0] for camera\n";
+            } else {
+                lookat_up = parseVec3(element_ptr);
+            }
+        } else {
+            std::cerr << "XML scene file error:\n";
+            throw std::runtime_error("Camera element contains no 'lookat' transform\n");
         }
     }
 
@@ -108,5 +120,5 @@ CPT_CPU DeviceCamera DeviceCamera::from_xml(const tinyxml2::XMLElement* sensorEl
             filmElement = filmElement->NextSiblingElement("integer");
         }
     }
-    return DeviceCamera(lookat_origin, lookat_target, fov, width, height, hsign, vsign);
+    return DeviceCamera(lookat_origin, lookat_target, fov, width, height, hsign, vsign, lookat_up);
 }

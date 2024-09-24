@@ -147,7 +147,7 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
     return std::unique_ptr<GLFWwindow, GLFWWindowDeleter>(window);
 }
 
-bool keyboard_camera_update(DeviceCamera& camera, float step)
+bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap)
 {
     ImGuiIO& io = ImGui::GetIO();
     bool update = false;
@@ -166,6 +166,23 @@ bool keyboard_camera_update(DeviceCamera& camera, float step)
     if (io.KeysDown[ImGuiKey_D]) {
         update = true;
         camera.move_right(step);
+    }
+    if (io.KeysDown[ImGuiKey_P]) {
+        frame_cap = true;
+        printf("Frame capture keyboard event.\n");
+    }
+    if (io.KeysDown[ImGuiKey_E]) {
+        printf("Camera Pose:\n");
+        Vec3 lookat = camera.R.col(2) + camera.t;
+        printf("\tPosition:\t");
+        print_vec3(camera.t);
+        printf("\tLookat:  \t");
+        print_vec3(lookat);
+        printf("\tUp:      \t");
+        print_vec3(camera.R.col(1));
+        printf("\tLateral: \t");
+        print_vec3(camera.R.col(0));
+        printf("\n");
     }
     return update;
 }
@@ -195,7 +212,6 @@ bool render_settings_interface(
     DeviceCamera& cam, bool& show_window, bool& show_fps, bool& sub_window_process, bool& capture
 ) {
     // Begin the main menu bar at the top of the window
-    capture            = false;
     if (ImGui::BeginMainMenuBar()) {
         // Create a menu item called "Options" in the main menu bar
         if (ImGui::BeginMenu("Options")) {

@@ -29,7 +29,7 @@ public:
 public:
     CPT_CPU_GPU DeviceCamera() {}
 
-    CPT_CPU_GPU DeviceCamera(const Vec3& from, const Vec3& lookat, float fov, float w, float h, float hsign = 1, float vsign = 1);
+    CPT_CPU_GPU DeviceCamera(const Vec3& from, const Vec3& lookat, float fov, float w, float h, float hsign = 1, float vsign = 1, Vec3 up = Vec3(0, 1, 0));
 
     /**
      * Sampling ray with stratified sampling
@@ -40,7 +40,7 @@ public:
         float ndc_dir_x = (x_pos - _hw) * inv_focal * signs.x();
         float ndc_dir_y = (y_pos - _hh) * inv_focal * signs.y();
         Vec3 origin = t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
-        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)));
+        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)).normalized());
     }
 
     CPT_GPU Ray generate_ray(int x, int y, Vec2&& sample) const {
@@ -49,7 +49,7 @@ public:
         float ndc_dir_x = (x_pos - _hw) * inv_focal * signs.x();
         float ndc_dir_y = (y_pos - _hh) * inv_focal * signs.y();
         Vec3 origin = t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
-        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)));
+        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)).normalized());
     }
 
     CPT_CPU static DeviceCamera from_xml(const tinyxml2::XMLElement* sensorElement);

@@ -6,7 +6,7 @@
 int main() {
     // right, down, back, left, up
     int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
-    int spp       = 2;
+    int spp       = 16;
     std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
     std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
     std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
@@ -24,7 +24,10 @@ int main() {
     Vec3 from(0, -3, 0), to(0, 0, 0);
     int width = 1024, height = 1024;
     float fov = 55;
-    DeviceCamera camera(from, to, fov, width, height);
+    DeviceCamera camera(from, to, fov, width, height, -1, -1, Vec3(0, 0, 1));
+    print_vec3(camera.R.col(0));
+    print_vec3(camera.R.col(1));
+    print_vec3(camera.R.col(2));
 
     // shape setup
     std::vector<Shape> shapes(num_prims);
@@ -33,7 +36,7 @@ int main() {
     for (int i = num_triangle; i < num_prims; i++)
         shapes[i] = SphereShape(i >> 1);
     
-    DepthTracer dtracer(shapes, vert_data, norm_data, uvs_data, std::move(camera), width, height);
+    DepthTracer dtracer(shapes, vert_data, norm_data, uvs_data, camera, width, height);
     auto bytes_buffer = dtracer.render(spp);
 
     std::string file_name = "depth-render.png";

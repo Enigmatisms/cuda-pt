@@ -1,0 +1,95 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
+<scene version="1.1">
+	<renderer type="megakernel"/>
+	<bool name="use_bvh" value="true"/>
+
+	<sensor type="perspective">
+		<float name="fov" value="39.3077"/>
+        <integer name="sample_count" value="128"/>
+        <integer name="max_bounce" value="16"/>
+        <bool name="vflip" value="true"/>
+        <bool name="hflip" value="true"/>
+		
+		<transform name="toWorld">
+			<lookat target="0.031568, 0.003045, -0.193984" origin="-0.648214, 0.323867, 0.465538" up="0.265440, 0.914012, -0.306796"/>
+		</transform>
+
+		<film type="film">
+			<integer name="width" value="1024"/>
+			<integer name="height" value="1024"/>
+			<bool name="gamma_correction" value="false"/>
+		</film>
+	</sensor>
+
+	<brdf type="lambertian" id="floor">
+		<rgb name="k_d" value="#BCBCBC"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="light">
+		<rgb name="k_d" value="#555555"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="det-refraction" id="glass">
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+	<brdf type="det-refraction" id="wine">
+		<rgb name="k_d" value="1.4"/>
+		<rgb name="k_s" value="#722F37"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+	<emitter type="area" id="area">
+		<rgb name="emission" value="70.0, 63.2, 60.3"/>
+		<rgb name="scaler" value="20"/>
+		<!-- <rgb name="scaler" value="0.1"/> -->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/whiskey/light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/whiskey/high-bottle.obj"/>
+		<ref type="material" id="glass"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/whiskey/low-bottle.obj"/>
+		<ref type="material" id="glass"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/whiskey/wine-bottle.obj"/>
+		<ref type="material" id="glass"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="-0.35" y="0.02" z="0.05"/>
+		<float name="radius" value="0.02"/>
+		<ref type="material" id="glass"/>
+	</shape>
+
+	<!-- <shape type="obj">
+		<string name="filename" value="../meshes/whiskey/wine.obj"/>
+		<ref type="material" id="wine"/>
+	</shape> -->
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/whiskey/floor.obj"/>
+		<ref type="material" id="floor"/>
+	</shape>
+</scene>

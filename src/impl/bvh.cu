@@ -11,7 +11,13 @@
 #include <array>
 #include "core/bvh.cuh"
 
-using IntPair = std::pair<int, int>;
+struct PrimMappingInfo {
+    int obj_id;
+    int prim_id;
+    bool is_sphere;
+    PrimMappingInfo(): obj_id(0), prim_id(0), is_sphere(false) {}
+    PrimMappingInfo(int _obj_id, int _prim_id, bool _is_sphere): obj_id(_obj_id), prim_id(_prim_id), is_sphere(_is_sphere) {}
+};
 
 static constexpr int num_bins = 12;
 static constexpr int max_node_prim = 4;
@@ -50,7 +56,7 @@ SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector
 void index_input(
     const std::vector<ObjInfo>& objs, 
     const std::vector<bool>& sphere_flags, 
-    std::vector<IntPair>& idxs, size_t num_primitives
+    std::vector<PrimMappingInfo>& idxs, size_t num_primitives
 ) {
     // input follow the shape of the number of objects, for each position
     // the number of primitive / whether the primitive is sphere will be stored, the index will be object id
@@ -60,10 +66,8 @@ void index_input(
     for (size_t i = 0; i < result_shape; i++) {
         int local_num = objs[i].prim_num;
         int obj_id = static_cast<int>(i);
-        if (sphere_flags[i])
-            obj_id = -obj_id;
         for (int j = 0; j < local_num; j++) {
-            idxs.emplace_back(j + prim_num, obj_id);
+            idxs.emplace_back(obj_id, j + prim_num, sphere_flags[i]);
         }
         prim_num += local_num;
     }
@@ -73,11 +77,12 @@ void create_bvh_info(
     const std::vector<Vec3>& points1,
     const std::vector<Vec3>& points2,
     const std::vector<Vec3>& points3,
-    const std::vector<IntPair>& idxs, std::vector<BVHInfo>& bvh_infos) {
+    const std::vector<PrimMappingInfo>& idxs, std::vector<BVHInfo>& bvh_infos) {
     bvh_infos.reserve(points1.size());
     for (size_t i = 0; i < points1.size(); i++) {
-        const IntPair& idx_info = idxs[i];
-        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.first, std::abs(idx_info.second), idx_info.second < 0);
+        const auto& idx_info = idxs[i];
+        // idx_info.first is the primitive_id, while second is obj_id (negative means)
+        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.obj_id, idx_info.prim_id, idx_info.is_sphere);
     }
 }
 
@@ -238,7 +243,7 @@ void bvh_build(
     std::vector<float4>& node_backs,
     std::vector<int>& node_offsets
 ) {
-    std::vector<IntPair> idx_prs;
+    std::vector<PrimMappingInfo> idx_prs;
     std::vector<BVHInfo> bvh_infos;
     int node_num = 0, num_prims_all = points1.size();
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
