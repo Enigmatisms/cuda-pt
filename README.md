@@ -16,7 +16,7 @@ The scalability of this repo might be worse than that of AdaPT, but it will impr
 
 |Depth Renderer|Unidirection PT|
 |:--:|:--:|
-|![](assets/depth-render.png)|![](assets/pt-render.png)|
+|![](assets/depth-render.png)|![](assets/whiskey.png)|
 |![](assets/render-balls.png)|![](assets/render-bvh-50.png)|
 
 

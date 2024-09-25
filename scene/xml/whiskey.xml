@@ -10,12 +10,14 @@
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="16"/>
+        <integer name="max_bounce" value="12"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
-			<lookat target="0.031568, 0.003045, -0.193984" origin="-0.648214, 0.323867, 0.465538" up="0.265440, 0.914012, -0.306796"/>
+			<!-- <lookat target="0.031568, 0.003045, -0.193984" origin="-0.648214, 0.323867, 0.465538" up="0.265440, 0.914012, -0.306796"/> -->
+			<lookat target="0.124368, -0.000682, -0.254114" origin="-0.604854, 0.243089, 0.385269" up="0.187101, 0.969817, -0.156361"/>
+			
 		</transform>
 
 		<film type="film">
@@ -51,7 +53,7 @@
 
 	<emitter type="area" id="area">
 		<rgb name="emission" value="70.0, 63.2, 60.3"/>
-		<rgb name="scaler" value="20"/>
+		<rgb name="scaler" value="25"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
@@ -83,10 +85,10 @@
 		<ref type="material" id="glass"/>
 	</shape>
 
-	<!-- <shape type="obj">
+	<shape type="obj">
 		<string name="filename" value="../meshes/whiskey/wine.obj"/>
 		<ref type="material" id="wine"/>
-	</shape> -->
+	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/whiskey/floor.obj"/>
