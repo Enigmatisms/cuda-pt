@@ -123,3 +123,39 @@ CPT_KERNEL void render_pt_kernel(
     int node_num = -1,
     int accum_cnt = 1
 );
+
+/**
+ * Megakernel Light Tracing. Light tracing is only used to render
+ * complex caustics: starting from the emitter, we will only record
+ * path which has more than `specular_constraints` number of
+ * specular nodes
+ * @param specular_constraints The path throughput will be ignored
+ * if number of specular events is less or equal to this value
+*/
+template <bool render_once>
+CPT_KERNEL void render_lt_kernel(
+    const DeviceCamera& dev_cam, 
+    ConstObjPtr objects,
+    ConstIndexPtr prim2obj,
+    ConstShapePtr shapes,
+    ConstAABBPtr aabbs,
+    ConstPrimPtr verts,
+    ConstPrimPtr norms, 
+    ConstUVPtr uvs,
+    cudaTextureObject_t bvh_fronts,
+    cudaTextureObject_t bvh_backs,
+    cudaTextureObject_t node_fronts,
+    cudaTextureObject_t node_backs,
+    cudaTextureObject_t node_offsets,
+    DeviceImage& image,
+    float* output_buffer,
+    int num_prims,
+    int num_objects,
+    int num_emitter,
+    int seed_offset,
+    int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
+    int node_num = -1,
+    int accum_cnt = 1,
+    int specular_constraints = 0,
+    float caustic_scale = 1.f
+);

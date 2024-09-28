@@ -4,26 +4,30 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
-	<renderer type="megakernel"/>
+	<renderer type="lt"/>
 	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="12"/>
+        <integer name="max_bounce" value="16"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
 			<!-- <lookat target="0.031568, 0.003045, -0.193984" origin="-0.648214, 0.323867, 0.465538" up="0.265440, 0.914012, -0.306796"/> -->
-			<lookat target="0.124368, -0.000682, -0.254114" origin="-0.604854, 0.243089, 0.385269" up="0.187101, 0.969817, -0.156361"/>
+			<!-- <lookat target="0.124368, -0.000682, -0.254114" origin="-0.604854, 0.243089, 0.385269" up="0.187101, 0.969817, -0.156361"/> -->
+			<lookat target="-0.543958, -0.126626, -0.208790" origin="0.197341, 0.334934, 0.278485" up="-0.388234, 0.887099, -0.249657"/>
 			
 		</transform>
 
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
+			<integer name="specular_constraint" value="0"/>
 			<bool name="gamma_correction" value="false"/>
+			<bool name="bidirectional" value="true"/>
+			<float name="caustic_scaling" value="1.5"/>
 		</film>
 	</sensor>
 
@@ -91,7 +95,7 @@
 	</shape>
 
 	<shape type="obj">
-		<string name="filename" value="../meshes/whiskey/floor.obj"/>
+		<string name="filename" value="../meshes/whiskey/floor-long.obj"/>
 		<ref type="material" id="floor"/>
 	</shape>
 </scene>

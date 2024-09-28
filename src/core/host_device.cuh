@@ -108,7 +108,7 @@ public:
     }
 
     // TODO: can be accelerated via multi-threading
-    std::vector<uint8_t> export_cpu(float inv_factor = 1, bool gamma_cor = true) const {
+    std::vector<uint8_t> export_cpu(float inv_factor = 1, bool gamma_cor = true, bool alpha_avg = false) const {
         std::vector<uint8_t> byte_buffer(_w * _h * 4);
         size_t copy_pitch = _w * sizeof(Vec4);
         CUDA_CHECK_RETURN(cudaMemcpy2D(host_buffer, copy_pitch, _buffer, pitch, copy_pitch, _h, cudaMemcpyDeviceToHost));
@@ -119,10 +119,14 @@ public:
                     int pixel_index = base + j;
                     const Vec4& color = host_buffer[pixel_index];
                     pixel_index <<= 2;
+                    byte_buffer[pixel_index + 3] = 255;
+                    if (alpha_avg) {
+                        if (color.w() < 1e-5f) continue;
+                        inv_factor = 1.f / color.w();
+                    }
                     byte_buffer[pixel_index]     = to_int(color.x() * inv_factor);
                     byte_buffer[pixel_index + 1] = to_int(color.y() * inv_factor);
                     byte_buffer[pixel_index + 2] = to_int(color.z() * inv_factor);
-                    byte_buffer[pixel_index + 3] = 255;
                 }
             }
         } else {
@@ -132,10 +136,14 @@ public:
                     int pixel_index = base + j;
                     const Vec4& color = host_buffer[pixel_index];
                     pixel_index <<= 2;
+                    byte_buffer[pixel_index + 3] = 255;
+                    if (alpha_avg) {
+                        if (color.w() < 1e-5f) continue;
+                        inv_factor = 1.f / color.w();
+                    }
                     byte_buffer[pixel_index]     = to_int_linear(color.x() * inv_factor);
                     byte_buffer[pixel_index + 1] = to_int_linear(color.y() * inv_factor);
                     byte_buffer[pixel_index + 2] = to_int_linear(color.z() * inv_factor);
-                    byte_buffer[pixel_index + 3] = 255;
                 }
             }
         }

@@ -6,6 +6,9 @@
 #include "renderer/base_pt.cuh"
 #include "renderer/megakernel_pt.cuh"
 
+static constexpr int RR_BOUNCE = 2;
+static constexpr float RR_THRESHOLD = 0.1;
+
 /**
  * Occlusion test, computation is done on global memory
 */
@@ -158,7 +161,7 @@ CPT_GPU float ray_intersect_bvh(
 }
 
 CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sample) {
-    // logic: if no_sample and num > 1, means that there is one emitter than can not be sampled
+    // logic: if no_sample and num > 1, means that there is one emitter that can not be sampled
     // so we can only choose from num - 1 emitters, the following computation does this (branchless)
     // if (emit_id >= no_sample && no_sample >= 0) -> we should skip one index (the no_sample), therefore + 1
     // if invalid (there is only one emitter, and we cannot sample it), return c_emitter[8]
@@ -328,6 +331,13 @@ CPT_KERNEL void render_pt_kernel(
 
             if (radiance.numeric_err())
                 radiance.fill(0);
+
+            // step 5: russian roulette
+            float max_value = throughput.max_elem_3d();
+            if (b >= RR_BOUNCE && max_value < RR_THRESHOLD) {
+                if (sampler.next1D() > max_value || max_value < THP_EPS) break;
+                throughput *= 1. / max_value;
+            }
         }
     }
     __syncthreads();

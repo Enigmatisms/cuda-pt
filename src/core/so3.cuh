@@ -66,7 +66,9 @@ public:
     CPT_CPU_GPU Vec3& operator[](size_t index) { return rows[index]; }
     CPT_CPU_GPU const Vec3& operator[](size_t index) const { return rows[index]; }
 public:
-    template <typename VecType>
+
+    // R @ v
+    CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU Vec3 rotate(VecType&& v) const noexcept {
         return Vec3(
             rows[0].dot(std::forward<VecType>(v)), 
@@ -134,6 +136,16 @@ public:
         temp3[2] = fmaf(rows[0].x(), rows[1].y(), - rows[0].y() * rows[1].x());
         return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, temp3.dot(v) * inv_det);
     }
+
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU_GPU Vec3 transposed_rotate(VecType&& v) const { 
+        return Vec3(
+            rows[0].x() * v.x() + rows[1].x() * v.y() + rows[2].x() * v.z(),
+            rows[0].y() * v.x() + rows[1].y() * v.y() + rows[2].y() * v.z(),
+            rows[0].z() * v.x() + rows[1].z() * v.y() + rows[2].z() * v.z()
+        );
+    }
+
     CPT_CPU_GPU SO3 operator*(const SO3& R2) {
         SO3 output;
         for (int i = 0; i < 3; i++) {

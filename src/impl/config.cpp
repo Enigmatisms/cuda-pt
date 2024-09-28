@@ -27,15 +27,28 @@ RenderingConfig RenderingConfig::from_xml(const tinyxml2::XMLElement *sensor_nod
                 film_elem->QueryIntAttribute("value", &config.width);
             } else if (name == "height") {
                 film_elem->QueryIntAttribute("value", &config.height);
+            } else if (name == "specular_constraint") {
+                film_elem->QueryIntAttribute("value", &config.spec_constraint);
             }
             film_elem = film_elem->NextSiblingElement("integer");
         }
         film_elem = node->FirstChildElement("bool");
-        if (film_elem) {
+        while (film_elem) {
             std::string name = film_elem->Attribute("name");
             if (name == "gamma_correction") {
                 film_elem->QueryBoolAttribute("value", &config.gamma_correction);
+            } else if (name == "bidirectional") {
+                film_elem->QueryBoolAttribute("value", &config.bidirectional);
             }
+            film_elem = film_elem->NextSiblingElement("bool");
+        }
+        film_elem = node->FirstChildElement("float");
+        while (film_elem) {
+            std::string name = film_elem->Attribute("name");
+            if (name == "caustic_scaling") {
+                film_elem->QueryFloatAttribute("value", &config.caustic_scaling);
+            }
+            film_elem = film_elem->NextSiblingElement("float");
         }
     }
     return config;

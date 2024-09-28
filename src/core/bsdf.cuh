@@ -9,6 +9,17 @@
 #include "core/sampling.cuh"
 #include "core/interaction.cuh"
 
+enum BSDFFlag: int {
+    BSDF_NONE     = 0x00,
+    BSDF_DIFFUSE  = 0x01,
+    BSDF_SPECULAR = 0x02,
+    BSDF_GLOSSY   = 0x04,
+    BSDF_FORWARD  = 0x08,
+
+    BSDF_REFLECT  = 0x10,
+    BSDF_TRANSMIT = 0x20
+};
+
 class BSDF {
 public:
     Vec4 k_d;
@@ -16,11 +27,13 @@ public:
     Vec4 k_g;
     int kd_tex_id;
     int ex_tex_id;
+    int bsdf_flag;
+    int __padding;
 public:
     CPT_CPU_GPU BSDF() {}
-    CPT_CPU_GPU BSDF(Vec4 _k_d, Vec4 _k_s, Vec4 _k_g, int kd_id = -1, int kg_id = -1):
+    CPT_CPU_GPU BSDF(Vec4 _k_d, Vec4 _k_s, Vec4 _k_g, int kd_id = -1, int kg_id = -1, int flag = BSDFFlag::BSDF_NONE):
         k_d(std::move(k_d)), k_s(std::move(_k_s)), k_g(std::move(_k_g)),
-        kd_tex_id(kd_id), ex_tex_id(kg_id)
+        kd_tex_id(kd_id), ex_tex_id(kg_id), bsdf_flag(flag)
     {}
 
     CPT_GPU void set_kd(Vec4&& v) noexcept { this->k_d = v; }
@@ -28,20 +41,26 @@ public:
     CPT_GPU void set_kg(Vec4&& v) noexcept { this->k_g = v; }
     CPT_GPU void set_kd_id(int v) noexcept { this->kd_tex_id = v; }
     CPT_GPU void set_ex_id(int v) noexcept { this->ex_tex_id = v; }
+    CPT_GPU void set_lobe(int v) noexcept { this->bsdf_flag = v; }
 
     CPT_CPU_GPU virtual float pdf(const Interaction& it, const Vec3& out, const Vec3& in) const = 0;
 
     CPT_CPU_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const = 0;
 
     CPT_CPU_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Vec2&& uv) const = 0;
+
+    CPT_CPU_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {
+        return (bsdf_flag & (int)flags) > 0;
+    }
 };
 
 
 class LambertianBSDF: public BSDF {
 using BSDF::k_d;
+using BSDF::bsdf_flag;
 public:
     CPT_CPU_GPU LambertianBSDF(Vec4 _k_d, int kd_id = -1):
-        BSDF(std::move(_k_d), Vec4(0, 0, 0), Vec4(0, 0, 0), kd_id, -1) {}
+        BSDF(std::move(_k_d), Vec4(0, 0, 0), Vec4(0, 0, 0), kd_id, -1, BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT) {}
 
     CPT_CPU_GPU LambertianBSDF(): BSDF() {}
     
@@ -75,7 +94,7 @@ class SpecularBSDF: public BSDF {
 using BSDF::k_s;
 public:
     CPT_CPU_GPU SpecularBSDF(Vec4 _k_s, int ks_id = -1):
-        BSDF(Vec4(0, 0, 0), std::move(_k_s), Vec4(0, 0, 0), -1, ks_id) {}
+        BSDF(Vec4(0, 0, 0), std::move(_k_s), Vec4(0, 0, 0), -1, ks_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT) {}
 
     CPT_CPU_GPU SpecularBSDF(): BSDF() {}
     
@@ -84,7 +103,8 @@ public:
     }
 
     CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
-        return Vec4(0, 0, 0);
+        auto ref_dir = in.advance(it.shading_norm, -2.f * in.dot(it.shading_norm)).normalized();
+        return k_s * (out.dot(ref_dir) > 0.99999f);
     }
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
@@ -101,7 +121,7 @@ using BSDF::k_s;        // specular reflection
 using BSDF::k_d;        // ior
 public:
     CPT_CPU_GPU TranslucentBSDF(Vec4 k_s, Vec4 ior, int ex_id):
-        BSDF(std::move(ior), std::move(k_s), Vec4(0, 0, 0), -1, ex_id) {}
+        BSDF(std::move(ior), std::move(k_s), Vec4(0, 0, 0), -1, ex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT) {}
 
     CPT_CPU_GPU TranslucentBSDF(): BSDF() {}
     
@@ -110,7 +130,17 @@ public:
     }
 
     CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
-        return Vec4(0, 0, 0);
+        float dot_normal = in.dot(it.shading_norm);
+        // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
+        // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
+        float ni = dot_normal < 0 ? 1.f : k_d.x();
+        float nr = dot_normal < 0 ? k_d.x() : 1.f, cos_r2 = 0;
+        Vec3 ret_dir = in.advance(it.shading_norm, -2.f * dot_normal).normalized(),
+             refra_vec = snell_refraction(in, it.shading_norm, cos_r2, dot_normal, ni, nr);
+        bool total_ref = is_total_reflection(dot_normal, ni, nr);
+        nr = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
+        bool reflc_dot = out.dot(ret_dir) > 0.99999f, refra_dot = out.dot(refra_vec) > 0.99999f;        // 0.9999  means 0.26 deg
+        return k_s * (reflc_dot | refra_dot);
     }
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {

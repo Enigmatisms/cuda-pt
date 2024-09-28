@@ -23,9 +23,10 @@
 #include "core/bvh.cuh"
 
 enum RendererType {
-    MegaKernelPT = 0,
-    WavefrontPT  = 1,
-    VoxelSDFPT   = 2,            // not supported currently
+    MegaKernelPT = 0,            // megakernel path tracing
+    WavefrontPT  = 1,            // wavefront  path tracing
+    MegeKernelLT = 2,            // megakernel light tracing
+    VoxelSDFPT   = 3,            // not supported currently
     NumRendererType
 };
 

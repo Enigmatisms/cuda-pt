@@ -54,6 +54,19 @@ public:
 
     CPT_CPU static DeviceCamera from_xml(const tinyxml2::XMLElement* sensorElement);
 
+    CPT_GPU bool get_splat_pixel(const Vec3& ray_d, int& px, int& py) const {
+        // TODO: Currently, orthogonal camera does not support splatting
+        Vec3 local_dir = -R.transposed_rotate(ray_d);
+        bool success = false;
+        if (local_dir.z() > 1e-5) {
+            local_dir *= 1.f / local_dir.z();       // inverse NDC
+            px = floorf(_hw + local_dir.x() / (inv_focal * signs.x()));
+            py = floorf(_hh + local_dir.y() / (inv_focal * signs.y()));
+            success = px >= 0 && px < _hw * 2 && py >= 0 && py < _hh * 2;
+        }
+        return success;
+    }
+
     CPT_CPU void move_forward(float step = 0.1) {
         t += step * R.rotate(Vec3(0, 0, 1));
     }

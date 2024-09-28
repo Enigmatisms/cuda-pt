@@ -14,9 +14,14 @@ public:
     int height;
     int max_depth;
     int spp;
+    int spec_constraint;
     bool gamma_correction;
+    bool bidirectional;
 
-    RenderingConfig() : width(512), height(512), max_depth(16), spp(64), gamma_correction(true) {}
+    float caustic_scaling;
+
+    RenderingConfig() : width(512), height(512), max_depth(16), spp(64), 
+        spec_constraint(0), gamma_correction(true), bidirectional(false), caustic_scaling(1.0) {}
 
     static RenderingConfig from_xml(const tinyxml2::XMLElement *sensor_node);
 };

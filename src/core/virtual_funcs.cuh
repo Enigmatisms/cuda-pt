@@ -9,7 +9,7 @@
 #include "core/emitter.cuh"
 
 template <typename BSDFType>
-CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex_id = 0, int ex_tex_id = 0) {
+CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex_id = 0, int ex_tex_id = 0, int flags = BSDFFlag::BSDF_DIFFUSE) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         *dst = new BSDFType();
         (*dst)->set_kd(std::move(k_d));
@@ -17,6 +17,7 @@ CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex
         (*dst)->set_kg(std::move(k_g));
         (*dst)->set_kd_id(kd_tex_id);
         (*dst)->set_ex_id(ex_tex_id);
+        (*dst)->set_lobe(flags);
     }
 }
 

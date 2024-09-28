@@ -1,4 +1,5 @@
 #include "core/scene.cuh"
+#include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 #include <ext/lodepng/lodepng.h>
 
@@ -25,10 +26,33 @@ int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
     std::unique_ptr<PathTracer> renderer = nullptr;
-    if (scene.rdr_type == RendererType::MegaKernelPT) {
-        renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, 1);
-    } else {
-        renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, 1);
+    std::cout << "Path tracer loaded: ";
+    switch (scene.rdr_type) {
+        case RendererType::MegaKernelPT: {
+            renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, 1); 
+            std::cout << "Megakernel Path Tracing.\n";
+            break;
+        }
+        case RendererType::WavefrontPT: {
+            renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, 1);
+            std::cout << "Wavefront Path Tracing.\n";
+            break;
+        }
+        case RendererType::MegeKernelLT: {
+            renderer = std::make_unique<LightTracer>(scene, vert_data, norm_data, uvs_data, 1, 
+                scene.config.spec_constraint, scene.config.bidirectional); 
+            if (scene.config.bidirectional)
+                std::cout << "Naive Bidirectional ";
+            std::cout << "Megakernel Light Tracing.\n";
+            break;
+        } 
+        case RendererType::VoxelSDFPT: {
+            std::cerr << "VoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
+            return 0;
+        }
+        default: {
+            throw std::runtime_error("Unsupported renderer type.");
+        }
     }
 
     printf("Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.max_depth, scene.config.spp);

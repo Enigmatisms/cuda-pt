@@ -132,6 +132,11 @@ public:
         _data.w *= b.w();
     }
 
+    CPT_CPU_GPU_INLINE
+    bool operator<(float v) const noexcept {      // only compare the first 3
+        return _data.x < v && _data.y < v && _data.z < v;
+    }
+
     CPT_CPU_GPU_INLINE void fill(float v) noexcept {
         _data = make_float4(v, v, v, v);
     }
@@ -149,6 +154,9 @@ public:
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
     Vec4 minimize(VecType&& b) const noexcept { return Vec4(min(_data.x, b.x()), min(_data.y, b.y()), min(_data.z, b.z()), min(_data.w, b.w())); }
+
+    CPT_CPU_GPU_INLINE
+    float max_elem_3d() const noexcept { return max(_data.x, max(_data.y, _data.z)); }
 
     CPT_CPU_GPU_INLINE
     float max_elem() const noexcept { return max(max(_data.w, _data.x), max(_data.y, _data.z)); }
