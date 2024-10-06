@@ -59,7 +59,6 @@ CPT_GPU float ray_intersect_old(
 CPT_GPU float ray_intersect(
     const ArrayType<Vec3>& s_verts, 
     const Ray& ray,
-    ConstShapePtr shapes,
     ConstAABBWPtr s_aabbs,
     const int remain_prims,
     const int cp_base,

@@ -190,6 +190,8 @@ public:
             cudaStreamDestroy(streams[i]);
         payload_buffer.destroy();
         printf("\n");
+
+        // TODO: wavefront path tracing does not support online visualization yet
         return image.export_cpu(1.f / num_iter, gamma_correction);
     }
 };

@@ -22,7 +22,6 @@ static constexpr float RR_THRESHOLD = 0.1;
  * too difficult to control
  * 
  * @param objects   object encapsulation
- * @param prim2obj  primitive to object index mapping: which object does this primitive come from?
  * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
@@ -35,8 +34,6 @@ template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -77,28 +74,27 @@ CPT_KERNEL void render_lt_kernel(
     }
 
     // step 2: bouncing around the scene until the max depth is reached
-    int min_index = -1;
+    int min_index = -1, object_id = 0;
 #ifdef RENDERER_USE_BVH
     ShapeIntersectVisitor visitor(*verts, ray, 0);
 #else   // RENDERER_USE_BVH
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
-    ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
-    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
-    // printf("Out Throughput: %f, %f, %f, ray_o: %f, %f, %f, ray_d: %f, %f, %f\n", 
-    //     throughput.x(), throughput.y(), throughput.z(),
-    //     ray.o.x(), ray.o.y(), ray.o.z(),
-    //     ray.d.x(), ray.d.y(), ray.d.z()
-    // );
     for (int b = 0; b < max_depth; b++) {
-        float min_dist = MAX_DIST;
+        float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
+        min_dist = ray_intersect_bvh(
+            ray, bvh_fronts, bvh_backs, 
+            node_fronts, node_backs, node_offsets, 
+            verts, min_index, object_id, prim_u, 
+            prim_v, node_num, min_dist
+        );
         min_dist = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, visitor, min_index, node_num, min_dist);
 #else   // RENDERER_USE_BVH
         #pragma unroll
@@ -122,20 +118,20 @@ CPT_KERNEL void render_lt_kernel(
             pipe.consumer_wait();
             __syncthreads();
             // this might not be a good solution
-            min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, min_dist);
+            min_dist = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
+                cp_base << BASE_SHFL, min_index, object_id, prim_u, prim_v, min_dist);
             __syncthreads();
         }
 #endif  // RENDERER_USE_BVH
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
             // printf("Throughput: %f, %f, %f, min_index: %d, bounce: %d, %d\n", throughput.x(), throughput.y(), throughput.z(), min_index, b, num_emitter);
-            extract.set_index(min_index);
-            auto it = variant::apply_visitor(extract, shapes[min_index]);
+            auto it = Primitive::get_interaction(*verts, *norms, *uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
+            object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
 
             // ============= step 3: next event estimation ================
             // (1) randomly pick one emitter
-            int object_id   = prim2obj[min_index],
-                material_id = objects[object_id].bsdf_id;
+            int material_id = objects[object_id].bsdf_id;
 
             // deterministically connect to the camera
             Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 1));
@@ -148,10 +144,10 @@ CPT_KERNEL void render_lt_kernel(
             if (constraint_cnt > specular_constraints &&
                 dev_cam.get_splat_pixel(shadow_ray.d, pixel_x, pixel_y) && 
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, shapes, bvh_fronts, bvh_backs, node_fronts, 
+            occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
                         node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+            occlusion_test(shadow_ray, objects, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
             ) {
                 Vec4 direct_splat = throughput * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
@@ -192,8 +188,6 @@ CPT_KERNEL void render_lt_kernel(
 template CPT_KERNEL void render_lt_kernel<true>(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -219,8 +213,6 @@ template CPT_KERNEL void render_lt_kernel<true>(
 template CPT_KERNEL void render_lt_kernel<false>(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 

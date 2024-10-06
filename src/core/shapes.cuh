@@ -12,13 +12,13 @@
 class SphereShape {
 public:
     int obj_id;
-    CPT_CPU SphereShape(int _obj_id): obj_id(_obj_id) {}
+    CPT_CPU SphereShape(int _obj_id = -1): obj_id(_obj_id) {}
 };
 
 class TriangleShape {
 public:
     int obj_id;
-    CPT_CPU TriangleShape(int _obj_id): obj_id(_obj_id) {}
+    CPT_CPU TriangleShape(int _obj_id = -1): obj_id(_obj_id) {}
 };
 
 /**
