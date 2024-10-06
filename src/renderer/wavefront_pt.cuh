@@ -243,8 +243,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -270,8 +268,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
 CPT_KERNEL void closesthit_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -295,8 +291,6 @@ CPT_KERNEL void closesthit_shader(
 CPT_KERNEL void nee_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -322,7 +316,7 @@ CPT_KERNEL void nee_shader(
 CPT_KERNEL void bsdf_local_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
+    ConstAABBPtr aabbs,
     ConstUVPtr,         
     const IndexBuffer idx_buffer,
     int stream_offset,

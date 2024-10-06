@@ -15,23 +15,21 @@ static constexpr float RR_THRESHOLD = 0.1;
 CPT_GPU bool occlusion_test(
     const Ray& ray,
     ConstObjPtr objects,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     const ArrayType<Vec3>& verts,
     int num_objects,
     float max_dist
 ) {
     float aabb_tmin = 0;
-    ShapeIntersectVisitor shape_visitor(verts, ray, 0, max_dist);
     int prim_id = 0, num_prim = 0;
     for (int obj_id = 0; obj_id < num_objects; obj_id ++) {
         num_prim = prim_id + objects[obj_id].prim_num;
         if (objects[obj_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist) {
             // ray intersects the object
             for (; prim_id < num_prim; prim_id ++) {
-                if (aabbs[prim_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist) {
-                    shape_visitor.set_index(prim_id);
-                    float dist = variant::apply_visitor(shape_visitor, shapes[prim_id]);
+                auto aabb = aabbs[prim_id];
+                if (aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist) {
+                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_id, it_u, it_v, aabb.obj_idx() >= 0);
                     if (dist < max_dist && dist > EPSILON)
                         return false;
                 }
@@ -45,7 +43,6 @@ CPT_GPU bool occlusion_test(
 // occlusion test is any hit shader
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
-    ConstShapePtr shapes,
     cudaTextureObject_t bvh_fronts,
     cudaTextureObject_t bvh_backs,
     cudaTextureObject_t node_fronts,
@@ -58,7 +55,6 @@ CPT_GPU bool occlusion_test_bvh(
     int node_idx = 0;
     float aabb_tmin = 0;
     // There can be much control flow divergence, not good
-    ShapeIntersectVisitor shape_visitor(verts, ray, 0, max_dist);
     while (node_idx < node_num) {
         float4 node_f = tex1Dfetch<float4>(node_fronts, node_idx),
                node_b = tex1Dfetch<float4>(node_backs, node_idx);
@@ -80,8 +76,7 @@ CPT_GPU bool occlusion_test_bvh(
                 if (bvh.aabb.intersect(ray, aabb_tmin)) {
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
-                    shape_visitor.set_index(prim_idx);
-                    float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
+                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
                     if (dist > EPSILON && dist < max_dist)
                         return false;
                 }
@@ -96,8 +91,7 @@ CPT_GPU bool occlusion_test_bvh(
  * Stackless BVH (should use tetxure memory?)
  * Perform ray-intersection test on shared memory primitives
  * @param ray: the ray for intersection test
- * @param shapes: scene primitives
- * @param s_aabbs: scene primitives
+ * @param s_aabbs: scene primitive AABB
  * @param shape_visitor: encapsulated shape visitor
  * @param it: interaction info, containing the interacted normal and uv
  * @param remain_prims: number of primitives to be tested (32 at most)
@@ -111,14 +105,16 @@ CPT_GPU bool occlusion_test_bvh(
 */
 CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
-    ConstShapePtr shapes,
     cudaTextureObject_t bvh_fronts,
     cudaTextureObject_t bvh_backs,
     cudaTextureObject_t node_fronts,
     cudaTextureObject_t node_backs,
     cudaTextureObject_t node_offsets,
-    ShapeIntersectVisitor& shape_visitor,
+    const ArrayType<Vec3>& verts,
     int& min_index,
+    int& min_obj_idx,
+    float& prim_u,
+    float& prim_v,
     const int node_num,
     float min_dist
 ) {
@@ -147,11 +143,13 @@ CPT_GPU float ray_intersect_bvh(
                     int obj_idx = 0, prim_idx = 0;
                     bvh.get_info(obj_idx, prim_idx);
                     // we might not need an obj_idx stored in shapes, if we use BVH 
-                    shape_visitor.set_index(prim_idx);
-                    float dist = variant::apply_visitor(shape_visitor, shapes[prim_idx]);
+                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
                     bool valid = dist > EPSILON && dist < min_dist;
                     min_dist = valid ? dist : min_dist;
+                    prim_u   = valid ? it_u : prim_u;
+                    prim_v   = valid ? it_v : prim_v;
                     min_index = valid ? prim_idx : min_index;
+                    min_obj_idx = valid ? obj_idx : min_obj_idx;
                 }
             }
         }
@@ -195,8 +193,6 @@ template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -212,7 +208,7 @@ CPT_KERNEL void render_pt_kernel(
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,/* max depth, useless for depth renderer, 1 anyway */
+    int max_depth,
     int node_num,
     int accum_cnt
 ) {
@@ -228,28 +224,28 @@ CPT_KERNEL void render_pt_kernel(
     // optimization: copy at most 32 prims from global memory to shared memory
 
     // this kinda resembles deferred rendering
-    int min_index = -1;
-#ifdef RENDERER_USE_BVH
-    ShapeIntersectVisitor visitor(*verts, ray, 0);
-#else   // RENDERER_USE_BVH
+    int min_index = -1, object_id = 0;
+#ifndef RENDERER_USE_BVH
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
-    ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
-    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
-
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
     bool hit_emitter = false;
     for (int b = 0; b < max_depth; b++) {
-        float min_dist = MAX_DIST;
+        float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
-        min_dist = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, visitor, min_index, node_num, min_dist);
+        min_dist = ray_intersect_bvh(
+            ray, bvh_fronts, bvh_backs, 
+            node_fronts, node_backs, node_offsets, 
+            verts, min_index, object_id, prim_u, 
+            prim_v, node_num, min_dist
+        );
 #else   // RENDERER_USE_BVH
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
@@ -272,19 +268,19 @@ CPT_KERNEL void render_pt_kernel(
             pipe.consumer_wait();
             __syncthreads();
             // this might not be a good solution
-            min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, min_dist);
+            min_dist = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
+                cp_base << BASE_SHFL, min_index, object_id, prim_u, prim_v, min_dist);
             __syncthreads();
         }
 #endif  // RENDERER_USE_BVH
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
-            extract.set_index(min_index);
-            auto it = variant::apply_visitor(extract, shapes[min_index]);
+            auto it = Primitive::get_interaction(*verts, *norms, *uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
+            object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
 
             // ============= step 3: next event estimation ================
             // (1) randomly pick one emitter
-            int object_id   = prim2obj[min_index],
-                material_id = objects[object_id].bsdf_id,
+            int material_id = objects[object_id].bsdf_id,
                 emitter_id  = objects[object_id].emitter_id;
             hit_emitter = emitter_id > 0;
 
@@ -311,10 +307,10 @@ CPT_KERNEL void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, shapes, bvh_fronts, bvh_backs, node_fronts, 
+            occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
                         node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+            occlusion_test(shadow_ray, objects, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
             ) {
                 // MIS for BSDF / light sampling, to achieve better rendering
@@ -355,8 +351,6 @@ CPT_KERNEL void render_pt_kernel(
 template CPT_KERNEL void render_pt_kernel<true>(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -380,8 +374,6 @@ template CPT_KERNEL void render_pt_kernel<true>(
 template CPT_KERNEL void render_pt_kernel<false>(
     const DeviceCamera& dev_cam, 
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 

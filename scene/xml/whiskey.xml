@@ -4,7 +4,7 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
-	<renderer type="lt"/>
+	<renderer type="pt"/>
 	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
@@ -26,7 +26,7 @@
 			<integer name="height" value="1024"/>
 			<integer name="specular_constraint" value="0"/>
 			<bool name="gamma_correction" value="false"/>
-			<bool name="bidirectional" value="true"/>
+			<bool name="bidirectional" value="false"/>
 			<float name="caustic_scaling" value="1.5"/>
 		</film>
 	</sensor>

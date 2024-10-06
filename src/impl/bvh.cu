@@ -82,7 +82,8 @@ void create_bvh_info(
     for (size_t i = 0; i < points1.size(); i++) {
         const auto& idx_info = idxs[i];
         // idx_info.first is the primitive_id, while second is obj_id (negative means)
-        bvh_infos.emplace_back(points1[i], points2[i], points3[i], idx_info.obj_id, idx_info.prim_id, idx_info.is_sphere);
+        bvh_infos.emplace_back(points1[i], points2[i], points3[i], 
+            idx_info.is_sphere ? -idx_info.obj_id - 1: idx_info.obj_id, idx_info.prim_id, idx_info.is_sphere);
     }
 }
 

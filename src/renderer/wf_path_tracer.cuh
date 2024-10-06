@@ -40,7 +40,6 @@ static constexpr int NUM_STREAM = 8;
 
 class WavefrontPathTracer: public PathTracer {
 private:
-    using PathTracer::shapes;
     using PathTracer::aabbs;
     using PathTracer::verts;
     using PathTracer::norms; 
@@ -51,7 +50,6 @@ private:
     using PathTracer::w;
     using PathTracer::h;
     using PathTracer::obj_info;
-    using PathTracer::prim2obj;
     using PathTracer::num_objs;
     using PathTracer::num_emitter;
     using PathTracer::bvh_fronts;
@@ -116,9 +114,9 @@ public:
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
                 raygen_primary_hit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    *camera, payload_buffer, obj_info, prim2obj, shapes, aabbs, 
-                    verts, norms, uvs, bvh_fronts, bvh_backs, node_fronts, 
-                    node_backs, node_offsets, ray_idx_buffer, stream_offset, num_prims, 
+                    *camera, payload_buffer, obj_info, aabbs, verts, 
+                    norms, uvs, bvh_fronts, bvh_backs, node_fronts, node_backs, 
+                    node_offsets, ray_idx_buffer, stream_offset, num_prims, 
                     patch_x, patch_y, i, stream_id, image.w(), num_nodes);
                 int num_valid_ray = TOTAL_RAY;
                 auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
@@ -158,22 +156,22 @@ public:
 
                     // step5: NEE shader
                     nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
-                        bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, ray_idx_buffer, 
+                        payload_buffer, obj_info, aabbs, verts, norms, uvs, bvh_fronts, 
+                        bvh_backs, node_fronts, node_backs, node_offsets, ray_idx_buffer, 
                         stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes
                     );
 
                     // step6: emission shader + ray update shader
                     bsdf_local_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, prim2obj, uvs, ray_idx_buffer,
+                        payload_buffer, obj_info, aabbs, uvs, ray_idx_buffer,
                         stream_offset, num_prims, num_valid_ray, bounce > 0
                     );
 
                     // step2: closesthit shader
                     if (bounce + 1 >= max_depth) break;
                     closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, prim2obj, shapes, aabbs, verts, 
-                        norms, uvs, bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
+                        payload_buffer, obj_info, aabbs, verts, norms, uvs, 
+                        bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
                         ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes
                     );
                 }

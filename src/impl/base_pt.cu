@@ -13,24 +13,29 @@
  * https://stackoverflow.com/questions/78603442/convergence-barrier-for-branchless-cuda-conditional-select
 */
 CPT_GPU float ray_intersect_old(
+    const ArrayType<Vec3>& s_verts, 
     const Ray& ray,
-    ConstShapePtr shapes,
     ConstAABBWPtr s_aabbs,
-    ShapeIntersectVisitor& shape_visitor,
-    int& min_index,
     const int remain_prims,
     const int cp_base,
+    int& min_index,
+    int& min_obj_idx,
+    float& prim_u,
+    float& prim_v,
     float min_dist
 ) {
     float aabb_tmin = 0; 
     #pragma unroll
     for (int idx = 0; idx < remain_prims; idx ++) {
-        if (s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist) {
-            shape_visitor.set_index(idx);
-            float dist = variant::apply_visitor(shape_visitor, shapes[cp_base + idx]);
+        auto aabb = s_aabbs[idx].aabb;
+        if (aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist) {
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, aabb.obj_idx() >= 0);
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;
+            prim_u   = valid ? it_u : prim_u;
+            prim_v   = valid ? it_v : prim_v;
             min_index = valid ? cp_base + idx : min_index;
+            min_obj_idx = valid ? aabb.obj_idx() : min_obj_idx;
         }
     }
     return min_dist;
@@ -52,13 +57,16 @@ CPT_GPU float ray_intersect_old(
  * compare to the ray_intersect_old, this API almost double the speed
 */
 CPT_GPU float ray_intersect(
+    const ArrayType<Vec3>& s_verts, 
     const Ray& ray,
     ConstShapePtr shapes,
     ConstAABBWPtr s_aabbs,
-    ShapeIntersectVisitor& shape_visitor,
-    int& min_index,
     const int remain_prims,
     const int cp_base,
+    int& min_index,
+    int& min_obj_idx,
+    float& prim_u,
+    float& prim_v,
     float min_dist
 ) {
     float aabb_tmin = 0;
@@ -74,11 +82,17 @@ CPT_GPU float ray_intersect(
     while (tasks) {
         BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
         tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
-        shape_visitor.set_index(idx);
-        float dist = variant::apply_visitor(shape_visitor, shapes[cp_base + idx]);
+#ifdef TRIANGLE_ONLY
+        float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, true);
+#else
+        float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, s_aabbs[idx].aabb.obj_idx() >= 0);
+#endif
         bool valid = dist > EPSILON && dist < min_dist;
         min_dist = valid ? dist : min_dist;
+        prim_u   = valid ? it_u : prim_u;
+        prim_v   = valid ? it_v : prim_v;
         min_index = valid ? cp_base + idx : min_index;
+        min_obj_idx = valid ? s_aabbs[idx].aabb.obj_idx() : min_obj_idx;
     }
     return min_dist;
 }

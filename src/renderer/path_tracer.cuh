@@ -22,7 +22,6 @@ private:
     float4* _node_backs;
     int* _node_offsets;
 protected:
-    using TracerBase::shapes;
     using TracerBase::aabbs;
     using TracerBase::verts;
     using TracerBase::norms; 
@@ -34,7 +33,6 @@ protected:
     using TracerBase::h;
 
     ObjInfo* obj_info;
-    int*    prim2obj;
     int num_objs;
     int num_nodes;
     int num_emitter;
@@ -54,7 +52,6 @@ protected:
     int accum_cnt;
 public:
     /**
-     * @param shapes    shape information (for ray intersection)
      * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
      * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
      * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
@@ -95,23 +92,15 @@ public:
 #endif  // RENDERER_USE_BVH
 
         CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
-        CUDA_CHECK_RETURN(cudaMallocManaged(&prim2obj, num_prims * sizeof(int)));
         CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
         CUDA_CHECK_RETURN(cudaMemcpy(camera, &scene.cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
 
-        int prim_offset = 0;
-        for (int i = 0; i < num_objs; i++) {
+        for (int i = 0; i < num_objs; i++)
             obj_info[i] = scene.objects[i];
-            int prim_num = scene.objects[i].prim_num;
-            for (int j = 0; j < prim_num; j++)
-                prim2obj[prim_offset + j] = i;
-            prim_offset += prim_num;
-        }
     }
 
     virtual ~PathTracer() {
         CUDA_CHECK_RETURN(cudaFree(obj_info));
-        CUDA_CHECK_RETURN(cudaFree(prim2obj));
         CUDA_CHECK_RETURN(cudaFree(camera));
 #ifdef RENDERER_USE_BVH
         CUDA_CHECK_RETURN(cudaDestroyTextureObject(bvh_fronts));
@@ -140,7 +129,7 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_pt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                *camera, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+                *camera, obj_info, aabbs, verts, norms, uvs, 
                 bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
                 *dev_image, nullptr, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth, num_nodes
             ); 
@@ -160,7 +149,7 @@ public:
 
         accum_cnt ++;
         render_pt_kernel<true><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-            *camera, obj_info, prim2obj, shapes, aabbs, verts, norms, uvs, 
+            *camera, obj_info, aabbs, verts, norms, uvs, 
             bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
             *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
             accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt

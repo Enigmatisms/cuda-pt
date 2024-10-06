@@ -4,7 +4,8 @@
  * @author: Qianyue He
 */
 #pragma once
-#include "core/shapes.cuh"
+#include "core/primitives.cuh"
+#include "core/aabb.cuh"
 
 // #define CP_BASE_6
 #ifdef CP_BASE_6
@@ -26,38 +27,43 @@ constexpr int BASE_ADDR = 1 << BASE_SHFL;
  * https://stackoverflow.com/questions/78603442/convergence-barrier-for-branchless-cuda-conditional-select
 */
 CPT_GPU float ray_intersect_old(
+    const ArrayType<Vec3>& s_verts, 
     const Ray& ray,
-    ConstShapePtr shapes,
     ConstAABBWPtr s_aabbs,
-    ShapeIntersectVisitor& shape_visitor,
-    int& min_index,
     const int remain_prims,
     const int cp_base,
+    int& min_index,
+    int& min_obj_idx,
+    float& prim_u,
+    float& prim_v,
     float min_dist
 );
 
 /**
  * Perform ray-intersection test on shared memory primitives
- * @param ray: the ray for intersection test
- * @param shapes: scene primitives
- * @param s_aabbs: scene primitives
- * @param shape_visitor: encapsulated shape visitor
- * @param it: interaction info, containing the interacted normal and uv
+ * @param s_verts:      vertices stored in shared memory
+ * @param ray:          the ray for intersection test
+ * @param s_aabbs:      scene primitives
  * @param remain_prims: number of primitives to be tested (32 at most)
- * @param cp_base: shared memory address offset
- * @param min_dist: current minimal distance
+ * @param min_index:    closest hit primitive index
+ * @param min_obj_idx:  closest hit object index
+ * @param prim_u:       intersection barycentric coord u
+ * @param prim_v:       intersection barycentric coord v
+ * @param min_dist:     current minimal distance
  *
  * @return minimum intersection distance
  * 
  * compare to the ray_intersect_old, this API almost double the speed
 */
 CPT_GPU float ray_intersect(
+    const ArrayType<Vec3>& s_verts, 
     const Ray& ray,
-    ConstShapePtr shapes,
     ConstAABBWPtr s_aabbs,
-    ShapeIntersectVisitor& shape_visitor,
-    int& min_index,
     const int remain_prims,
     const int cp_base,
+    int& min_index,
+    int& min_obj_idx,
+    float& prim_u,
+    float& prim_v,
     float min_dist
 );

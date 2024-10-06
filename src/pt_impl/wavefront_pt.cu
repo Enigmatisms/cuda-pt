@@ -24,8 +24,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -51,28 +49,26 @@ CPT_KERNEL void raygen_primary_hit_shader(
     Ray ray = dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
 
     PDFInteraction it;            // To local register
-    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
 
-    int min_index = -1;   // round up
+    int min_index = -1, min_object_id = 0;   // round up
     ray.hit_t = MAX_DIST;
 
     #ifdef FUSED_MISS_SHADER
     ray.set_active(false);
     #endif   // FUSED_MISS_SHADER
+    float prim_u = 0, prim_v = 0;
 
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
 #ifdef RENDERER_USE_BVH 
-    ShapeIntersectVisitor visitor(*verts, ray, 0);
-    ray.hit_t = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, node_fronts, 
-                    node_backs, node_offsets, visitor, min_index, node_num, ray.hit_t);
+    ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
+                    node_backs, node_offsets, *verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
-    ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
     // ============= step 1: ray intersection =================
@@ -100,7 +96,8 @@ CPT_KERNEL void raygen_primary_hit_shader(
         pipe.consumer_wait();
         __syncthreads();
         // this might not be a good solution
-        ray.hit_t = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, ray.hit_t);
+        ray.hit_t = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
+                cp_base << BASE_SHFL, min_index, min_object_id, prim_u, prim_v, ray.hit_t);
         __syncthreads();
     }
 #endif  // RENDERER_USE_BVH
@@ -110,13 +107,12 @@ CPT_KERNEL void raygen_primary_hit_shader(
     if (min_index >= 0) {
         // if the ray hits nothing, or the path throughput is 0, then the ray will be inactive
         // inactive rays will only be processed in the miss_shader
-        extract.set_index(min_index);
         ray.set_hit();
         ray.set_hit_index(min_index);
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it.it() = variant::apply_visitor(extract, shapes[min_index]);
+        it.it() = Primitive::get_interaction(*verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     // compress two int (to int16) to a uint32_t 
@@ -140,8 +136,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
 CPT_KERNEL void closesthit_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -168,22 +162,19 @@ CPT_KERNEL void closesthit_shader(
     PDFInteraction it = payloads.get_interaction(px, py);            // To local register
     ray.reset();
     
-    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
-
-    int min_index = -1;   // round up
+    float prim_u = 0, prim_v = 0;
+    int min_index = -1, min_object_id = 0;   // round up
     ray.hit_t = MAX_DIST;
 
 #ifdef RENDERER_USE_BVH 
-    ShapeIntersectVisitor visitor(*verts, ray, 0);
-    ray.hit_t = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, 
-                    node_fronts, node_backs, node_offsets, visitor, min_index, node_num, ray.hit_t);
+    ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
+                    node_backs, node_offsets, *verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
-    ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
     // ============= step 1: ray intersection =================
@@ -211,7 +202,8 @@ CPT_KERNEL void closesthit_shader(
         pipe.consumer_wait();
         __syncthreads();
         // this might not be a good solution
-        ray.hit_t = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, ray.hit_t);
+       ray.hit_t = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
+                cp_base << BASE_SHFL, min_index, min_object_id, prim_u, prim_v, ray.hit_t);
         __syncthreads();
     }
 #endif  // RENDERER_USE_BVH
@@ -220,13 +212,12 @@ CPT_KERNEL void closesthit_shader(
     if (block_index < num_valid && min_index >= 0) {
         // if the ray hits nothing, or the path throughput is 0, then the ray will be inactive
         // inactive rays will only be processed in the miss_shader
-        extract.set_index(min_index);
         ray.set_hit();
         ray.set_hit_index(min_index);
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it.it() = variant::apply_visitor(extract, shapes[min_index]);
+        it.it() = Primitive::get_interaction(*verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     payloads.set_ray(px, py, ray);
@@ -240,8 +231,6 @@ CPT_KERNEL void closesthit_shader(
 CPT_KERNEL void nee_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
     ConstPrimPtr verts,
     ConstPrimPtr norms, 
@@ -271,9 +260,10 @@ CPT_KERNEL void nee_shader(
         Sampler sg = payloads.get_sampler(px, py);
         const PDFInteraction it = payloads.get_interaction(px, py);
 
-        int object_id    = prim2obj[ray.hit_id()],
-            material_id  = objects[object_id].bsdf_id,
-            emitter_id   = objects[object_id].emitter_id;
+        auto aabb_front = CONST_FLOAT4(aabbs[ray.hit_id()].mini);       // hope to have coalesced access
+        int object_id   = __float_as_int(aabb_front.w),
+            material_id = objects[object_id].bsdf_id,
+            emitter_id  = objects[object_id].emitter_id;
 
         float direct_pdf = 1;
 
@@ -289,10 +279,10 @@ CPT_KERNEL void nee_shader(
         // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
         if (emitter != c_emitter[0] && 
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, shapes, bvh_fronts, bvh_backs, 
-                        node_fronts, node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
+            occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
+                        node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+            occlusion_test(shadow_ray, objects, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
         ) {
             // MIS for BSDF / light sampling, to achieve better rendering
@@ -313,7 +303,7 @@ CPT_KERNEL void nee_shader(
 CPT_KERNEL void bsdf_local_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
+    ConstAABBPtr aabbs,
     ConstUVPtr,         
     const IndexBuffer idx_buffer,
     int stream_offset,
@@ -336,7 +326,8 @@ CPT_KERNEL void bsdf_local_shader(
         Vec2 sample = sg.next2D();
         payloads.set_sampler(px, py, sg);
 
-        int object_id   = prim2obj[ray.hit_id()],
+        auto aabb_front = CONST_FLOAT4(aabbs[ray.hit_id()].mini);       // hope to have coalesced access
+        int object_id   = __float_as_int(aabb_front.w),
             emitter_id  = objects[object_id].emitter_id,
             material_id = objects[object_id].bsdf_id;
         bool hit_emitter = emitter_id > 0;
