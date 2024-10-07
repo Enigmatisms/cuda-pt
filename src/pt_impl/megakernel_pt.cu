@@ -6,9 +6,6 @@
 #include "renderer/base_pt.cuh"
 #include "renderer/megakernel_pt.cuh"
 
-static constexpr int RR_BOUNCE = 2;
-static constexpr float RR_THRESHOLD = 0.1;
-
 /**
  * Occlusion test, computation is done on global memory
 */
@@ -243,7 +240,7 @@ CPT_KERNEL void render_pt_kernel(
         min_dist = ray_intersect_bvh(
             ray, bvh_fronts, bvh_backs, 
             node_fronts, node_backs, node_offsets, 
-            verts, min_index, object_id, prim_u, 
+            *verts, min_index, object_id, prim_u, 
             prim_v, node_num, min_dist
         );
 #else   // RENDERER_USE_BVH
@@ -307,10 +304,10 @@ CPT_KERNEL void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                        node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
+                occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
+                            node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+                occlusion_test(shadow_ray, objects, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
             ) {
                 // MIS for BSDF / light sampling, to achieve better rendering
@@ -327,13 +324,7 @@ CPT_KERNEL void render_pt_kernel(
 
             if (radiance.numeric_err())
                 radiance.fill(0);
-
-            // step 5: russian roulette
-            float max_value = throughput.max_elem_3d();
-            if (b >= RR_BOUNCE && max_value < RR_THRESHOLD) {
-                if (sampler.next1D() > max_value || max_value < THP_EPS) break;
-                throughput *= 1. / max_value;
-            }
+            
         }
     }
     __syncthreads();

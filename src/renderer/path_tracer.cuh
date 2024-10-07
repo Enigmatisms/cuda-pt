@@ -131,7 +131,8 @@ public:
             render_pt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
                 *camera, obj_info, aabbs, verts, norms, uvs, 
                 bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
-                *dev_image, nullptr, num_prims, num_objs, num_emitter, i * SEED_SCALER, max_depth, num_nodes
+                *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
+                i * SEED_SCALER, max_depth, num_nodes, accum_cnt
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
             printProgress(i, num_iter);

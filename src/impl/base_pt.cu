@@ -81,17 +81,18 @@ CPT_GPU float ray_intersect(
     while (tasks) {
         BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
         tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
+        int obj_idx = s_aabbs[idx].aabb.obj_idx();
 #ifdef TRIANGLE_ONLY
         float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, true);
 #else
-        float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, s_aabbs[idx].aabb.obj_idx() >= 0);
+        float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, obj_idx >= 0);
 #endif
         bool valid = dist > EPSILON && dist < min_dist;
         min_dist = valid ? dist : min_dist;
         prim_u   = valid ? it_u : prim_u;
         prim_v   = valid ? it_v : prim_v;
         min_index = valid ? cp_base + idx : min_index;
-        min_obj_idx = valid ? s_aabbs[idx].aabb.obj_idx() : min_obj_idx;
+        min_obj_idx = valid ? obj_idx : min_obj_idx;
     }
     return min_dist;
 }

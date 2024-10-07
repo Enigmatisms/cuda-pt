@@ -1,47 +1,31 @@
 #include "core/aos.cuh"
 #include "renderer/depth.cuh"
 #include "core/camera_model.cuh"
+#include "core/scene.cuh"
 #include <ext/lodepng/lodepng.h>
 
-int main() {
-    // right, down, back, left, up
-    int num_triangle = 10, num_spheres = 3, num_prims = num_triangle + num_spheres;
-    int spp       = 16;
-    std::vector<Vec3> v1s = {{1, 1, 1}, {1, 1, 1}, {-1, 1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, 1, 1}, {-1, -1, 1}, {-1, 1, 1}, {-1,-1, 1}, {-1, -1, 1}, {0.5, 0, -0.7}, {-0.4,0.4, -0.5}, {-0.5, -0.5, -0.7}};
-    std::vector<Vec3> v2s = {{1,-1,-1}, {1, -1,1}, {1, 1,  -1}, {1, -1, -1}, {1, 1,  1}, {1, 1, -1}, {-1, 1,  1}, {-1, 1,-1}, { 1,-1, 1}, {1,  1,  1}, {0.3, 0, 0}, {0.5, 0, 0}, {0.3, 0, 0}};
-    std::vector<Vec3> v3s = {{1, 1,-1}, {1,-1,-1}, {1, -1, -1}, {-1, -1,-1}, {1, 1, -1}, {-1,1, -1}, {-1, -1,-1}, {-1,-1,-1}, { 1, 1, 1}, {-1, 1,  1}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
-    Vec3 normal_default = {0, 1, 0};
-    Vec2 uv_default     = {0.5, 0.5};
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
+        exit(1);
+    }
+    std::string xml_path = argv[1];
+
+    std::cout << "Loading scenes from '" << xml_path << "'\n";
+    Scene scene(xml_path);
 
     // scene setup
-    ArrayType<Vec3> vert_data(v1s.size()), norm_data(v1s.size());
-    ArrayType<Vec2> uvs_data(v1s.size());
-    vert_data.from_vectors(v1s, v2s, v3s);
-    norm_data.fill(normal_default);
-    uvs_data.fill(uv_default);
+    ArrayType<Vec3> vert_data(scene.num_prims), norm_data(scene.num_prims);
+    ArrayType<Vec2> uvs_data(scene.num_prims);
 
-    // camera setup
-    Vec3 from(0, -3, 0), to(0, 0, 0);
-    int width = 1024, height = 1024;
-    float fov = 55;
-    DeviceCamera camera(from, to, fov, width, height, -1, -1, Vec3(0, 0, 1));
-    print_vec3(camera.R.col(0));
-    print_vec3(camera.R.col(1));
-    print_vec3(camera.R.col(2));
-
-    // shape setup
-    std::vector<Shape> shapes(num_prims);
-    for (int i = 0; i < num_triangle; i++)
-        shapes[i] = TriangleShape(i >> 1);
-    for (int i = num_triangle; i < num_prims; i++)
-        shapes[i] = SphereShape(i >> 1);
+    scene.export_prims(vert_data, norm_data, uvs_data);
     
-    DepthTracer dtracer(shapes, vert_data, norm_data, uvs_data, camera, width, height);
-    auto bytes_buffer = dtracer.render(spp);
+    DepthTracer dtracer(scene.shapes, vert_data, norm_data, uvs_data, *scene.cam, scene.config.width, scene.config.height);
+    auto bytes_buffer = dtracer.render(16);
 
     std::string file_name = "depth-render.png";
 
-    if (unsigned error = lodepng::encode(file_name, bytes_buffer, width, height); error) {
+    if (unsigned error = lodepng::encode(file_name, bytes_buffer, scene.config.width, scene.config.height); error) {
         std::cerr << "lodepng::encoder error " << error << ": " << lodepng_error_text(error)
                   << std::endl;
         throw std::runtime_error("lodepng::encode() fail");

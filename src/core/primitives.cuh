@@ -20,7 +20,7 @@ using SharedVec2Ptr = Vec2 (*)[32];
 using ConstSharedVec3Ptr = const Vec3 (*)[32];
 using ConstSharedVec2Ptr = const Vec2 (*)[32];
 
-#define TRIANGLE_ONLY
+// #define TRIANGLE_ONLY
 
 // All static
 class Primitive {
@@ -129,5 +129,3 @@ public:
 #endif
     }
 };
-
-using ConstShapePtr = const Primitive* const; 

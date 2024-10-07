@@ -75,9 +75,7 @@ CPT_KERNEL void render_lt_kernel(
 
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, object_id = 0;
-#ifdef RENDERER_USE_BVH
-    ShapeIntersectVisitor visitor(*verts, ray, 0);
-#else   // RENDERER_USE_BVH
+#ifndef RENDERER_USE_BVH
     __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
     ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
@@ -92,10 +90,9 @@ CPT_KERNEL void render_lt_kernel(
         min_dist = ray_intersect_bvh(
             ray, bvh_fronts, bvh_backs, 
             node_fronts, node_backs, node_offsets, 
-            verts, min_index, object_id, prim_u, 
+            *verts, min_index, object_id, prim_u, 
             prim_v, node_num, min_dist
         );
-        min_dist = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, visitor, min_index, node_num, min_dist);
 #else   // RENDERER_USE_BVH
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {

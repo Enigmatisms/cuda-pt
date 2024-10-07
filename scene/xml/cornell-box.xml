@@ -5,7 +5,7 @@
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
 	<renderer type="pt"/>
-	<bool name="use_bvh" value="false"/>
+	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
@@ -21,7 +21,7 @@
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
-			<bool name="gamma_correction" value="true"/>
+			<bool name="gamma_correction" value="false"/>
 		</film>
 	</sensor>
 
@@ -57,7 +57,7 @@
 
 	<emitter type="area" id="area">
 		<rgb name="emission" value="4, 4, 4"/>
-		<rgb name="scaler" value="2.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="12.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 

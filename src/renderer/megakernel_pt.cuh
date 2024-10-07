@@ -11,7 +11,7 @@
 #include "core/emitter.cuh"
 #include "core/camera_model.cuh"
 
-// #define RENDERER_USE_BVH
+#define RENDERER_USE_BVH
 
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];

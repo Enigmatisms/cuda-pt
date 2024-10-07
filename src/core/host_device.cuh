@@ -107,7 +107,6 @@ public:
         delete [] host_buffer;
     }
 
-    // TODO: can be accelerated via multi-threading
     std::vector<uint8_t> export_cpu(float inv_factor = 1, bool gamma_cor = true, bool alpha_avg = false) const {
         std::vector<uint8_t> byte_buffer(_w * _h * 4);
         size_t copy_pitch = _w * sizeof(Vec4);
