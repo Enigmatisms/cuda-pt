@@ -59,6 +59,8 @@ private:
         float max_range = std::numeric_limits<float>::infinity()
     ) {
         // solve a linear equation
+        // TODO: anchor is useless, we can therefore only store two float3 (diff) for a triangle
+        // padding will be natural
         auto anchor = verts.x(index), v1 = verts.y(index) - anchor, v2 = verts.z(index) - anchor;
         SO3 M(v1, v2, -ray.d, false);       // column wise input
         auto solution = M.inverse_transform(ray.o - anchor);

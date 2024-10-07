@@ -46,60 +46,39 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
     return dev_mem;
 }
 
-/**
- * Accessor for CUDA pitch array
-*/
 template<typename ValType>
-struct Accessor {
-    CPT_CPU_GPU Accessor() {}
-    CPT_CPU_GPU_INLINE ValType& operator() (ValType* buffer, uint32_t col, uint32_t row, uint32_t pitch) 
-                {  return ((ValType*)((char*)buffer + row * pitch))[col]; }
-    CPT_CPU_GPU_INLINE const ValType& operator() (ValType* buffer, uint32_t col, uint32_t row, uint32_t pitch) const 
-                { return ((ValType*)((char*)buffer + row * pitch))[col]; }
-};
-
-/**
- * A 2D CUDA pitch array encapsulation
-*/
-template<typename ValType>
-class DevicePitchBuffer {
+class DeviceBuffer {
 protected:
     ValType* _buffer;
-    size_t pitch;
     int _w;
     int _h;
 public:
-    DevicePitchBuffer(int width = 800, int height = 800): pitch(0), _w(width), _h(height) {
-        CUDA_CHECK_RETURN(cudaMallocPitch(&_buffer, &pitch, width * sizeof(ValType), height));
-        CUDA_CHECK_RETURN(cudaMemset2D(_buffer, pitch, 0, width * sizeof(ValType), height));
+    DeviceBuffer(int width = 800, int height = 800): _w(width), _h(height) {
+        CUDA_CHECK_RETURN(cudaMalloc(&_buffer, width * height * sizeof(ValType)));
+        CUDA_CHECK_RETURN(cudaMemset(_buffer, 0, width * height * sizeof(ValType)));
     }
 
-    ~DevicePitchBuffer() {
+    ~DeviceBuffer() {
         cudaFree(_buffer);
     }
 
     // for cudaMallocPitch (with extra memory alignment), we need to use pitch to access
-    CPT_CPU_GPU_INLINE ValType& operator() (int col, int row) {  return ((ValType*)((char*)_buffer + row * pitch))[col]; }
-    CPT_CPU_GPU_INLINE const ValType& operator() (int col, int row) const { return ((ValType*)((char*)_buffer + row * pitch))[col]; }
+    CPT_CPU_GPU_INLINE ValType& operator() (int col, int row) {  return _buffer[row * _w + col]; }
+    CPT_CPU_GPU_INLINE const ValType& operator() (int col, int row) const { return _buffer[row * _w + col]; }
 
     CPT_CPU_GPU_INLINE int w() const noexcept { return _w; }
     CPT_CPU_GPU_INLINE int h() const noexcept { return _h; }
-    CPT_CPU_GPU_INLINE int get_pitch() const noexcept { return pitch; }
-
-    CPT_CPU_GPU_INLINE static Accessor<ValType> accessor() noexcept {
-        return Accessor<ValType>();
-    }
 
     CPT_CPU_GPU_INLINE ValType* data() {
         return _buffer;
     }
 };
 
-class DeviceImage: public DevicePitchBuffer<Vec4> {
+class DeviceImage: public DeviceBuffer<Vec4> {
 private:
     Vec4* host_buffer;
 public:
-    DeviceImage(int width = 800, int height = 800): DevicePitchBuffer<Vec4>(width, height) {
+    DeviceImage(int width = 800, int height = 800): DeviceBuffer<Vec4>(width, height) {
         host_buffer = new Vec4[width * height];
     }
 
@@ -109,8 +88,8 @@ public:
 
     std::vector<uint8_t> export_cpu(float inv_factor = 1, bool gamma_cor = true, bool alpha_avg = false) const {
         std::vector<uint8_t> byte_buffer(_w * _h * 4);
-        size_t copy_pitch = _w * sizeof(Vec4);
-        CUDA_CHECK_RETURN(cudaMemcpy2D(host_buffer, copy_pitch, _buffer, pitch, copy_pitch, _h, cudaMemcpyDeviceToHost));
+        size_t copy_size = _w * _h * sizeof(Vec4);
+        CUDA_CHECK_RETURN(cudaMemcpy(host_buffer, _buffer, copy_size, cudaMemcpyDeviceToHost));
         if (gamma_cor) {
             for (int i = 0; i < _h; i ++) {
                 int base = i * _w;

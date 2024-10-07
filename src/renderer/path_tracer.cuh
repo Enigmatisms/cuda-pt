@@ -170,7 +170,7 @@ public:
 
     CPT_CPU void update_camera(const DeviceCamera* const cam) {
         CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
-        CUDA_CHECK_RETURN(cudaMemset2D(image.data(), image.get_pitch(), 0, w * sizeof(float4), h));    // reset image buffer
+        CUDA_CHECK_RETURN(cudaMemset(image.data(), 0, w * h * sizeof(float4)));    // reset image buffer
         accum_cnt = 0;                                                                  // reset accumulation counter
     }
 
