@@ -20,8 +20,8 @@
 CPT_KERNEL static void render_depth_kernel(
     const DeviceCamera& dev_cam,
     ConstAABBPtr aabbs,
-    ConstPrimPtr verts,
-    ConstPrimPtr norms, 
+    ConstNormPtr verts,
+    ConstNormPtr norms, 
     ConstUVPtr uvs,
     DeviceImage& image,
     int num_prims,

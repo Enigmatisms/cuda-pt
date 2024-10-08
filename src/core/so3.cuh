@@ -131,8 +131,8 @@ public:
         temp2[2] = fmaf(rows[0].z(), rows[1].x(), - rows[0].x() * rows[1].z());
 
         temp3[0] = fmaf(rows[1].x(), rows[2].y(), - rows[1].y() * rows[2].x());
-        temp3[1] = fmaf(rows[0].y(), rows[2].x(), - rows[0].x() * rows[2].y());
-        temp3[2] = fmaf(rows[0].x(), rows[1].y(), - rows[0].y() * rows[1].x());
+        temp3[1] = fmaf(rows[0].y(), rows[2].x(), - rows[0].x() * rows[2].y());      // use precomputed
+        temp3[2] = fmaf(rows[0].x(), rows[1].y(), - rows[0].y() * rows[1].x());      // use precomputed
         float inv_det = 1.f / (rows[0].x() * temp1.x() + rows[0].y() * temp2.x() + rows[0].z() * temp3.x());
         return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, temp3.dot(v) * inv_det);
     }
