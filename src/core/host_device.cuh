@@ -46,6 +46,8 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
     return dev_mem;
 }
 
+
+
 template<typename ValType>
 class DeviceBuffer {
 protected:
@@ -58,8 +60,9 @@ public:
         CUDA_CHECK_RETURN(cudaMemset(_buffer, 0, width * height * sizeof(ValType)));
     }
 
-    ~DeviceBuffer() {
-        cudaFree(_buffer);
+    // manually call the destroy to deallocate memory
+    void destroy() {
+        CUDA_CHECK_RETURN(cudaFree(_buffer));
     }
 
     // for cudaMallocPitch (with extra memory alignment), we need to use pitch to access
@@ -68,6 +71,8 @@ public:
 
     CPT_CPU_GPU_INLINE int w() const noexcept { return _w; }
     CPT_CPU_GPU_INLINE int h() const noexcept { return _h; }
+
+    
 
     CPT_CPU_GPU_INLINE ValType* data() {
         return _buffer;
@@ -82,7 +87,9 @@ public:
         host_buffer = new Vec4[width * height];
     }
 
-    ~DeviceImage() {
+    // manually call the destroy to deallocate memory
+    void destroy() {
+        DeviceBuffer<Vec4>::destroy();
         delete [] host_buffer;
     }
 

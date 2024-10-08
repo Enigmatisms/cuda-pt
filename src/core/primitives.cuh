@@ -27,17 +27,18 @@ class Primitive {
 private:
     CPT_CPU_GPU_INLINE static float intersect_sphere(
         const Ray& ray,
-        const ArrayType<Vec3>& verts, 
+        const PrecomputeAoS& verts, 
         int index,
         float& solved_u,
         float& solved_v,
         float min_range = EPSILON, 
         float max_range = std::numeric_limits<float>::infinity()
     ) {
-        auto op = verts.x(index) - ray.o; 
+        Vec4 center_r = verts.x(index);
+        auto op = Vec3(center_r.x(), center_r.y(), center_r.z()) - ray.o; 
         auto _pt = verts.x(index);
         float b = op.dot(ray.d);
-        float determinant = b * b - op.dot(op) + verts.y(index).x() * verts.y(index).x(), result = 0;
+        float determinant = b * b - op.dot(op) + center_r.w() * center_r.w(), result = 0;
         if (determinant >= 0) {
             determinant = sqrtf(determinant);
             result = (b - determinant > min_range) ? b - determinant : 0;
@@ -51,7 +52,7 @@ private:
 
     CPT_CPU_GPU_INLINE static float intersect_triangle(
         const Ray& ray,
-        const ArrayType<Vec3>& verts, 
+        const PrecomputeAoS& verts, 
         int index,
         float& solved_u,
         float& solved_v,
@@ -61,9 +62,10 @@ private:
         // solve a linear equation
         // TODO: anchor is useless, we can therefore only store two float3 (diff) for a triangle
         // padding will be natural
-        auto anchor = verts.x(index), v1 = verts.y(index) - anchor, v2 = verts.z(index) - anchor;
+        auto anchor = verts.x(index), v1 = verts.y(index), v2 = verts.z(index);
         SO3 M(v1, v2, -ray.d, false);       // column wise input
-        auto solution = M.inverse_transform(ray.o - anchor);
+        // use precomputed 
+        auto solution = M.inverse_transform_precomputed(ray.o - Vec3(anchor.x(), anchor.y(), anchor.z()), anchor.w(), v1.w(), v2.w());
         bool valid    = (solution.x() > 0 && solution.y() > 0 && solution.x() + solution.y() < 1 &&
                             solution.z() > EPSILON && solution.z() < max_range);
         solved_u = solution.x();
@@ -73,7 +75,7 @@ private:
 public:
     CPT_CPU_GPU static float intersect(
         const Ray& ray,
-        const ArrayType<Vec3>& verts, 
+        const PrecomputeAoS& verts, 
         int index,
         float& solved_u,
         float& solved_v,
@@ -93,7 +95,7 @@ public:
     }
 
     CPT_CPU_GPU_INLINE static Interaction get_interaction(
-        const ArrayType<Vec3>& verts, 
+        const PrecomputeAoS& verts, 
         const ArrayType<Vec3>& norms, 
         const ArrayType<Vec2>& uvs, 
         Vec3&& hit_pos,
@@ -125,7 +127,7 @@ public:
             );
         } else {
             return Interaction(
-                (verts.x(index) - hit_pos).normalized(), Vec2(0, 0)
+                (verts.x_clipped(index) - hit_pos).normalized(), Vec2(0, 0)
             );
         }
 #endif

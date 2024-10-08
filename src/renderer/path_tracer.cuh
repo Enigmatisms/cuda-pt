@@ -27,7 +27,6 @@ protected:
     using TracerBase::norms; 
     using TracerBase::uvs;
     using TracerBase::image;
-    using TracerBase::dev_image;
     using TracerBase::num_prims;
     using TracerBase::w;
     using TracerBase::h;
@@ -63,7 +62,7 @@ public:
     */
     PathTracer(
         const Scene& scene,
-        const ArrayType<Vec3>& _verts,
+        const PrecomputeAoS& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         int num_emitter
@@ -129,9 +128,9 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_pt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                *camera, obj_info, aabbs, verts, norms, uvs, 
+                *camera, *verts, obj_info, aabbs, norms, uvs, 
                 bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
-                *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
+                image, output_buffer, num_prims, num_objs, num_emitter, 
                 i * SEED_SCALER, max_depth, num_nodes, accum_cnt
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -150,9 +149,9 @@ public:
 
         accum_cnt ++;
         render_pt_kernel<true><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-            *camera, obj_info, aabbs, verts, norms, uvs, 
+            *camera, *verts, obj_info, aabbs, norms, uvs, 
             bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
-            *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
+            image, output_buffer, num_prims, num_objs, num_emitter, 
             accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt
         ); 
         CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));

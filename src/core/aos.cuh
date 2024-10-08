@@ -110,27 +110,24 @@ public:
 // PrecomputeAoS stored triangle difference, two of the adjacent matrix terms
 // and one Vec3 array for absolute positioning (of a triangle)
 // ray intersection and emitter sampling efficiency can be boosted
-// 9 floats per triangle -> 11 floats per triangle
+// 9 floats per triangle -> 12 floats per triangle
 class PrecomputeAoS {
 public:
     Vec4* data;         // packed sphere data or vertex difference (with adjoint matrix terms packed)
-    Vec3* abs_data;     // absolute point
     size_t size;
 public:
     CPT_CPU PrecomputeAoS(size_t _size) : size(_size) {
-        CUDA_CHECK_RETURN(cudaMallocManaged(&data, 2 * sizeof(Vec4) * _size));
-        CUDA_CHECK_RETURN(cudaMallocManaged(&abs_data, sizeof(Vec3) * _size));
+        CUDA_CHECK_RETURN(cudaMallocManaged(&data, 3 * sizeof(Vec4) * _size));
     }
 
     CPT_CPU void destroy() {
         size = 0;
         CUDA_CHECK_RETURN(cudaFree(data));
-        CUDA_CHECK_RETURN(cudaFree(abs_data));
     }
 
     // GPU implements SoA constructor very differently
-    CPT_GPU PrecomputeAoS(Vec4* _data, Vec3* _abs_data, size_t size) :
-        data(_data), abs_data(_abs_data), size(size) {}
+    CPT_GPU PrecomputeAoS(Vec4* _data, size_t size) :
+        data(_data), size(size) {}
 
     // vertices input, convert to float4 and store precomputed adjoint matrix value
     // convert from vertices to vertex difference
@@ -143,47 +140,53 @@ public:
         for (size_t i = 0; i < size; i++) {
             if (sphere_flags && sphere_flags->at(i)) {                 // sphere is compacted into 4 floats, fast loading!
                 Vec3 center = vec1[i];
-                data[i << 1]       = Vec4(center.x(), center.y(), center.z(), vec2[i].x());       // radius
-                data[(i << 1) + 1] = Vec4();       // empty
+                data[TRI_IDX(i)]     = Vec4(center.x(), center.y(), center.z(), vec2[i].x());
+                data[TRI_IDX(i) + 1] = Vec4();
+                data[TRI_IDX(i) + 2] = Vec4();
                 continue;
             }
             Vec3 abs1  = vec1[i],
                  diff1 = vec2[i] - abs1,
                  diff2 = vec3[i] - abs1;
-            // precomputed adjacent matrix terms, work as padding (saved 2 FMADD, 2 FMUL and 2 FADD per triangle)
-            float a21 = diff2.x() * diff1.z() - diff1.x() * diff2.z(),
+            // precomputed adjacent matrix terms, work as padding (saved 3 FMADD, 3 FMUL and 3 FADD per triangle)
+            float a20 = diff1.y() * diff2.z() - diff1.z() * diff2.y(),
+                  a21 = diff2.x() * diff1.z() - diff1.x() * diff2.z(),
                   a22 = diff1.x() * diff2.y() - diff2.x() * diff1.y();
-            abs_data[i]        = abs1;
-            data[i << 1]       = Vec4(diff1.x(), diff1.y(), diff1.z(), a21);
-            data[(i << 1) + 1] = Vec4(diff2.x(), diff2.y(), diff2.z(), a22);
+            data[TRI_IDX(i)]     = Vec4(abs1.x(), abs1.y(), abs1.z(), a20);
+            data[TRI_IDX(i) + 1] = Vec4(diff1.x(), diff1.y(), diff1.z(), a21);
+            data[TRI_IDX(i) + 2] = Vec4(diff2.x(), diff2.y(), diff2.z(), a22);
         }
     }
 
     CPT_CPU void fill(const Vec4& v) {
-        parallel_memset << <1, 256 >> > (data, v, size * 2);
-        parallel_memset << <1, 256 >> > (abs_data, Vec3(0, 0, 0), size);
+        parallel_memset << <1, 256 >> > (data, v, size * 3);
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
 
-    CPT_CPU_GPU const Vec4& x(int index) const { return data[index << 1]; }
-    CPT_CPU_GPU const Vec4& y(int index) const { return data[(index << 1) + 1]; }
-    CPT_CPU_GPU const Vec4& z(int index) const { return abs_data[index]; }
+    CPT_CPU_GPU const Vec4& x(int index) const { return data[TRI_IDX(index)]; }
+    CPT_CPU_GPU const Vec4& y(int index) const { return data[TRI_IDX(index) + 1]; }
+    CPT_CPU_GPU const Vec4& z(int index) const { return data[TRI_IDX(index) + 2]; }
 
-    CPT_CPU_GPU Vec4& x(int index) { return data[index << 1]; }
-    CPT_CPU_GPU Vec4& y(int index) { return data[(index << 1) + 1]; }
-    CPT_CPU_GPU Vec3& z(int index) { return abs_data[index]; }
+    CPT_CPU_GPU Vec4& x(int index) { return data[TRI_IDX(index)]; }
+    CPT_CPU_GPU Vec4& y(int index) { return data[TRI_IDX(index) + 1]; }
+    CPT_CPU_GPU Vec4& z(int index) { return data[TRI_IDX(index) + 2]; }
+
 
     CPT_CPU_GPU Vec3 x_clipped(int index) const { 
-        auto v = data[index << 1]; 
+        auto v = data[TRI_IDX(index)]; 
         return Vec3(v.x(), v.y(), v.z());
     }
     CPT_CPU_GPU Vec3 y_clipped(int index) const { 
-        auto v = data[(index << 1) + 1]; 
+        auto v = data[TRI_IDX(index) + 1]; 
+        return Vec3(v.x(), v.y(), v.z());
+    }
+    CPT_CPU_GPU Vec3 z_clipped(int index) const { 
+        auto v = data[TRI_IDX(index) + 2]; 
         return Vec3(v.x(), v.y(), v.z());
     }
 
     CPT_CPU_GPU Vec3 get_sphere_point(const Vec3& normal, int index) const { 
-        auto v = data[index << 1]; 
+        auto v = data[TRI_IDX(index)]; 
         return normal * v.w() + Vec3(v.x(), v.y(), v.z());      // center + radius * direction
     }
 };

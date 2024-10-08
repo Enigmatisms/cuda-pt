@@ -19,11 +19,11 @@
 */
 CPT_KERNEL static void render_depth_kernel(
     const DeviceCamera& dev_cam,
+    const PrecomputeAoS& verts,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    DeviceImage& image,
+    DeviceImage image,
     int num_prims,
     int max_bounce = 1/* max depth, useless for depth renderer, 1 anyway */
 ) {
@@ -40,9 +40,9 @@ CPT_KERNEL static void render_depth_kernel(
     // A matter of design choice
     // optimization: copy at most 32 prims from global memory to shared memory
 
-    __shared__ Vec3 s_verts[TRI_IDX(32)];         // vertex info
+    __shared__ Vec4 s_verts[TRI_IDX(32)];         // vertex info
     __shared__ AABBWrapper s_aabbs[32];            // aabb
-    ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
+    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
 
     int num_copy = (num_prims + 31) / 32;   // round up
     float min_dist = MAX_DIST;
@@ -52,13 +52,7 @@ CPT_KERNEL static void render_depth_kernel(
             int cp_base_5 = cp_base << 5, cur_idx = cp_base_5 + tid, remain_prims = min(num_prims - cp_base_5, 32);
             cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
             if (tid < 32 && cur_idx < num_prims) {        // copy from gmem to smem
-#ifdef USE_SOA
-                cuda::memcpy_async(&s_verts[tid],      &verts->x(cur_idx), sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[tid + 32], &verts->y(cur_idx), sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[tid + 64], &verts->z(cur_idx), sizeof(Vec3), pipe);
-#else
-                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
-#endif
+                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
                 s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
             }
             pipe.producer_commit();
@@ -82,7 +76,6 @@ using TracerBase::verts;
 using TracerBase::norms; 
 using TracerBase::uvs;
 using TracerBase::image;
-using TracerBase::dev_image;
 using TracerBase::num_prims;
 using TracerBase::w;
 using TracerBase::h;
@@ -99,7 +92,7 @@ public:
     */
     DepthTracer(
         const std::vector<Shape>& _shapes,
-        const ArrayType<Vec3>& _verts,
+        const PrecomputeAoS& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         const DeviceCamera& cam,
@@ -123,7 +116,7 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_depth_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                    *camera, aabbs, verts, norms, uvs, *dev_image, num_prims, max_depth); 
+                    *camera, *verts, aabbs, norms, uvs, image, num_prims, max_depth); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         return image.export_cpu(1.f / (15.f * num_iter), gamma_correction);

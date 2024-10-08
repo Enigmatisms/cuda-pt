@@ -29,7 +29,7 @@ CPT_GPU bool occlusion_test(
     const Ray& ray,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    const ArrayType<Vec3>& verts,
+    const PrecomputeAoS& verts,
     int num_objects,
     float max_dist
 );
@@ -42,7 +42,7 @@ CPT_GPU bool occlusion_test_bvh(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
-    const ArrayType<Vec3>& verts,
+    const PrecomputeAoS& verts,
     const int node_num,
     float max_dist
 );
@@ -58,7 +58,7 @@ CPT_GPU float ray_intersect_bvh(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
-    const ArrayType<Vec3>& verts,
+    const PrecomputeAoS& verts,
     int& min_index,
     int& min_obj_idx,
     float& prim_u,
@@ -98,9 +98,9 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
+    const PrecomputeAoS& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
     const cudaTextureObject_t bvh_fronts,
@@ -108,7 +108,7 @@ CPT_KERNEL void render_pt_kernel(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
-    DeviceImage& image,
+    DeviceImage image,
     float* output_buffer,
     int num_prims,
     int num_objects,
@@ -130,9 +130,9 @@ CPT_KERNEL void render_pt_kernel(
 template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
+    const PrecomputeAoS& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
     const cudaTextureObject_t bvh_fronts,
@@ -140,7 +140,7 @@ CPT_KERNEL void render_lt_kernel(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
-    DeviceImage& image,
+    DeviceImage image,
     float* output_buffer,
     int num_prims,
     int num_objects,

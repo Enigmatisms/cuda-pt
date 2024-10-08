@@ -29,7 +29,7 @@ public:
     */
     LightTracer(
         const Scene& scene,
-        const ArrayType<Vec3>& _verts,
+        const PrecomputeAoS& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         int num_emitter,
@@ -52,17 +52,17 @@ public:
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             if (bidirectional) {
                 render_pt_kernel<true><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                    *camera, obj_info, aabbs, verts, norms, uvs, 
+                    *camera, *verts, obj_info, aabbs, norms, uvs, 
                     bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
-                    *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
+                    image, output_buffer, num_prims, num_objs, num_emitter, 
                     accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt
                 ); 
                 CUDA_CHECK_RETURN(cudaDeviceSynchronize());
             }
             render_lt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                *camera, obj_info, aabbs, verts, norms, uvs, 
+                *camera, *verts, obj_info, aabbs, norms, uvs, 
                 bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
-                *dev_image, nullptr, num_prims, num_objs, num_emitter, i * SEED_SCALER, 
+                image, nullptr, num_prims, num_objs, num_emitter, i * SEED_SCALER, 
                 max_depth, num_nodes, spec_constraint
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -82,17 +82,17 @@ public:
         accum_cnt ++;
         if (bidirectional) {
             render_pt_kernel<false><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                *camera, obj_info, aabbs, verts, norms, uvs, 
+                *camera, *verts, obj_info, aabbs, norms, uvs, 
                 bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
-                *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
+                image, output_buffer, num_prims, num_objs, num_emitter, 
                 accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         render_lt_kernel<true><<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-            *camera, obj_info, aabbs, verts, norms, uvs, 
+            *camera, *verts, obj_info, aabbs, norms, uvs, 
             bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
-            *dev_image, output_buffer, num_prims, num_objs, num_emitter, 
+            image, output_buffer, num_prims, num_objs, num_emitter, 
             accum_cnt * SEED_SCALER, max_depth, num_nodes, 
             accum_cnt, spec_constraint, caustic_scaling
         ); 

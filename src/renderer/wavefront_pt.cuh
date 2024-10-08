@@ -241,10 +241,10 @@ public:
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
+    const PrecomputeAoS& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
     cudaTextureObject_t bvh_fronts,
@@ -266,10 +266,10 @@ CPT_KERNEL void raygen_primary_hit_shader(
  * and we need the index to port the 
 */ 
 CPT_KERNEL void closesthit_shader(
+    const PrecomputeAoS& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
     cudaTextureObject_t bvh_fronts,
@@ -289,10 +289,10 @@ CPT_KERNEL void closesthit_shader(
  * we sample a light source then start ray intersection test
 */
 CPT_KERNEL void nee_shader(
+    const PrecomputeAoS& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr,         
     cudaTextureObject_t bvh_fronts,
@@ -344,7 +344,7 @@ CPT_KERNEL void miss_shader(
 );
 
 CPT_KERNEL void radiance_splat(
-    PayLoadBufferSoA payloads, DeviceImage& image, 
+    PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch
 );
 

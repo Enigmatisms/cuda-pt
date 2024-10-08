@@ -22,10 +22,10 @@ namespace {
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
+    const PrecomputeAoS& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
     cudaTextureObject_t bvh_fronts,
@@ -62,13 +62,13 @@ CPT_KERNEL void raygen_primary_hit_shader(
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
 #ifdef RENDERER_USE_BVH 
     ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
-                    node_backs, node_offsets, *verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
+                    node_backs, node_offsets, verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
+    __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
-    ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
+    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
     // ============= step 1: ray intersection =================
@@ -78,17 +78,11 @@ CPT_KERNEL void raygen_primary_hit_shader(
         int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
         cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
         if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-    #ifdef USE_SOA          // SOA is actually better
-            cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
-            cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
-            cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
-    #else
             // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
             // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
             // since our step is Vec3, this will lead to uncoalesced access
             // shared memory is enough. Though padding is not easy to implement
-            cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
-    #endif
+            cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
             // This memory op is not fully coalesced, since AABB container is not a complete SOA
             s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
         }
@@ -112,7 +106,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it.it() = Primitive::get_interaction(*verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+        it.it() = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     // compress two int (to int16) to a uint32_t 
@@ -134,10 +128,10 @@ CPT_KERNEL void raygen_primary_hit_shader(
  * and we need the index to port the 
 */ 
 CPT_KERNEL void closesthit_shader(
+    const PrecomputeAoS& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
     cudaTextureObject_t bvh_fronts,
@@ -168,13 +162,13 @@ CPT_KERNEL void closesthit_shader(
 
 #ifdef RENDERER_USE_BVH 
     ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
-                    node_backs, node_offsets, *verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
+                    node_backs, node_offsets, verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
+    __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
-    ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
+    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
     // ============= step 1: ray intersection =================
@@ -184,17 +178,12 @@ CPT_KERNEL void closesthit_shader(
         int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
         cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
         if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-    #ifdef USE_SOA          // SOA is actually better
-            cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
-            cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
-            cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
-    #else
+    
             // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
             // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
             // since our step is Vec3, this will lead to uncoalesced access
             // shared memory is enough. Though padding is not easy to implement
-            cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
-    #endif
+            cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
             // This memory op is not fully coalesced, since AABB container is not a complete SOA
             s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
         }
@@ -217,7 +206,7 @@ CPT_KERNEL void closesthit_shader(
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it.it() = Primitive::get_interaction(*verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+        it.it() = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     payloads.set_ray(px, py, ray);
@@ -229,10 +218,10 @@ CPT_KERNEL void closesthit_shader(
  * we sample a light source then start ray intersection test
 */
 CPT_KERNEL void nee_shader(
+    const PrecomputeAoS& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr verts,
     ConstNormPtr norms, 
     ConstUVPtr,         
     cudaTextureObject_t bvh_fronts,
@@ -272,7 +261,7 @@ CPT_KERNEL void nee_shader(
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
         // use ray.o to avoid creating another shadow_int variable
         Vec4 direct_comp(0, 0, 0, 1);
-        shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sg.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+        shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sg.next2D(), &verts, norms, emitter_id) - shadow_ray.o;
 
         float emit_len_mis = shadow_ray.d.length();
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
@@ -280,9 +269,9 @@ CPT_KERNEL void nee_shader(
         if (emitter != c_emitter[0] && 
 #ifdef RENDERER_USE_BVH
             occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                        node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
+                        node_backs, node_offsets, verts, node_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+            occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
         ) {
             // MIS for BSDF / light sampling, to achieve better rendering
@@ -384,7 +373,7 @@ CPT_KERNEL void miss_shader(
 }
 
 CPT_KERNEL void radiance_splat(
-    PayLoadBufferSoA payloads, DeviceImage& image, 
+    PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch
 ) {
     // Nothing here, currently, if we decide not to support env lighting

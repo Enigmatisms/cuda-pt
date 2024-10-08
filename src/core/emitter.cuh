@@ -105,8 +105,9 @@ public:
         float sample_sum = uv.x() + uv.y();
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
         float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y();
-        Vec3 sampled = uv.x() * prims->x_clipped(sampled_index) + uv.y() * prims->y_clipped(sampled_index) + prims->z(sampled_index);
-        Vec3 normal = (norms->x(sampled_index) * diff_x * diff_y + \
+        Vec3 sampled = uv.x() * prims->y_clipped(sampled_index) + uv.y() * prims->z_clipped(sampled_index) + prims->x_clipped(sampled_index);
+        Vec3 normal = \
+            (norms->x(sampled_index) * diff_x * diff_y + \
              norms->y(sampled_index) * uv.x() * diff_y + \
              norms->z(sampled_index) * uv.y() * diff_x).normalized();
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
@@ -133,8 +134,9 @@ public:
         float sample_sum = uv.x() + uv.y();
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
         float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y(), pdf_dir = 1;
-        Vec3 sampled = uv.x() * prims->x_clipped(sampled_index) + uv.y() * prims->y_clipped(sampled_index) + prims->z(sampled_index);
-        Vec3 normal = (norms->x(sampled_index) * diff_x * diff_y + \
+        Vec3 sampled = uv.x() * prims->y_clipped(sampled_index) + uv.y() * prims->z_clipped(sampled_index) + prims->x_clipped(sampled_index);
+        Vec3 normal = \
+           (norms->x(sampled_index) * diff_x * diff_y + \
             norms->y(sampled_index) * uv.x() * diff_y + \
             norms->z(sampled_index) * uv.y() * diff_x).normalized();
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);

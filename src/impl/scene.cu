@@ -460,14 +460,17 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
 
     // ------------------------- (6) initialize shapes -------------------------
     shapes.resize(num_prims);
+    sphere_flags.resize(num_prims);
     prim_offset = 0;
     for (int obj_id = 0; obj_id < num_objects; obj_id ++) {
         prim_offset += objects[obj_id].prim_num;
         for (int i = objects[obj_id].prim_offset; i < prim_offset; i++) {
             if (!sphere_objs[obj_id]) {
                 shapes[i] = TriangleShape(obj_id);
+                sphere_flags[i] = false;
             } else {
                 shapes[i] = SphereShape(obj_id);
+                sphere_flags[i] = true;
             }
         }
     }
@@ -502,8 +505,8 @@ Scene::~Scene() {
 
 }
 
-void Scene::export_prims(ArrayType<Vec3>& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const {
-    verts.from_vectors(verts_list[0], verts_list[1], verts_list[2]);
+void Scene::export_prims(PrecomputeAoS& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const {
+    verts.from_vectors(verts_list[0], verts_list[1], verts_list[2], &sphere_flags);
     norms.from_vectors(norms_list[0], norms_list[1], norms_list[2]);
     uvs.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
 }

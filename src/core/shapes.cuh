@@ -26,21 +26,24 @@ public:
 */
 class ShapeAABBVisitor {
 private:
-    const ArrayType<Vec3>& verts;
+    const PrecomputeAoS& verts;
     mutable AABB* aabb_ptr;
     int index;
 public:
     CPT_CPU ShapeAABBVisitor(
-        const ArrayType<Vec3>& verts,
+        const PrecomputeAoS& verts,
         AABB* aabb
     ): verts(verts), aabb_ptr(aabb), index(0) {}
 
     CPT_CPU void operator()(const TriangleShape& shape) const { 
-        aabb_ptr[index] = AABB(verts.x(index), verts.y(index), verts.z(index), shape.obj_id, -1);
+        auto anchor = verts.x_clipped(index);
+        aabb_ptr[index] = AABB(anchor, anchor + verts.y_clipped(index), anchor + verts.z_clipped(index), shape.obj_id, -1);
     }
 
     CPT_CPU void operator()(const SphereShape& shape) const { 
-        aabb_ptr[index] = AABB(verts.x(index) - verts.y(index).x(), verts.x(index) + verts.y(index).x(), -shape.obj_id - 1, -1);
+        auto center_r = verts.x(index);
+        Vec3 center   = Vec3(center_r.x(), center_r.y(), center_r.z());
+        aabb_ptr[index] = AABB(center - center_r.w(), center + center_r.w(), -shape.obj_id - 1, -1);
     }
 
     CPT_CPU void set_index(int i)        noexcept { this->index = i; }

@@ -13,7 +13,7 @@
  * https://stackoverflow.com/questions/78603442/convergence-barrier-for-branchless-cuda-conditional-select
 */
 CPT_GPU float ray_intersect_old(
-    const ArrayType<Vec3>& s_verts, 
+    const PrecomputeAoS& s_verts, 
     const Ray& ray,
     ConstAABBWPtr s_aabbs,
     const int remain_prims,
@@ -57,7 +57,7 @@ CPT_GPU float ray_intersect_old(
  * compare to the ray_intersect_old, this API almost double the speed
 */
 CPT_GPU float ray_intersect(
-    const ArrayType<Vec3>& s_verts, 
+    const PrecomputeAoS& s_verts, 
     const Ray& ray,
     ConstAABBWPtr s_aabbs,
     const int remain_prims,

@@ -45,7 +45,6 @@ private:
     using PathTracer::norms; 
     using PathTracer::uvs;
     using PathTracer::image;
-    using PathTracer::dev_image;
     using PathTracer::num_prims;
     using PathTracer::w;
     using PathTracer::h;
@@ -72,7 +71,7 @@ public:
     */
     WavefrontPathTracer(
         const Scene& scene,
-        const ArrayType<Vec3>& _verts,
+        const PrecomputeAoS& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         int num_emitter
@@ -114,7 +113,7 @@ public:
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
                 raygen_primary_hit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    *camera, payload_buffer, obj_info, aabbs, verts, 
+                    *camera, *verts, payload_buffer, obj_info, aabbs, 
                     norms, uvs, bvh_fronts, bvh_backs, node_fronts, node_backs, 
                     node_offsets, ray_idx_buffer, stream_offset, num_prims, 
                     patch_x, patch_y, i, stream_id, image.w(), num_nodes);
@@ -156,7 +155,7 @@ public:
 
                     // step5: NEE shader
                     nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, aabbs, verts, norms, uvs, bvh_fronts, 
+                        *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_fronts, 
                         bvh_backs, node_fronts, node_backs, node_offsets, ray_idx_buffer, 
                         stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes
                     );
@@ -170,7 +169,7 @@ public:
                     // step2: closesthit shader
                     if (bounce + 1 >= max_depth) break;
                     closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                        payload_buffer, obj_info, aabbs, verts, norms, uvs, 
+                        *verts, payload_buffer, obj_info, aabbs, norms, uvs, 
                         bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
                         ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes
                     );
@@ -178,7 +177,7 @@ public:
 
                 // step8: accumulating radiance to the rgb buffer
                 radiance_splat<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer, *dev_image, stream_id, patch_x, patch_y
+                    payload_buffer, image, stream_id, patch_x, patch_y
                 );
             }
 
