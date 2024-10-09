@@ -13,6 +13,7 @@ public:
     int width;
     int height;
     int max_depth;
+    int cache_level;
     int spp;
     int spec_constraint;
     bool gamma_correction;
@@ -20,7 +21,7 @@ public:
 
     float caustic_scaling;
 
-    RenderingConfig() : width(512), height(512), max_depth(16), spp(64), 
+    RenderingConfig() : width(512), height(512), max_depth(16), cache_level(5), spp(64), 
         spec_constraint(0), gamma_correction(true), bidirectional(false), caustic_scaling(1.0) {}
 
     static RenderingConfig from_xml(const tinyxml2::XMLElement *sensor_node);

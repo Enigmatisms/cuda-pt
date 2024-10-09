@@ -199,6 +199,7 @@ public:
     using ArrayType = AoS3<InnerType>;
 #endif  // USE_AOS
 
+using ConstF4Ptr   = const float4* const;
 using ConstVertPtr = const PrecomputeAoS* const;
 using ConstNormPtr = const ArrayType<Vec3>* const;
 using ConstUVPtr   = const ArrayType<Vec2>* const;

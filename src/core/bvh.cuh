@@ -169,5 +169,8 @@ void bvh_build(
     std::vector<float4>& bvh_backs, 
     std::vector<float4>& node_fronts,
     std::vector<float4>& node_backs,
-    std::vector<int>& node_offsets
+    std::vector<float4>& cache_fronts,
+    std::vector<float4>& cache_backs,
+    std::vector<int>& node_offsets,
+    int& max_cache_level
 );

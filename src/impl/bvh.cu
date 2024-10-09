@@ -204,27 +204,60 @@ static int recursive_linearize(
     BVHNode* cur_node, 
     std::vector<float4>& node_fronts,
     std::vector<float4>& node_backs,
-    std::vector<int>& node_offsets
+    std::vector<float4>& cached_fronts,     // we extract nodes to be cached in shared memory, normally: levels closer to root
+    std::vector<float4>& cached_backs,
+    std::vector<int>& node_offsets,
+    const int depth = 0,
+    const int cache_max_depth = 4
 ) {
     // BVH tree should be linearized to better traverse and fit in the system memory
     // The linearized BVH tree should contain: bound, base, prim_cnt, rchild_offset, total_offset (to skip the entire node)
     // Note that if rchild_offset is -1, then the node is leaf. Leaf node points to primitive array
     // which is already sorted during BVH construction, containing primitive_id and obj_id for true intersection
     // Note that lin_nodes has been reserved
-    size_t current_size = node_fronts.size();
+    size_t current_size = node_fronts.size(), current_cached = cached_fronts.size();
     float4 node_f, node_b;
     cur_node->get_float4(node_f, node_b);
     node_fronts.push_back(node_f);
     node_backs.push_back(node_b);
     node_offsets.emplace_back(0);
+    reinterpret_cast<int&>(node_f.w) = 1;               // always assume leaf node (offset = 1)
+    reinterpret_cast<int&>(node_b.w) = current_size;
+    if (depth < cache_max_depth) {
+        // LinearNode (cached): 
+        // (float3) aabb.min
+        // (int)    jump offset to next cached node 
+        // (float3) aabb.max 
+        // (int)    index to the global memory node (if -1, means it it not a leave node, we should continue)
+        cached_fronts.push_back(node_f);
+        cached_backs.push_back(node_b);
+    }
     if (cur_node->lchild != nullptr) {
         // non-leaf node
-        int lnodes = recursive_linearize(cur_node->lchild, node_fronts, node_backs, node_offsets);
-        lnodes += recursive_linearize(cur_node->rchild, node_fronts, node_backs, node_offsets);
+        int lnodes = recursive_linearize(
+            cur_node->lchild, 
+            node_fronts, node_backs, 
+            cached_fronts, cached_backs, 
+            node_offsets, depth + 1, cache_max_depth
+        );
+        lnodes += recursive_linearize(
+            cur_node->rchild, 
+            node_fronts, node_backs, 
+            cached_fronts, cached_backs, 
+            node_offsets, depth + 1, cache_max_depth
+        );
         node_offsets[current_size] = lnodes + 1;
+        if (depth < cache_max_depth) {
+            // store the jump offset to the next cached node (for non-leaf node)
+            reinterpret_cast<int&>(cached_fronts[current_cached].w) = cached_fronts.size() - current_cached;
+            printf("(non-leaf) cached id: %d, offset: %d\n", current_cached, cached_fronts.size() - current_cached);
+        }
         return lnodes + 1;                      // include the cur_node                       
     } else {
         // leaf node has negative offset
+        if (depth < cache_max_depth) {
+            printf("(leaf) cached id: %d, offset: %d\n", current_cached, cached_fronts.size() - current_cached);
+        }
         node_offsets.back() = 1;        
         return 1;
     }
@@ -242,7 +275,10 @@ void bvh_build(
     std::vector<float4>& bvh_backs, 
     std::vector<float4>& node_fronts,
     std::vector<float4>& node_backs,
-    std::vector<int>& node_offsets
+    std::vector<float4>& cached_fronts,
+    std::vector<float4>& cached_backs,
+    std::vector<int>& node_offsets,
+    int& cache_max_level
 ) {
     std::vector<PrimMappingInfo> idx_prs;
     std::vector<BVHInfo> bvh_infos;
@@ -250,10 +286,14 @@ void bvh_build(
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
     create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos);
-    node_fronts.reserve(64);
-    node_backs.reserve(64);
-    node_offsets.reserve(64);
-    recursive_linearize(root_node, node_fronts, node_backs, node_offsets);
+    node_fronts.reserve(node_num);
+    node_backs.reserve(node_num);
+    node_offsets.reserve(node_num);
+    cache_max_level = (int)std::floor(std::log(node_num));
+    cached_fronts.reserve(1 << cache_max_level);
+    cached_backs.reserve(1 << cache_max_level);
+    recursive_linearize(root_node, node_fronts, node_backs, cached_fronts, cached_backs, node_offsets, 0, cache_max_level);
+
     bvh_fronts.reserve(bvh_infos.size());
     bvh_backs.reserve(bvh_infos.size());
     for (BVHInfo& bvh: bvh_infos) {

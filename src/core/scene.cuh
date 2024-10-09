@@ -47,6 +47,8 @@ public:
     std::vector<float4> bvh_backs;
     std::vector<float4> node_fronts;
     std::vector<float4> node_backs;
+    std::vector<float4> cache_fronts;
+    std::vector<float4> cache_backs;
     std::vector<int> node_offsets;
 
     std::array<Vec3Arr, 3> verts_list;

@@ -28,15 +28,17 @@ CPT_KERNEL void raygen_primary_hit_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
-    int stream_id, int width, int node_num
+    int stream_id, int width, 
+    int node_num, int cache_num
 ) {
     // stream and patch related offset
     const int sx = x_patch * PATCH_X, sy = y_patch * PATCH_Y, buffer_xoffset = stream_id * PATCH_X;
@@ -61,8 +63,16 @@ CPT_KERNEL void raygen_primary_hit_shader(
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
 #ifdef RENDERER_USE_BVH 
+    extern __shared__ float4 s_cached[];
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid < cache_num) {
+        s_cached[tid]             = cached_nodes[tid];
+        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    }
+    __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
-                    node_backs, node_offsets, verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
+                    node_backs, node_offsets, s_cached, verts, min_index, 
+                    min_object_id, prim_u, prim_v, node_num, cache_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
@@ -134,22 +144,23 @@ CPT_KERNEL void closesthit_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
     int num_valid,
-    int node_num
+    int node_num,
+    int cache_num
 ) {
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
                             blockDim.x * gridDim.x +                            // cols
                             threadIdx.x + blockIdx.x * blockDim.x;              // px
-                            
-    
+
     uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
     py >>= 16;
     Ray           ray = payloads.get_ray(px, py);
@@ -161,8 +172,16 @@ CPT_KERNEL void closesthit_shader(
     ray.hit_t = MAX_DIST;
 
 #ifdef RENDERER_USE_BVH 
+    extern __shared__ float4 s_cached[];
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid < cache_num) {
+        s_cached[tid]             = cached_nodes[tid];
+        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    }
+    __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
-                    node_backs, node_offsets, verts, min_index, min_object_id, prim_u, prim_v, node_num, MAX_DIST);
+                    node_backs, node_offsets, s_cached, verts, min_index, 
+                    min_object_id, prim_u, prim_v, node_num, cache_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
@@ -224,22 +243,33 @@ CPT_KERNEL void nee_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr,         
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
     int num_objects,
     int num_emitter,
     int num_valid,
-    int node_num
+    int node_num,
+    int cache_num
 ) {
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
                             blockDim.x * gridDim.x +                            // cols
                             threadIdx.x + blockIdx.x * blockDim.x;              // px
+#ifdef RENDERER_USE_BVH
+    extern __shared__ float4 s_cached[];
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid < cache_num) {
+        s_cached[tid]             = cached_nodes[tid];
+        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    }
+    __syncthreads();
+#endif  // RENDERER_USE_BVH
     
     if (block_index < num_valid) {
         uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
@@ -269,7 +299,7 @@ CPT_KERNEL void nee_shader(
         if (emitter != c_emitter[0] && 
 #ifdef RENDERER_USE_BVH
             occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                        node_backs, node_offsets, verts, node_num, emit_len_mis - EPSILON)
+                        node_backs, node_offsets, cached_nodes, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH

@@ -56,6 +56,8 @@ private:
     using PathTracer::node_fronts;
     using PathTracer::node_backs;
     using PathTracer::node_offsets;
+    using PathTracer::_cached_nodes;
+    using PathTracer::num_cache;
     using PathTracer::camera;
 public:
     /**
@@ -96,7 +98,8 @@ public:
 
         // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
         thrust::device_vector<uint32_t> index_buffer(NUM_STREAM * TOTAL_RAY);
-        uint32_t* const ray_idx_buffer = thrust::raw_pointer_cast(index_buffer.data());
+        uint32_t* const ray_idx_buffer = thrust::raw_pointer_cast(index_buffer.data()),
+                  cached_size = 2 * num_cache * sizeof(float4);
         const dim3 GRID(BLOCK_X, BLOCK_Y), BLOCK(THREAD_X, THREAD_Y);
 
         for (int i = 0; i < num_iter; i++) {
@@ -112,11 +115,11 @@ public:
                 auto cur_stream = streams[stream_id];
 
                 // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
-                raygen_primary_hit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                     *camera, *verts, payload_buffer, obj_info, aabbs, 
                     norms, uvs, bvh_fronts, bvh_backs, node_fronts, node_backs, 
-                    node_offsets, ray_idx_buffer, stream_offset, num_prims, 
-                    patch_x, patch_y, i, stream_id, image.w(), num_nodes);
+                    node_offsets, _cached_nodes, ray_idx_buffer, stream_offset, num_prims, 
+                    patch_x, patch_y, i, stream_id, image.w(), num_nodes, num_cache);
                 int num_valid_ray = TOTAL_RAY;
                 auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
                 for (int bounce = 0; bounce < max_depth; bounce ++) {
@@ -154,9 +157,9 @@ public:
                     if (!num_valid_ray) break;
 
                     // step5: NEE shader
-                    nee_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                    nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                         *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_fronts, 
-                        bvh_backs, node_fronts, node_backs, node_offsets, ray_idx_buffer, 
+                        bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes, ray_idx_buffer, 
                         stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes
                     );
 
@@ -168,9 +171,9 @@ public:
 
                     // step2: closesthit shader
                     if (bounce + 1 >= max_depth) break;
-                    closesthit_shader<<<GRID, BLOCK, 0, cur_stream>>>(
+                    closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                         *verts, payload_buffer, obj_info, aabbs, norms, uvs, 
-                        bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets,
+                        bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes,
                         ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes
                     );
                 }

@@ -48,13 +48,38 @@ CPT_GPU bool occlusion_test_bvh(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const PrecomputeAoS& verts,
     const int node_num,
+    const int cache_num,
     float max_dist
 ) {
-    int node_idx = 0;
-    float aabb_tmin = 0;
+    bool valid_cache = false;
+    int node_idx     = 0;
+    float aabb_tmin  = 0;
     // There can be much control flow divergence, not good
+    while (node_idx < cache_num) {
+        const LinearNode node(
+            cached_nodes[node_idx],
+            cached_nodes[node_idx + cache_num]
+        );
+        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
+        int all_offset = 0, gmem_index = 0;
+        node.get_range(all_offset, gmem_index);
+        if (!intersect_node) {
+            node_idx += all_offset;
+            continue;
+        }
+        if (all_offset == 1) {
+            valid_cache = true;
+            node_idx    = gmem_index + 1;
+            break;
+        }
+        node_idx ++;
+    }
+    // no intersected nodes, for the near root level, meaning that the path is not occluded
+    if (!valid_cache) return true;      
+
     while (node_idx < node_num) {
         const LinearNode node(
             tex1Dfetch<float4>(node_fronts, node_idx), 
@@ -110,16 +135,41 @@ CPT_GPU float ray_intersect_bvh(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const PrecomputeAoS& verts,
     int& min_index,
     int& min_obj_idx,
     float& prim_u,
     float& prim_v,
     const int node_num,
+    const int cache_num,
     float min_dist
 ) {
-    int node_idx = 0;
-    float aabb_tmin = 0;
+    bool valid_cache = false;
+    int node_idx     = 0;
+    float aabb_tmin  = 0;
+    // There can be much control flow divergence, not good
+    while (node_idx < cache_num) {
+        const LinearNode node(
+            cached_nodes[node_idx],
+            cached_nodes[node_idx + cache_num]
+        );
+        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        int all_offset = 0, gmem_index = 0;
+        node.get_range(all_offset, gmem_index);
+        if (!intersect_node) {
+            node_idx += all_offset;
+            continue;
+        }
+        if (all_offset == 1) {
+            valid_cache = true;
+            node_idx    = gmem_index;
+            break;
+        }
+        node_idx ++;
+    }
+    if (!valid_cache) return min_dist;    
+
     // There can be much control flow divergence, not good
     while (node_idx < node_num) {
         const LinearNode node(tex1Dfetch<float4>(node_fronts, node_idx), 
@@ -201,6 +251,7 @@ CPT_KERNEL void render_pt_kernel(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
     int num_prims,
@@ -209,7 +260,8 @@ CPT_KERNEL void render_pt_kernel(
     int seed_offset,
     int max_depth,
     int node_num,
-    int accum_cnt
+    int accum_cnt,
+    int cache_num
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
 
@@ -219,13 +271,23 @@ CPT_KERNEL void render_pt_kernel(
 
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, object_id = 0;
-#ifndef RENDERER_USE_BVH
+#ifdef RENDERER_USE_BVH
+    // cache near root level BVH nodes for faster traversal
+    extern __shared__ float4 s_cached[];
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid < cache_num) {
+        s_cached[tid]             = cached_nodes[tid];
+        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    }
+    __syncthreads();
+#else
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
     PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
+
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
     bool hit_emitter = false;
@@ -237,8 +299,8 @@ CPT_KERNEL void render_pt_kernel(
         min_dist = ray_intersect_bvh(
             ray, bvh_fronts, bvh_backs, 
             node_fronts, node_backs, node_offsets, 
-            verts, min_index, object_id, prim_u, 
-            prim_v, node_num, min_dist
+            cached_nodes, verts, min_index, object_id, 
+            prim_u, prim_v, node_num, cache_num, min_dist
         );
 #else   // RENDERER_USE_BVH
         #pragma unroll
@@ -295,7 +357,7 @@ CPT_KERNEL void render_pt_kernel(
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
                 occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                            node_backs, node_offsets, verts, node_num, emit_len_mis - EPSILON)
+                            node_backs, node_offsets, cached_nodes, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
                 occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -349,6 +411,7 @@ template CPT_KERNEL void render_pt_kernel<true>(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
     int num_prims,
@@ -357,7 +420,8 @@ template CPT_KERNEL void render_pt_kernel<true>(
     int seed_offset,
     int max_depth,
     int node_num,
-    int accum_cnt
+    int accum_cnt,
+    int cache_num
 );
 
 template CPT_KERNEL void render_pt_kernel<false>(
@@ -372,6 +436,7 @@ template CPT_KERNEL void render_pt_kernel<false>(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
     int num_prims,
@@ -380,5 +445,6 @@ template CPT_KERNEL void render_pt_kernel<false>(
     int seed_offset,
     int max_depth,
     int node_num,
-    int accum_cnt
+    int accum_cnt,
+    int cache_num
 );

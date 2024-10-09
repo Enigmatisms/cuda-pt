@@ -42,8 +42,10 @@ CPT_GPU bool occlusion_test_bvh(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const PrecomputeAoS& verts,
     const int node_num,
+    const int cache_num,
     float max_dist
 );
 
@@ -58,12 +60,14 @@ CPT_GPU float ray_intersect_bvh(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const PrecomputeAoS& verts,
     int& min_index,
     int& min_obj_idx,
     float& prim_u,
     float& prim_v,
     const int node_num,
+    const int cache_num,
     float min_dist = MAX_DIST
 );
 
@@ -84,6 +88,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param node_fronts   BVH nodes first float4 (128 bit)
  * @param node_backs    BVH nodes last float4 (128 bit)
  * @param node_offsets  BVH nodes node offsets (int, 32 bit)
+ * @param cached_nodes  BVH cached nodes (in shared memory): first half: front float4, second half: back float4
  * @param image         GPU image buffer
  * @param output_buffer Possible visualization buffer
  * @param num_prims     number of primitives (to be intersected with)
@@ -93,7 +98,6 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param max_depth     maximum allowed bounce
  * @param node_num      number of nodes on a BVH tree
  * @param accum_cnt     Counter of iterations
- * 
 */
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
@@ -108,6 +112,7 @@ CPT_KERNEL void render_pt_kernel(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
     int num_prims,
@@ -115,8 +120,9 @@ CPT_KERNEL void render_pt_kernel(
     int num_emitter,
     int seed_offset,
     int max_depth = 1,
-    int node_num = -1,
-    int accum_cnt = 1
+    int node_num  = -1,
+    int accum_cnt = 1,
+    int cache_num = 0
 );
 
 /**
@@ -140,6 +146,7 @@ CPT_KERNEL void render_lt_kernel(
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
     int num_prims,
@@ -149,6 +156,7 @@ CPT_KERNEL void render_lt_kernel(
     int max_depth = 1,
     int node_num = -1,
     int accum_cnt = 1,
+    int cache_num = 0,
     int specular_constraints = 0,
     float caustic_scale = 1.f
 );

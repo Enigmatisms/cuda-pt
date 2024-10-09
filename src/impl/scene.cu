@@ -483,9 +483,10 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         }
         auto tp = std::chrono::system_clock::now();
         bvh_build(
-            verts_list[0], verts_list[1], verts_list[2], objects, 
-            sphere_objs, world_min, world_max, bvh_fronts, 
-            bvh_backs, node_fronts, node_backs, node_offsets
+            verts_list[0], verts_list[1], verts_list[2], 
+            objects, sphere_objs, world_min, world_max, 
+            bvh_fronts, bvh_backs, node_fronts, node_backs, 
+            cache_fronts, cache_backs, node_offsets, config.cache_level
         );
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
@@ -515,6 +516,7 @@ void Scene::print() const noexcept {
     std::cout << " Scene:\n";
     std::cout << "\tRenderer type:\t\t" << RENDER_TYPE_STR[rdr_type] << std::endl;
     std::cout << "\tUse SAH-BVH:\t\t" << use_bvh << std::endl;
+    std::cout << "\tSAH-BVH Cache Level: \t" << config.cache_level << std::endl;
     std::cout << "\tNumber of objects: \t" << num_objects << std::endl;
     std::cout << "\tNumber of primitives: \t" << num_prims << std::endl;
     std::cout << "\tNumber of emitters: \t" << num_emitters << std::endl;

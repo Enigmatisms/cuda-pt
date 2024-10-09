@@ -247,15 +247,17 @@ CPT_KERNEL void raygen_primary_hit_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
-    int stream_id, int width, int node_num = -1
+    int stream_id, int width, 
+    int node_num = -1, int cache_num = 0
 );
 
 /**
@@ -272,16 +274,18 @@ CPT_KERNEL void closesthit_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
     int num_valid,
-    int node_num = -1
+    int node_num = -1,
+    int cache_num = 0
 );
 
 /***
@@ -295,18 +299,20 @@ CPT_KERNEL void nee_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr,         
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
     int num_objects,
     int num_emitter,
     int num_valid,
-    int node_num = -1
+    int node_num = -1,
+    int cache_num = 0
 );
 
 
