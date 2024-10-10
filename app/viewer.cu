@@ -41,7 +41,8 @@ int main(int argc, char** argv) {
     Scene scene(xml_path);
 
     // scene setup
-    ArrayType<Vec3> vert_data(scene.num_prims), norm_data(scene.num_prims);
+    PrecomputedArray vert_data(scene.num_prims);
+    ArrayType<Vec3> norm_data(scene.num_prims);
     ArrayType<Vec2> uvs_data(scene.num_prims);
 
     scene.export_prims(vert_data, norm_data, uvs_data);
@@ -53,17 +54,18 @@ int main(int argc, char** argv) {
     std::cout << "Path tracer loaded: ";
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {
-            renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, 1); 
+            renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters); 
             std::cout << "Megakernel Path Tracing.\n";
             break;
         }
         case RendererType::WavefrontPT: {
-            renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, 1);
-            std::cout << "Wavefront Path Tracing.\n";
+            renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters);
+            std::cout << "Warning: Wavefront Path Tracing does not support online visualization yet.\n";
+            std::cout << "Fall back to megakernel path tracing: no override function in WFPT.\n";
             break;
         }
         case RendererType::MegeKernelLT: {
-            renderer = std::make_unique<LightTracer>(scene, vert_data, norm_data, uvs_data, 1, 
+            renderer = std::make_unique<LightTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters, 
                 scene.config.spec_constraint, scene.config.bidirectional, scene.config.caustic_scaling); 
             if (scene.config.bidirectional)
                 std::cout << "Naive Bidirectional ";

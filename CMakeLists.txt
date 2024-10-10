@@ -63,7 +63,6 @@ set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 include_directories(
 	${CMAKE_CURRENT_LIST_DIR}/src 
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/variant
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/glfw/include
 )
 
@@ -168,17 +167,6 @@ target_compile_options(
 )
 
 # ========================================= unit-test ===============================================
-
-set(TEST2_NAME "variant_test")
-add_executable(${TEST2_NAME}
-	test/variant_test.cu
-)
-
-set_target_properties(
-	${TEST1_NAME} PROPERTIES
-	CUDA_SEPARABLE_COMPILATION ON
-	CUDA_ARCHITECTURES native
-)
 
 add_executable(sensor_test test/parsers/sensor_parse.cc)
 

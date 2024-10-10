@@ -115,7 +115,9 @@
         "__split_buffer": "cpp",
         "__threading_support": "cpp",
         "xstddef": "cpp",
-        "__bit_reference": "cpp"
+        "__bit_reference": "cpp",
+        "ranges": "cpp",
+        "span": "cpp"
     },
     "cmake.cpptools.compilerPath": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\bin\\nvcc.exe"
 }

@@ -7,7 +7,7 @@
 #include <cuda/pipeline>
 #include "core/bvh.cuh"
 #include "core/bsdf.cuh"
-#include "core/shapes.cuh"
+#include "core/primitives.cuh"
 #include "core/emitter.cuh"
 #include "core/camera_model.cuh"
 
@@ -28,9 +28,8 @@ using ConstIndexPtr = const int* const;
 CPT_GPU bool occlusion_test(
     const Ray& ray,
     ConstObjPtr objects,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    const ArrayType<Vec3>& verts,
+    const PrecomputedArray& verts,
     int num_objects,
     float max_dist
 );
@@ -38,46 +37,38 @@ CPT_GPU bool occlusion_test(
 // occlusion test is any hit shader
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
-    ConstShapePtr shapes,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
-    const ArrayType<Vec3>& verts,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
+    const PrecomputedArray& verts,
     const int node_num,
+    const int cache_num,
     float max_dist
 );
 
 /**
  * Stackless BVH (should use tetxure memory?)
  * Perform ray-intersection test on shared memory primitives
- * @param ray: the ray for intersection test
- * @param shapes: scene primitives
- * @param s_aabbs: scene primitives
- * @param shape_visitor: encapsulated shape visitor
- * @param it: interaction info, containing the interacted normal and uv
- * @param remain_prims: number of primitives to be tested (32 at most)
- * @param cp_base: shared memory address offset
- * @param min_dist: current minimal distance
- *
- * @return minimum intersection distance
- * 
- * ray_intersect_bvh is closesthit shader
- * compare to the ray_intersect_old, this API almost double the speed
 */
 CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
-    ConstShapePtr shapes,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
-    ShapeIntersectVisitor& shape_visitor,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
+    const PrecomputedArray& verts,
     int& min_index,
+    int& min_obj_idx,
+    float& prim_u,
+    float& prim_v,
     const int node_num,
-    float min_dist
+    const int cache_num,
+    float min_dist = MAX_DIST
 );
 
 CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sample);
@@ -88,40 +79,50 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * shared memory might not be easy to use, since the memory granularity will be
  * too difficult to control
  * 
- * @param objects   object encapsulation
- * @param prim2obj  primitive to object index mapping: which object does this primitive come from?
- * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
- * @param camera    GPU camera model (constant memory)
- * @param image     GPU image buffer
- * @param num_prims number of primitives (to be intersected with)
- * @param max_depth maximum allowed bounce
+ * @param objects       object encapsulation
+ * @param verts         vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param norms         normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param uvs           uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+ * @param bvh_fronts    BVH leaf nodes first float4 (128 bit)
+ * @param bvh_backs     BVH leaf nodes last float4 (128 bit)
+ * @param node_fronts   BVH nodes first float4 (128 bit)
+ * @param node_backs    BVH nodes last float4 (128 bit)
+ * @param node_offsets  BVH nodes node offsets (int, 32 bit)
+ * @param cached_nodes  BVH cached nodes (in shared memory): first half: front float4, second half: back float4
+ * @param image         GPU image buffer
+ * @param output_buffer Possible visualization buffer
+ * @param num_prims     number of primitives (to be intersected with)
+ * @param num_objects   number of objects
+ * @param num_emitter   number of emitters
+ * @param seed_offset   offset to random seed (to create uncorrelated samples)
+ * @param max_depth     maximum allowed bounce
+ * @param node_num      number of nodes on a BVH tree
+ * @param accum_cnt     Counter of iterations
 */
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    ConstPrimPtr verts,
-    ConstPrimPtr norms, 
+    ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
-    DeviceImage& image,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
+    DeviceImage image,
     float* output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
-    int node_num = -1,
-    int accum_cnt = 1
+    int max_depth = 1,
+    int node_num  = -1,
+    int accum_cnt = 1,
+    int cache_num = 0
 );
 
 /**
@@ -135,27 +136,27 @@ CPT_KERNEL void render_pt_kernel(
 template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    ConstPrimPtr verts,
-    ConstPrimPtr norms, 
+    ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
-    DeviceImage& image,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
+    DeviceImage image,
     float* output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
+    int max_depth = 1,
     int node_num = -1,
     int accum_cnt = 1,
+    int cache_num = 0,
     int specular_constraints = 0,
     float caustic_scale = 1.f
 );

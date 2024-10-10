@@ -42,10 +42,13 @@ public:
     Emitter** emitters;
     std::vector<ObjInfo> objects;
     std::vector<Shape> shapes;
+    std::vector<bool> sphere_flags;
     std::vector<float4> bvh_fronts;
     std::vector<float4> bvh_backs;
     std::vector<float4> node_fronts;
     std::vector<float4> node_backs;
+    std::vector<float4> cache_fronts;
+    std::vector<float4> cache_backs;
     std::vector<int> node_offsets;
 
     std::array<Vec3Arr, 3> verts_list;
@@ -66,7 +69,7 @@ public:
     Scene(std::string path);
     ~Scene();
 
-    void export_prims(ArrayType<Vec3>& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const;
+    void export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const;
 
     bool bvh_available() const noexcept {
         return !node_offsets.empty();

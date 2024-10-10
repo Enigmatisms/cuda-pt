@@ -3,7 +3,7 @@
  * @author: Qianyue He
  * @date:   2024.5.24
 */
-
+#include <iostream>
 #include "core/config.h"
 
 RenderingConfig RenderingConfig::from_xml(const tinyxml2::XMLElement *sensor_node) {
@@ -15,6 +15,14 @@ RenderingConfig RenderingConfig::from_xml(const tinyxml2::XMLElement *sensor_nod
             node->QueryIntAttribute("value", &config.spp);
         else if (name == "max_bounce")
             node->QueryIntAttribute("value", &config.max_depth);
+        else if (name == "cache_level") {
+            int cache_level = 0;
+            node->QueryIntAttribute("value", &cache_level);
+            if (cache_level <= 0 || cache_level > 6) {
+                std::cout << "Cache level clipped to [1, 6], originally: " << cache_level << std::endl;
+            }
+            config.cache_level = std::max(std::min(cache_level, 6), 1);
+        }
         node = node->NextSiblingElement("integer");
     }
 

@@ -7,6 +7,7 @@
 #pragma once
 #include <iostream>
 #include "core/vec3.cuh"
+#include "core/vec4.cuh"
 #include "core/quaternion.cuh"
 
 /**
@@ -45,16 +46,18 @@ public:
     CPT_CPU_GPU SO3() {}
 
     template <typename V1, typename V2, typename V3>
-    CPT_CPU_GPU SO3(V1&& v1, V2&& v2, V3&& v3, bool row_wise = true) {
-        if (row_wise) {
-            rows[0] = std::forward<V1>(v1);
-            rows[1] = std::forward<V1>(v2);
-            rows[2] = std::forward<V1>(v3);
-        } else {
-            rows[0] = Vec3(v1.x(), v2.x(), v3.x());
-            rows[1] = Vec3(v1.y(), v2.y(), v3.y());
-            rows[2] = Vec3(v1.z(), v2.z(), v3.z());
-        }
+    CPT_CPU_GPU SO3(V1&& v1, V2&& v2, V3&& v3) {
+        rows[0] = std::forward<V1>(v1);
+        rows[1] = std::forward<V2>(v2);
+        rows[2] = std::forward<V3>(v3);
+    }
+
+    template <typename V1, typename V2, typename V3>
+    CPT_CPU_GPU SO3(V1&& v1, V2&& v2, V3&& v3, bool row_wise) {
+        // overload, this function will call column wise construction
+        rows[0] = Vec3(v1.x(), v2.x(), v3.x());
+        rows[1] = Vec3(v1.y(), v2.y(), v3.y());
+        rows[2] = Vec3(v1.z(), v2.z(), v3.z());
     }
 
     CPT_CPU_GPU SO3(float val) {
@@ -119,10 +122,9 @@ public:
         return inv_R;
     }
 
-    CPT_CPU_GPU Vec3 inverse_transform(Vec3&& v) const { 
+    CPT_CPU_GPU Vec3 inverse_transform_precomputed(Vec3&& v, float a20, float a21, float a22) const { 
         // use 3 vectors to avoid register scoreboard
-        Vec3 temp1, temp2, temp3, output;
-        float inv_det = 1.f / determinant();
+        Vec3 temp1, temp2;
         temp1[0] = fmaf(rows[1].y(), rows[2].z(), - rows[1].z() * rows[2].y());
         temp1[1] = fmaf(rows[0].z(), rows[2].y(), - rows[0].y() * rows[2].z());
         temp1[2] = fmaf(rows[0].y(), rows[1].z(), - rows[0].z() * rows[1].y());
@@ -131,10 +133,9 @@ public:
         temp2[1] = fmaf(rows[0].x(), rows[2].z(), - rows[0].z() * rows[2].x());
         temp2[2] = fmaf(rows[0].z(), rows[1].x(), - rows[0].x() * rows[1].z());
 
-        temp3[0] = fmaf(rows[1].x(), rows[2].y(), - rows[1].y() * rows[2].x());
-        temp3[1] = fmaf(rows[0].y(), rows[2].x(), - rows[0].x() * rows[2].y());
-        temp3[2] = fmaf(rows[0].x(), rows[1].y(), - rows[0].y() * rows[1].x());
-        return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, temp3.dot(v) * inv_det);
+        // other elements can not be precomputed, due to 
+        float inv_det = 1.f / (rows[0].x() * temp1.x() + rows[0].y() * temp2.x() + rows[0].z() * a20);
+        return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (a20 * v.x() + a21 * v.y() + a22 * v.z()) * inv_det);
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)

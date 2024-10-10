@@ -22,8 +22,7 @@ static constexpr float RR_THRESHOLD = 0.1;
  * too difficult to control
  * 
  * @param objects   object encapsulation
- * @param prim2obj  primitive to object index mapping: which object does this primitive come from?
- * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param verts     vertices
  * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
  * @param camera    GPU camera model (constant memory)
@@ -34,27 +33,27 @@ static constexpr float RR_THRESHOLD = 0.1;
 template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    ConstPrimPtr verts,
-    ConstPrimPtr norms, 
+    ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
-    DeviceImage& image,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
+    DeviceImage image,
     float* output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,/* max depth, useless for depth renderer, 1 anyway */
+    int max_depth,
     int node_num,
     int accum_cnt,
+    int cache_num,
     int specular_constraints,
     float caustic_scale
 ) {
@@ -72,34 +71,38 @@ CPT_KERNEL void render_lt_kernel(
 
         Vec2 extras = sampler.next2D();
         emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), le_pdf);
-        throughput = emitter->sample_le(ray.o, ray.d, le_pdf, sampler.next2D(), verts, norms, emitter_id, extras.x(), extras.y());
+        throughput = emitter->sample_le(ray.o, ray.d, le_pdf, sampler.next2D(), &verts, norms, emitter_id, extras.x(), extras.y());
         throughput *= 1.f / (emitter_sample_pdf * le_pdf);
     }
 
     // step 2: bouncing around the scene until the max depth is reached
-    int min_index = -1;
+    int min_index = -1, object_id = 0;
 #ifdef RENDERER_USE_BVH
-    ShapeIntersectVisitor visitor(*verts, ray, 0);
-#else   // RENDERER_USE_BVH
-    __shared__ Vec3 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
+    // cache near root level BVH nodes for faster traversal
+    extern __shared__ float4 s_cached[];
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+        s_cached[tid] = cached_nodes[tid];
+    }
+    __syncthreads();
+#else
+    __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
-    ArrayType<Vec3> s_verts_arr(reinterpret_cast<Vec3*>(&s_verts[0]), BASE_ADDR);
-    ShapeIntersectVisitor visitor(s_verts_arr, ray, 0);
+    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
-    ShapeExtractVisitor extract(*verts, *norms, *uvs, ray, 0);
-    // printf("Out Throughput: %f, %f, %f, ray_o: %f, %f, %f, ray_d: %f, %f, %f\n", 
-    //     throughput.x(), throughput.y(), throughput.z(),
-    //     ray.o.x(), ray.o.y(), ray.o.z(),
-    //     ray.d.x(), ray.d.y(), ray.d.z()
-    // );
     for (int b = 0; b < max_depth; b++) {
-        float min_dist = MAX_DIST;
+        float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
-        min_dist = ray_intersect_bvh(ray, shapes, bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, visitor, min_index, node_num, min_dist);
+        min_dist = ray_intersect_bvh(
+            ray, bvh_fronts, bvh_backs, 
+            node_fronts, node_backs, node_offsets, 
+            s_cached, verts, min_index, object_id, 
+            prim_u, prim_v, node_num, cache_num, min_dist
+        );
 #else   // RENDERER_USE_BVH
         #pragma unroll
         for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
@@ -109,33 +112,27 @@ CPT_KERNEL void render_lt_kernel(
 
             // huge bug
             if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-    #ifdef USE_SOA
-                cuda::memcpy_async(&s_verts[tid],                    &verts->x(cur_idx), sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[tid + BASE_ADDR],        &verts->y(cur_idx), sizeof(Vec3), pipe);
-                cuda::memcpy_async(&s_verts[tid + (BASE_ADDR << 1)], &verts->z(cur_idx), sizeof(Vec3), pipe);
-    #else
-                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts->data[TRI_IDX(cur_idx)], sizeof(Vec3) * 3, pipe);
-    #endif
+                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
                 s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
             }
             pipe.producer_commit();
             pipe.consumer_wait();
             __syncthreads();
             // this might not be a good solution
-            min_dist = ray_intersect(ray, shapes, s_aabbs, visitor, min_index, remain_prims, cp_base << BASE_SHFL, min_dist);
+            min_dist = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
+                cp_base << BASE_SHFL, min_index, object_id, prim_u, prim_v, min_dist);
             __syncthreads();
         }
 #endif  // RENDERER_USE_BVH
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
             // printf("Throughput: %f, %f, %f, min_index: %d, bounce: %d, %d\n", throughput.x(), throughput.y(), throughput.z(), min_index, b, num_emitter);
-            extract.set_index(min_index);
-            auto it = variant::apply_visitor(extract, shapes[min_index]);
+            auto it = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
+            object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
 
             // ============= step 3: next event estimation ================
             // (1) randomly pick one emitter
-            int object_id   = prim2obj[min_index],
-                material_id = objects[object_id].bsdf_id;
+            int material_id = objects[object_id].bsdf_id;
 
             // deterministically connect to the camera
             Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 1));
@@ -148,10 +145,10 @@ CPT_KERNEL void render_lt_kernel(
             if (constraint_cnt > specular_constraints &&
                 dev_cam.get_splat_pixel(shadow_ray.d, pixel_x, pixel_y) && 
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, shapes, bvh_fronts, bvh_backs, node_fronts, 
-                        node_backs, node_offsets, *verts, node_num, emit_len_mis - EPSILON)
+            occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
+                        node_backs, node_offsets, s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, shapes, aabbs, *verts, num_objects, emit_len_mis - EPSILON)
+            occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
             ) {
                 Vec4 direct_splat = throughput * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
@@ -191,19 +188,18 @@ CPT_KERNEL void render_lt_kernel(
 
 template CPT_KERNEL void render_lt_kernel<true>(
     const DeviceCamera& dev_cam, 
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    ConstPrimPtr verts,
-    ConstPrimPtr norms, 
+    ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
-    DeviceImage& image,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
+    DeviceImage image,
     float* output_buffer,
     int num_prims,
     int num_objects,
@@ -212,25 +208,25 @@ template CPT_KERNEL void render_lt_kernel<true>(
     int max_depth,
     int node_num,
     int accum_cnt,
+    int cache_num,
     int specular_constraints,
     float caustic_scale
 );
 
 template CPT_KERNEL void render_lt_kernel<false>(
     const DeviceCamera& dev_cam, 
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
-    ConstIndexPtr prim2obj,
-    ConstShapePtr shapes,
     ConstAABBPtr aabbs,
-    ConstPrimPtr verts,
-    ConstPrimPtr norms, 
+    ConstNormPtr norms, 
     ConstUVPtr uvs,
-    cudaTextureObject_t bvh_fronts,
-    cudaTextureObject_t bvh_backs,
-    cudaTextureObject_t node_fronts,
-    cudaTextureObject_t node_backs,
-    cudaTextureObject_t node_offsets,
-    DeviceImage& image,
+    const cudaTextureObject_t bvh_fronts,
+    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t node_fronts,
+    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t node_offsets,
+    ConstF4Ptr cached_nodes,
+    DeviceImage image,
     float* output_buffer,
     int num_prims,
     int num_objects,
@@ -239,6 +235,7 @@ template CPT_KERNEL void render_lt_kernel<false>(
     int max_depth,
     int node_num,
     int accum_cnt,
+    int cache_num,
     int specular_constraints,
     float caustic_scale
 );
