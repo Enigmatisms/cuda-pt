@@ -40,25 +40,15 @@ static constexpr int NUM_STREAM = 8;
 
 class WavefrontPathTracer: public PathTracer {
 private:
-    using PathTracer::aabbs;
-    using PathTracer::verts;
-    using PathTracer::norms; 
-    using PathTracer::uvs;
-    using PathTracer::image;
-    using PathTracer::num_prims;
-    using PathTracer::w;
-    using PathTracer::h;
-    using PathTracer::obj_info;
-    using PathTracer::num_objs;
-    using PathTracer::num_emitter;
-    using PathTracer::bvh_fronts;
-    using PathTracer::bvh_backs;
-    using PathTracer::node_fronts;
-    using PathTracer::node_backs;
-    using PathTracer::node_offsets;
-    using PathTracer::_cached_nodes;
-    using PathTracer::num_cache;
-    using PathTracer::camera;
+    PayLoadBufferSoA payload_buffer;
+    cudaStream_t streams[NUM_STREAM];
+    thrust::device_vector<uint32_t> index_buffer;
+    uint32_t* ray_idx_buffer;
+
+    const int x_patches;
+    const int y_patches;
+    const int num_patches;
+    const dim3 GRID, BLOCK;
 public:
     /**
      * @param shapes    shape information (for ray intersection)
@@ -77,11 +67,21 @@ public:
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         int num_emitter
-    ): PathTracer(scene, _verts, _norms, _uvs, num_emitter) {}
+    );
+
+    ~WavefrontPathTracer() {
+        payload_buffer.destroy();
+        for (int i = 0; i < NUM_STREAM; i++)
+            cudaStreamDestroy(streams[i]);
+    }
     
     CPT_CPU std::vector<uint8_t> render(
         int num_iter = 64,
         int max_depth = 4,
         bool gamma_correction = true
+    ) override;
+
+    CPT_CPU void render_online(
+        int max_depth = 4
     ) override;
 };

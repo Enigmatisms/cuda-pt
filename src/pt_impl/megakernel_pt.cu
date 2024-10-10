@@ -265,7 +265,6 @@ CPT_KERNEL void render_pt_kernel(
 
     Sampler sampler(px + py * image.w(), seed_offset);
     // step 1: generate ray
-    Ray ray = dev_cam.generate_ray(px, py, sampler);
 
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, object_id = 0;
@@ -276,8 +275,10 @@ CPT_KERNEL void render_pt_kernel(
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
+    Ray ray = dev_cam.generate_ray(px, py, sampler);
     __syncthreads();
 #else
+    Ray ray = dev_cam.generate_ray(px, py, sampler);
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
     PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);

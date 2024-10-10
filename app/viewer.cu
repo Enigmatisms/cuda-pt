@@ -60,8 +60,7 @@ int main(int argc, char** argv) {
         }
         case RendererType::WavefrontPT: {
             renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters);
-            std::cout << "Warning: Wavefront Path Tracing does not support online visualization yet.\n";
-            std::cout << "Fall back to megakernel path tracing: no override function in WFPT.\n";
+            std::cout << "Wavefront Path Tracing..\n";
             break;
         }
         case RendererType::MegeKernelLT: {

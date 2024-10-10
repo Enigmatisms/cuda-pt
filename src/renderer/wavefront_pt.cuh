@@ -349,9 +349,11 @@ CPT_KERNEL void miss_shader(
     int num_valid
 );
 
+template <bool render_once>
 CPT_KERNEL void radiance_splat(
     PayLoadBufferSoA payloads, DeviceImage image, 
-    int stream_id, int x_patch, int y_patch
+    int stream_id, int x_patch, int y_patch, 
+    int accum_cnt = 0, float* output_buffer = nullptr
 );
 
 /**

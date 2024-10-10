@@ -402,12 +402,37 @@ CPT_KERNEL void miss_shader(
     }
 }
 
+template <bool render_once>
 CPT_KERNEL void radiance_splat(
     PayLoadBufferSoA payloads, DeviceImage image, 
-    int stream_id, int x_patch, int y_patch
+    int stream_id, int x_patch, int y_patch, 
+    int accum_cnt, float* output_buffer
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     Vec4 L = payloads.L(px + stream_id * PATCH_X, py);         // To local register
-    image(px + x_patch * PATCH_X, py + y_patch * PATCH_Y) += L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
+    L = L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
+
+    if constexpr (render_once) {
+        // image will be the output buffer, there will be double buffering
+        int img_x = px + x_patch * PATCH_X, img_y = py + y_patch * PATCH_Y;
+        auto local_v = image(img_x, img_y) + L;
+        image(img_x, img_y) = local_v;
+        local_v *= 1.f / float(accum_cnt);
+        FLOAT4(output_buffer[(img_x + img_y * image.w()) << 2]) = float4(local_v); 
+    } else {
+        image(px + x_patch * PATCH_X, py + y_patch * PATCH_Y) += L;
+    }
 }
+
+template CPT_KERNEL void radiance_splat<true>(
+    PayLoadBufferSoA payloads, DeviceImage image, 
+    int stream_id, int x_patch, int y_patch,
+    int accum_cnt, float* output_buffer
+);
+
+template CPT_KERNEL void radiance_splat<false>(
+    PayLoadBufferSoA payloads, DeviceImage image, 
+    int stream_id, int x_patch, int y_patch, 
+    int accum_cnt, float* output_buffer
+);
