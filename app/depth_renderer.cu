@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
     Scene scene(xml_path);
 
     // scene setup
-    PrecomputeAoS vert_data(scene.num_prims);
+    PrecomputedArray vert_data(scene.num_prims);
     ArrayType<Vec3> norm_data(scene.num_prims);
     ArrayType<Vec2> uvs_data(scene.num_prims);
 

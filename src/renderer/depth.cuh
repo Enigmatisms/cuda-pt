@@ -19,7 +19,7 @@
 */
 CPT_KERNEL static void render_depth_kernel(
     const DeviceCamera& dev_cam,
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
@@ -42,7 +42,7 @@ CPT_KERNEL static void render_depth_kernel(
 
     __shared__ Vec4 s_verts[TRI_IDX(32)];         // vertex info
     __shared__ AABBWrapper s_aabbs[32];            // aabb
-    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
+    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
 
     int num_copy = (num_prims + 31) / 32;   // round up
     float min_dist = MAX_DIST;
@@ -92,7 +92,7 @@ public:
     */
     DepthTracer(
         const std::vector<Shape>& _shapes,
-        const PrecomputeAoS& _verts,
+        const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         const DeviceCamera& cam,

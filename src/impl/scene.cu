@@ -240,8 +240,8 @@ void parseSphereShape(
         element->QueryFloatAttribute("value", &radius);
     }
     verts_list[0].emplace_back(std::move(center));
-    verts_list[1].emplace_back(Vec3(radius, radius, radius));
-    verts_list[2].emplace_back(Vec3(0, 0, 0));
+    verts_list[1].emplace_back(radius, radius, radius);
+    verts_list[2].emplace_back(0, 0, 0);
 
     for (int i = 0; i < 3; i++) {
         norms_list[i].emplace_back(0, 1, 0);
@@ -506,7 +506,7 @@ Scene::~Scene() {
 
 }
 
-void Scene::export_prims(PrecomputeAoS& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const {
+void Scene::export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const {
     verts.from_vectors(verts_list[0], verts_list[1], verts_list[2], &sphere_flags);
     norms.from_vectors(norms_list[0], norms_list[1], norms_list[2]);
     uvs.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);

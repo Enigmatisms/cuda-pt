@@ -241,7 +241,7 @@ public:
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
@@ -268,7 +268,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
  * and we need the index to port the 
 */ 
 CPT_KERNEL void closesthit_shader(
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
@@ -293,7 +293,7 @@ CPT_KERNEL void closesthit_shader(
  * we sample a light source then start ray intersection test
 */
 CPT_KERNEL void nee_shader(
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,

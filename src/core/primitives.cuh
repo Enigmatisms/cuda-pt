@@ -1,11 +1,8 @@
 /**
- * TODO:
- * 我说一下这里的实现：
- *      1. 去 variant 化，variant 搞成一个分支，以便我们随时可以切回来对比
- *      2. 用 AABB（对于无BVH intersect）或者 BVH 的 AABB 存带符号的obj_id，正为三角形，负为球体
- *          intersect 函数需要输入是否是球体的指示标
- *      3. intersect full 进行简化，不再重算。object_id 的获取也简化，不再重取，直接通过 AABB 获取
- *          prim2obj 应该删除，AABB 完全能存下
+ * Simplified primitive ray intersection implementation
+ * without GPU variant
+ * @author: Qianyue He
+ * @date:   2024.10.5
 */
 
 #pragma once
@@ -27,7 +24,7 @@ class Primitive {
 private:
     CPT_CPU_GPU_INLINE static float intersect_sphere(
         const Ray& ray,
-        const PrecomputeAoS& verts, 
+        const PrecomputedArray& verts, 
         int index,
         float& solved_u,
         float& solved_v,
@@ -52,7 +49,7 @@ private:
 
     CPT_CPU_GPU_INLINE static float intersect_triangle(
         const Ray& ray,
-        const PrecomputeAoS& verts, 
+        const PrecomputedArray& verts, 
         int index,
         float& solved_u,
         float& solved_v,
@@ -60,8 +57,6 @@ private:
         float max_range = std::numeric_limits<float>::infinity()
     ) {
         // solve a linear equation
-        // TODO: anchor is useless, we can therefore only store two float3 (diff) for a triangle
-        // padding will be natural
         auto anchor = verts.x(index), v1 = verts.y(index), v2 = verts.z(index);
         SO3 M(v1, v2, -ray.d, false);       // column wise input
         // use precomputed 
@@ -75,7 +70,7 @@ private:
 public:
     CPT_CPU_GPU static float intersect(
         const Ray& ray,
-        const PrecomputeAoS& verts, 
+        const PrecomputedArray& verts, 
         int index,
         float& solved_u,
         float& solved_v,
@@ -95,7 +90,7 @@ public:
     }
 
     CPT_CPU_GPU_INLINE static Interaction get_interaction(
-        const PrecomputeAoS& verts, 
+        const PrecomputedArray& verts, 
         const ArrayType<Vec3>& norms, 
         const ArrayType<Vec2>& uvs, 
         Vec3&& hit_pos,
@@ -127,7 +122,7 @@ public:
             );
         } else {
             return Interaction(
-                (verts.x_clipped(index) - hit_pos).normalized(), Vec2(0, 0)
+                (hit_pos - verts.x_clipped(index)).normalized(), Vec2(0, 0)
             );
         }
 #endif

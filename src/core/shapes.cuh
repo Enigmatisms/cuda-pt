@@ -26,12 +26,12 @@ public:
 */
 class ShapeAABBVisitor {
 private:
-    const PrecomputeAoS& verts;
+    const PrecomputedArray& verts;
     mutable AABB* aabb_ptr;
     int index;
 public:
     CPT_CPU ShapeAABBVisitor(
-        const PrecomputeAoS& verts,
+        const PrecomputedArray& verts,
         AABB* aabb
     ): verts(verts), aabb_ptr(aabb), index(0) {}
 

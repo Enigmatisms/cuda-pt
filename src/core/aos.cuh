@@ -107,16 +107,26 @@ public:
     CPT_CPU_GPU StructType& z(int index) { return data[index + (size << 1)]; }
 };
 
-// PrecomputeAoS stored triangle difference, two of the adjacent matrix terms
+// AOS (this is actually faster)
+#define INDEX_X(index, size) TRI_IDX(index) + 0
+#define INDEX_Y(index, size) TRI_IDX(index) + 1
+#define INDEX_Z(index, size) TRI_IDX(index) + 2
+// SOA (this is actually slower)
+// #define INDEX_X(index, size) index
+// #define INDEX_Y(index, size) index + size
+// #define INDEX_Z(index, size) index + (size << 1)
+
+// PrecomputedArray stored triangle difference, two of the adjacent matrix terms
 // and one Vec3 array for absolute positioning (of a triangle)
 // ray intersection and emitter sampling efficiency can be boosted
 // 9 floats per triangle -> 12 floats per triangle
-class PrecomputeAoS {
+// This class can be both SoA and AoS, depending on the actual compilation setting
+class PrecomputedArray {
 public:
     Vec4* data;         // packed sphere data or vertex difference (with adjoint matrix terms packed)
     size_t size;
 public:
-    CPT_CPU PrecomputeAoS(size_t _size) : size(_size) {
+    CPT_CPU PrecomputedArray(size_t _size) : size(_size) {
         CUDA_CHECK_RETURN(cudaMallocManaged(&data, 3 * sizeof(Vec4) * _size));
     }
 
@@ -126,7 +136,7 @@ public:
     }
 
     // GPU implements SoA constructor very differently
-    CPT_GPU PrecomputeAoS(Vec4* _data, size_t size) :
+    CPT_GPU PrecomputedArray(Vec4* _data, size_t size) :
         data(_data), size(size) {}
 
     // vertices input, convert to float4 and store precomputed adjoint matrix value
@@ -140,9 +150,9 @@ public:
         for (size_t i = 0; i < size; i++) {
             if (sphere_flags && sphere_flags->at(i)) {                 // sphere is compacted into 4 floats, fast loading!
                 Vec3 center = vec1[i];
-                data[TRI_IDX(i)]     = Vec4(center.x(), center.y(), center.z(), vec2[i].x());
-                data[TRI_IDX(i) + 1] = Vec4();
-                data[TRI_IDX(i) + 2] = Vec4();
+                data[INDEX_X(i, size)] = Vec4(center.x(), center.y(), center.z(), vec2[i].x());
+                data[INDEX_Y(i, size)] = Vec4();
+                data[INDEX_Z(i, size)] = Vec4();
                 continue;
             }
             Vec3 abs1  = vec1[i],
@@ -152,9 +162,9 @@ public:
             float a20 = diff1.y() * diff2.z() - diff1.z() * diff2.y(),
                   a21 = diff2.x() * diff1.z() - diff1.x() * diff2.z(),
                   a22 = diff1.x() * diff2.y() - diff2.x() * diff1.y();
-            data[TRI_IDX(i)]     = Vec4(abs1.x(), abs1.y(), abs1.z(), a20);
-            data[TRI_IDX(i) + 1] = Vec4(diff1.x(), diff1.y(), diff1.z(), a21);
-            data[TRI_IDX(i) + 2] = Vec4(diff2.x(), diff2.y(), diff2.z(), a22);
+            data[INDEX_X(i, size)] = Vec4(abs1.x(), abs1.y(), abs1.z(), a20);
+            data[INDEX_Y(i, size)] = Vec4(diff1.x(), diff1.y(), diff1.z(), a21);
+            data[INDEX_Z(i, size)] = Vec4(diff2.x(), diff2.y(), diff2.z(), a22);
         }
     }
 
@@ -163,30 +173,30 @@ public:
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
 
-    CPT_CPU_GPU const Vec4& x(int index) const { return data[TRI_IDX(index)]; }
-    CPT_CPU_GPU const Vec4& y(int index) const { return data[TRI_IDX(index) + 1]; }
-    CPT_CPU_GPU const Vec4& z(int index) const { return data[TRI_IDX(index) + 2]; }
+    CPT_CPU_GPU const Vec4& x(int index) const { return data[INDEX_X(index, size)]; }
+    CPT_CPU_GPU const Vec4& y(int index) const { return data[INDEX_Y(index, size)]; }
+    CPT_CPU_GPU const Vec4& z(int index) const { return data[INDEX_Z(index, size)]; }
 
-    CPT_CPU_GPU Vec4& x(int index) { return data[TRI_IDX(index)]; }
-    CPT_CPU_GPU Vec4& y(int index) { return data[TRI_IDX(index) + 1]; }
-    CPT_CPU_GPU Vec4& z(int index) { return data[TRI_IDX(index) + 2]; }
+    CPT_CPU_GPU Vec4& x(int index) { return data[INDEX_X(index, size)]; }
+    CPT_CPU_GPU Vec4& y(int index) { return data[INDEX_Y(index, size)]; }
+    CPT_CPU_GPU Vec4& z(int index) { return data[INDEX_Z(index, size)]; }
 
 
     CPT_CPU_GPU Vec3 x_clipped(int index) const { 
-        auto v = data[TRI_IDX(index)]; 
+        auto v = data[INDEX_X(index, size)]; 
         return Vec3(v.x(), v.y(), v.z());
     }
     CPT_CPU_GPU Vec3 y_clipped(int index) const { 
-        auto v = data[TRI_IDX(index) + 1]; 
+        auto v = data[INDEX_Y(index, size)]; 
         return Vec3(v.x(), v.y(), v.z());
     }
     CPT_CPU_GPU Vec3 z_clipped(int index) const { 
-        auto v = data[TRI_IDX(index) + 2]; 
+        auto v = data[INDEX_Z(index, size)]; 
         return Vec3(v.x(), v.y(), v.z());
     }
 
     CPT_CPU_GPU Vec3 get_sphere_point(const Vec3& normal, int index) const { 
-        auto v = data[TRI_IDX(index)]; 
+        auto v = data[INDEX_X(index, size)]; 
         return normal * v.w() + Vec3(v.x(), v.y(), v.z());      // center + radius * direction
     }
 };
@@ -199,7 +209,11 @@ public:
     using ArrayType = AoS3<InnerType>;
 #endif  // USE_AOS
 
+#undef INDEX_X
+#undef INDEX_Y
+#undef INDEX_Z
+
 using ConstF4Ptr   = const float4* const;
-using ConstVertPtr = const PrecomputeAoS* const;
+using ConstVertPtr = const PrecomputedArray* const;
 using ConstNormPtr = const ArrayType<Vec3>* const;
 using ConstUVPtr   = const ArrayType<Vec2>* const;

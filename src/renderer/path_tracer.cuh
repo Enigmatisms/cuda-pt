@@ -64,7 +64,7 @@ public:
     */
     PathTracer(
         const Scene& scene,
-        const PrecomputeAoS& _verts,
+        const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         int num_emitter

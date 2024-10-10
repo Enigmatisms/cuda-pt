@@ -73,7 +73,7 @@ public:
     */
     WavefrontPathTracer(
         const Scene& scene,
-        const PrecomputeAoS& _verts,
+        const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         int num_emitter
@@ -160,7 +160,7 @@ public:
                     nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                         *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_fronts, 
                         bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes, ray_idx_buffer, 
-                        stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes
+                        stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
                     );
 
                     // step6: emission shader + ray update shader
@@ -174,7 +174,7 @@ public:
                     closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                         *verts, payload_buffer, obj_info, aabbs, norms, uvs, 
                         bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes,
-                        ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes
+                        ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
                     );
                 }
 

@@ -7,6 +7,7 @@
 #pragma once
 #include <iostream>
 #include "core/vec3.cuh"
+#include "core/vec4.cuh"
 #include "core/quaternion.cuh"
 
 /**
@@ -121,27 +122,9 @@ public:
         return inv_R;
     }
 
-    CPT_CPU_GPU Vec3 inverse_transform(Vec3&& v) const { 
-        // use 3 vectors to avoid register scoreboard
-        Vec3 temp1, temp2, temp3;
-        temp1[0] = fmaf(rows[1].y(), rows[2].z(), - rows[1].z() * rows[2].y());
-        temp1[1] = fmaf(rows[0].z(), rows[2].y(), - rows[0].y() * rows[2].z());
-        temp1[2] = fmaf(rows[0].y(), rows[1].z(), - rows[0].z() * rows[1].y());
-
-        temp2[0] = fmaf(rows[1].z(), rows[2].x(), - rows[1].x() * rows[2].z());
-        temp2[1] = fmaf(rows[0].x(), rows[2].z(), - rows[0].z() * rows[2].x());
-        temp2[2] = fmaf(rows[0].z(), rows[1].x(), - rows[0].x() * rows[1].z());
-
-        temp3[0] = fmaf(rows[1].x(), rows[2].y(), - rows[1].y() * rows[2].x());
-        temp3[1] = fmaf(rows[0].y(), rows[2].x(), - rows[0].x() * rows[2].y());      // use precomputed
-        temp3[2] = fmaf(rows[0].x(), rows[1].y(), - rows[0].y() * rows[1].x());      // use precomputed
-        float inv_det = 1.f / (rows[0].x() * temp1.x() + rows[0].y() * temp2.x() + rows[0].z() * temp3.x());
-        return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, temp3.dot(v) * inv_det);
-    }
-
     CPT_CPU_GPU Vec3 inverse_transform_precomputed(Vec3&& v, float a20, float a21, float a22) const { 
         // use 3 vectors to avoid register scoreboard
-        Vec3 temp1, temp2, temp3;
+        Vec3 temp1, temp2;
         temp1[0] = fmaf(rows[1].y(), rows[2].z(), - rows[1].z() * rows[2].y());
         temp1[1] = fmaf(rows[0].z(), rows[2].y(), - rows[0].y() * rows[2].z());
         temp1[2] = fmaf(rows[0].y(), rows[1].z(), - rows[0].z() * rows[1].y());
@@ -150,12 +133,9 @@ public:
         temp2[1] = fmaf(rows[0].x(), rows[2].z(), - rows[0].z() * rows[2].x());
         temp2[2] = fmaf(rows[0].z(), rows[1].x(), - rows[0].x() * rows[1].z());
 
-        temp3[0] = a20;
-        temp3[1] = a21;
-        temp3[2] = a22;
         // other elements can not be precomputed, due to 
         float inv_det = 1.f / (rows[0].x() * temp1.x() + rows[0].y() * temp2.x() + rows[0].z() * a20);
-        return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, temp3.dot(v) * inv_det);
+        return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (a20 * v.x() + a21 * v.y() + a22 * v.z()) * inv_det);
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)

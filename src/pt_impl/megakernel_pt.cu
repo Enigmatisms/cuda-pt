@@ -16,7 +16,7 @@ CPT_GPU bool occlusion_test(
     const Ray& ray,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     int num_objects,
     float max_dist
 ) {
@@ -49,7 +49,7 @@ CPT_GPU bool occlusion_test_bvh(
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     const int node_num,
     const int cache_num,
     float max_dist
@@ -64,15 +64,14 @@ CPT_GPU bool occlusion_test_bvh(
             cached_nodes[node_idx + cache_num]
         );
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
-        int all_offset = 0, gmem_index = 0;
-        node.get_range(all_offset, gmem_index);
+        int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         if (!intersect_node) {
             node_idx += all_offset;
             continue;
         }
         if (all_offset == 1) {
             valid_cache = true;
-            node_idx    = gmem_index + 1;
+            node_idx    = gmem_index;
             break;
         }
         node_idx ++;
@@ -136,7 +135,7 @@ CPT_GPU float ray_intersect_bvh(
     const cudaTextureObject_t node_backs,
     const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     int& min_index,
     int& min_obj_idx,
     float& prim_u,
@@ -155,8 +154,7 @@ CPT_GPU float ray_intersect_bvh(
             cached_nodes[node_idx + cache_num]
         );
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
-        int all_offset = 0, gmem_index = 0;
-        node.get_range(all_offset, gmem_index);
+        int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         if (!intersect_node) {
             node_idx += all_offset;
             continue;
@@ -241,7 +239,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
@@ -275,15 +273,14 @@ CPT_KERNEL void render_pt_kernel(
     // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < cache_num) {
-        s_cached[tid]             = cached_nodes[tid];
-        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+        s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
 #else
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
-    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
+    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
@@ -299,7 +296,7 @@ CPT_KERNEL void render_pt_kernel(
         min_dist = ray_intersect_bvh(
             ray, bvh_fronts, bvh_backs, 
             node_fronts, node_backs, node_offsets, 
-            cached_nodes, verts, min_index, object_id, 
+            s_cached, verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
 #else   // RENDERER_USE_BVH
@@ -357,7 +354,7 @@ CPT_KERNEL void render_pt_kernel(
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
                 occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                            node_backs, node_offsets, cached_nodes, verts, node_num, cache_num, emit_len_mis - EPSILON)
+                            node_backs, node_offsets, s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
                 occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -401,7 +398,7 @@ CPT_KERNEL void render_pt_kernel(
 
 template CPT_KERNEL void render_pt_kernel<true>(
     const DeviceCamera& dev_cam, 
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
@@ -426,7 +423,7 @@ template CPT_KERNEL void render_pt_kernel<true>(
 
 template CPT_KERNEL void render_pt_kernel<false>(
     const DeviceCamera& dev_cam, 
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 

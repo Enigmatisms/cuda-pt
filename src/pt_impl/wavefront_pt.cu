@@ -22,7 +22,7 @@ namespace {
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
@@ -63,11 +63,11 @@ CPT_KERNEL void raygen_primary_hit_shader(
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
 #ifdef RENDERER_USE_BVH 
+        // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < cache_num) {
-        s_cached[tid]             = cached_nodes[tid];
-        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+        s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
@@ -78,7 +78,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
-    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
+    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
     // ============= step 1: ray intersection =================
@@ -138,7 +138,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
  * and we need the index to port the 
 */ 
 CPT_KERNEL void closesthit_shader(
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
@@ -172,11 +172,11 @@ CPT_KERNEL void closesthit_shader(
     ray.hit_t = MAX_DIST;
 
 #ifdef RENDERER_USE_BVH 
+    // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < cache_num) {
-        s_cached[tid]             = cached_nodes[tid];
-        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+        s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_fronts, bvh_backs, node_fronts, 
@@ -187,7 +187,7 @@ CPT_KERNEL void closesthit_shader(
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
-    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
+    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
 
     // ============= step 1: ray intersection =================
@@ -237,7 +237,7 @@ CPT_KERNEL void closesthit_shader(
  * we sample a light source then start ray intersection test
 */
 CPT_KERNEL void nee_shader(
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
@@ -262,11 +262,11 @@ CPT_KERNEL void nee_shader(
                             blockDim.x * gridDim.x +                            // cols
                             threadIdx.x + blockIdx.x * blockDim.x;              // px
 #ifdef RENDERER_USE_BVH
+    // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < cache_num) {
-        s_cached[tid]             = cached_nodes[tid];
-        s_cached[tid + cache_num] = cached_nodes[tid + cache_num];
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+        s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
 #endif  // RENDERER_USE_BVH
@@ -299,7 +299,7 @@ CPT_KERNEL void nee_shader(
         if (emitter != c_emitter[0] && 
 #ifdef RENDERER_USE_BVH
             occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                        node_backs, node_offsets, cached_nodes, verts, node_num, cache_num, emit_len_mis - EPSILON)
+                        node_backs, node_offsets, s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH

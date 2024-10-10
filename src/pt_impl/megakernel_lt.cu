@@ -33,7 +33,7 @@ static constexpr float RR_THRESHOLD = 0.1;
 template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
@@ -77,10 +77,18 @@ CPT_KERNEL void render_lt_kernel(
 
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, object_id = 0;
-#ifndef RENDERER_USE_BVH
+#ifdef RENDERER_USE_BVH
+    // cache near root level BVH nodes for faster traversal
+    extern __shared__ float4 s_cached[];
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+        s_cached[tid] = cached_nodes[tid];
+    }
+    __syncthreads();
+#else
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
-    PrecomputeAoS s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
+    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
@@ -92,7 +100,7 @@ CPT_KERNEL void render_lt_kernel(
         min_dist = ray_intersect_bvh(
             ray, bvh_fronts, bvh_backs, 
             node_fronts, node_backs, node_offsets, 
-            cached_nodes, verts, min_index, object_id, 
+            s_cached, verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
 #else   // RENDERER_USE_BVH
@@ -138,7 +146,7 @@ CPT_KERNEL void render_lt_kernel(
                 dev_cam.get_splat_pixel(shadow_ray.d, pixel_x, pixel_y) && 
 #ifdef RENDERER_USE_BVH
             occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                        node_backs, node_offsets, cached_nodes, verts, node_num, cache_num, emit_len_mis - EPSILON)
+                        node_backs, node_offsets, s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -180,7 +188,7 @@ CPT_KERNEL void render_lt_kernel(
 
 template CPT_KERNEL void render_lt_kernel<true>(
     const DeviceCamera& dev_cam, 
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
@@ -207,7 +215,7 @@ template CPT_KERNEL void render_lt_kernel<true>(
 
 template CPT_KERNEL void render_lt_kernel<false>(
     const DeviceCamera& dev_cam, 
-    const PrecomputeAoS& verts,
+    const PrecomputedArray& verts,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 

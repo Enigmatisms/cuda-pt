@@ -16,7 +16,7 @@
 class TracerBase {
 protected:
     AABB* aabbs;
-    PrecomputeAoS* verts;
+    PrecomputedArray* verts;
     ArrayType<Vec3>* norms; 
     ArrayType<Vec2>* uvs;
     DeviceImage image;
@@ -34,7 +34,7 @@ public:
     */
     TracerBase(
         const std::vector<Shape>& _shapes,
-        const PrecomputeAoS& _verts,
+        const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
         const ArrayType<Vec2>& _uvs,
         int width, int height

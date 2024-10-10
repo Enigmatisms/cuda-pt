@@ -22,7 +22,7 @@ struct PrimMappingInfo {
 static constexpr int num_bins = 12;
 static constexpr int max_node_prim = 4;
 static constexpr int sah_split_threshold = 8;
-static constexpr float traverse_cost = 0.15;
+static constexpr float traverse_cost = 0.25;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const {
     int _base = base(), _prim_num = prim_num();
@@ -250,14 +250,10 @@ static int recursive_linearize(
         if (depth < cache_max_depth) {
             // store the jump offset to the next cached node (for non-leaf node)
             reinterpret_cast<int&>(cached_fronts[current_cached].w) = cached_fronts.size() - current_cached;
-            printf("(non-leaf) cached id: %d, offset: %d\n", current_cached, cached_fronts.size() - current_cached);
         }
         return lnodes + 1;                      // include the cur_node                       
     } else {
         // leaf node has negative offset
-        if (depth < cache_max_depth) {
-            printf("(leaf) cached id: %d, offset: %d\n", current_cached, cached_fronts.size() - current_cached);
-        }
         node_offsets.back() = 1;        
         return 1;
     }
@@ -289,10 +285,11 @@ void bvh_build(
     node_fronts.reserve(node_num);
     node_backs.reserve(node_num);
     node_offsets.reserve(node_num);
-    cache_max_level = (int)std::floor(std::log(node_num));
+    cache_max_level = std::min((int)std::floor(std::log2(node_num)), cache_max_level);
     cached_fronts.reserve(1 << cache_max_level);
     cached_backs.reserve(1 << cache_max_level);
     recursive_linearize(root_node, node_fronts, node_backs, cached_fronts, cached_backs, node_offsets, 0, cache_max_level);
+    printf("[BVH] Number of nodes to cache: %llu\n", cached_fronts.size());
 
     bvh_fronts.reserve(bvh_infos.size());
     bvh_backs.reserve(bvh_infos.size());
