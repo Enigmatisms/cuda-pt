@@ -269,10 +269,10 @@ CPT_KERNEL void render_pt_kernel(
 
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, object_id = 0;
+    int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #ifdef RENDERER_USE_BVH
     // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
-    int tid = threadIdx.x + threadIdx.y * blockDim.x;
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
@@ -282,7 +282,6 @@ CPT_KERNEL void render_pt_kernel(
     __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
     PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
-    int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
 
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
