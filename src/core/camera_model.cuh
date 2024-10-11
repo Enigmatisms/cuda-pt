@@ -68,19 +68,19 @@ public:
     }
 
     CPT_CPU void move_forward(float step = 0.1) {
-        t += step * R.rotate(Vec3(0, 0, 1));
+        t += step * R.col(2);
     }
 
     CPT_CPU void move_backward(float step = 0.1) {
-        t += step * R.rotate(Vec3(0, 0, -1));
+        t -= step * R.col(2);
     }
 
     CPT_CPU void move_left(float step = 0.1) {
-        t += step * R.rotate(Vec3(-signs.x(), 0, 0));
+        t += (-step * signs.x()) * R.col(0);
     }
 
     CPT_CPU void move_right(float step = 0.1) {
-        t += step * R.rotate(Vec3(signs.x(), 0, 0));
+        t += (step * signs.x()) * R.col(0);
     }
 
     CPT_CPU void rotate(float yaw, float pitch);

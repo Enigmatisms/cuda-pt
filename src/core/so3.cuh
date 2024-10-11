@@ -215,12 +215,22 @@ CPT_CPU_GPU_INLINE SO3 vec_mul(const Vec3& v1, const Vec3& v2) {
 CPT_CPU_GPU_INLINE SO3 rotation_between(Vec3&& from, const Vec3& to) {
     auto axis = from.cross(to);
     float cos_theta = from.dot(to);
-    SO3 R{};
-    R = SO3::diag(cos_theta);
+    SO3 R = SO3::diag(cos_theta);
     if (abs(cos_theta) < 1.f - 1e-5f) {
         auto skew = skew_symmetry(axis);
-        auto norm_axis = axis.normalized();
-        R += vec_mul(norm_axis, norm_axis).scale(1.f - cos_theta) + skew;
+        axis.normalize();
+        R += vec_mul(axis, axis).scale(1.f - cos_theta) + skew;
+    }
+    return R;
+}
+
+CPT_CPU_GPU_INLINE SO3 rotation_local_to_world(const Vec3& to) {
+    auto axis = Vec3(-to.y(), to.x(), 0);
+    SO3 R = SO3::diag(to.z());
+    if (abs(to.z()) < 1.f - 1e-5f) {
+        auto skew = skew_symmetry(axis);
+        axis.normalize();
+        R += vec_mul(axis, axis).scale(1.f - to.z()) + skew;
     }
     return R;
 }
@@ -229,4 +239,9 @@ CONDITION_TEMPLATE(VecType, Vec3)
 CPT_CPU_GPU_INLINE Vec3 delocalize_rotate(VecType&& anchor, const Vec3& to, const Vec3& input) {
     SO3 R = rotation_between(std::move(anchor), to);
     return R.rotate(input);
+}   
+
+// Specialized, when the anchor is (0, 0, 1)
+CPT_CPU_GPU_INLINE Vec3 delocalize_rotate(const Vec3& to, const Vec3& input) {
+    return rotation_local_to_world(to).rotate(input);
 }   

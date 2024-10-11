@@ -81,7 +81,7 @@ public:
 
     CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
         auto local_ray = sample_cosine_hemisphere(std::move(uv), pdf);
-        auto out_ray = delocalize_rotate(Vec3(0, 0, 1), it.shading_norm, local_ray);
+        auto out_ray = delocalize_rotate(it.shading_norm, local_ray);
         // throughput *= f / pdf --> k_d * cos / pi / (pdf = cos / pi) == k_d
         float dot_in  = it.shading_norm.dot(indir);
         float dot_out = it.shading_norm.dot(out_ray);

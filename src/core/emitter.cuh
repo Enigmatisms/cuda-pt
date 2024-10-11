@@ -146,7 +146,7 @@ public:
             is_sphere == false
         ) + normal * EPSILON;
         ray_d  = sample_cosine_hemisphere(Vec2(extra_u, extra_v), pdf_dir);
-        ray_d  = delocalize_rotate(Vec3(0, 0, 1), normal, ray_d);
+        ray_d  = delocalize_rotate(normal, ray_d);
         // input pdf is already the pdf of position (1 / area)
         pdf   *= pdf_dir;
         return Le * fabsf(normal.dot(ray_d));

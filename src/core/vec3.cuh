@@ -7,6 +7,7 @@
 #include <iostream>
 #include <chrono>
 #include <iomanip>
+#include <cuda/std/detail/libcxx/math.h>
 #include <cuda_runtime_api.h>
 #include "core/cuda_utils.cuh"
 #include "core/constants.cuh"
@@ -140,10 +141,10 @@ public:
     } 
 
     CPT_CPU_GPU_INLINE
-    Vec3 normalized() const { return *this * (1.f / length()); }
+    Vec3 normalized() const { return *this * rsqrtf(length2()); }
 
     CPT_CPU_GPU_INLINE
-    void normalize() { this->operator*=(1.f / length()); }
+    void normalize() { this->operator*=rsqrtf(length2()); }
 
     CPT_CPU_GPU_INLINE
     float length2() const { return fmaf(_data.x, _data.x, fmaf(_data.y, _data.y, _data.z * _data.z)); }
