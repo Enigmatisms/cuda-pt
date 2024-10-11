@@ -99,7 +99,7 @@ public:
     Vec2 normalized() const { return *this * rsqrtf(length2()); }
 
     CPT_CPU_GPU_INLINE
-    void normalize() { this->operator*=rsqrtf(length2()); }
+    void normalize() { this->operator*=(rsqrtf(length2())); }
 
     CPT_CPU_GPU_INLINE
     float length2() const { return _data.x * _data.x + _data.y * _data.y; }

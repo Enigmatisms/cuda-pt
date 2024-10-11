@@ -193,6 +193,7 @@ public:
     }
 
     friend CPT_CPU_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
+    friend CPT_CPU_GPU SO3 rotation_local_to_world(const Vec3& to);
 };
 
 CPT_CPU_GPU_INLINE SO3 skew_symmetry(const Vec3& v) {
