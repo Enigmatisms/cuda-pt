@@ -25,6 +25,9 @@ public:
     Vec4(float _x, float _y, float _z, float _w = 1): 
         _data(make_float4(_x, _y, _z, _w)) {}
 
+    CPT_CPU_GPU
+    Vec4(float4&& v): _data(std::move(v)) {}
+
     CPT_CPU_GPU_INLINE 
     float& operator[](int index) {
         return *((&_data.x) + index);
@@ -117,6 +120,14 @@ public:
         _data.z *= b;
         _data.w *= b;
         return *this;
+    }
+
+    CPT_CPU_GPU_INLINE float4* float4_ptr() {
+        return reinterpret_cast<float4*>(this);
+    }
+
+    CPT_CPU_GPU_INLINE const float4* float4_ptr() const {
+        return reinterpret_cast<const float4*>(this);
     }
 
     CONDITION_TEMPLATE(VecType, Vec4)

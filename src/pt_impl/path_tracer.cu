@@ -9,7 +9,7 @@
 #include "renderer/path_tracer.cuh"
 
 static constexpr int SHFL_THREAD_X = 4;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
-static constexpr int SHFL_THREAD_Y = 4;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
+static constexpr int SHFL_THREAD_Y = 3;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
 PathTracer::PathTracer(
     const Scene& scene,

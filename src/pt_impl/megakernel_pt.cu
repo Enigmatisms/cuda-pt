@@ -65,16 +65,14 @@ CPT_GPU bool occlusion_test_bvh(
         );
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
-        if (!intersect_node) {
-            node_idx += all_offset;
-            continue;
-        }
-        if (all_offset == 1) {
+        int increment = (!intersect_node) * all_offset + (intersect_node && all_offset != 1) * 1;
+        node_idx += increment;
+
+        if (intersect_node && all_offset == 1) {
             valid_cache = true;
-            node_idx    = gmem_index;
+            node_idx = gmem_index;
             break;
         }
-        node_idx ++;
     }
     // no intersected nodes, for the near root level, meaning that the path is not occluded
     if (!valid_cache) return true;      
@@ -86,27 +84,23 @@ CPT_GPU bool occlusion_test_bvh(
         );
         int all_offset = tex1Dfetch<int>(node_offsets, node_idx);
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
-        if (!intersect_node) {
-            node_idx += all_offset;
-            continue;
-        }
-        if (all_offset == 1) {
+        int increment = (!intersect_node) * all_offset + int(intersect_node);
+
+        if (intersect_node && all_offset == 1) {
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
             for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
                 const LinearBVH bvh(tex1Dfetch<float4>(bvh_fronts, idx), 
                                     tex1Dfetch<float4>(bvh_backs,  idx));
-                if (bvh.aabb.intersect(ray, aabb_tmin)) {
-                    int obj_idx = 0, prim_idx = 0;
-                    bvh.get_info(obj_idx, prim_idx);
-                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
-                    if (dist > EPSILON && dist < max_dist)
-                        return false;
-                }
+                int obj_idx = 0, prim_idx = 0;
+                bvh.get_info(obj_idx, prim_idx);
+                float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
+                if (dist > EPSILON && dist < max_dist)
+                    return false;
             }
         }
-        node_idx ++;
+        node_idx += increment;
     }
     return true;
 }
@@ -155,16 +149,15 @@ CPT_GPU float ray_intersect_bvh(
         );
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
-        if (!intersect_node) {
-            node_idx += all_offset;
-            continue;
-        }
-        if (all_offset == 1) {
+        int increment = (!intersect_node) * all_offset + (intersect_node && all_offset != 1) * 1;
+
+        node_idx += increment;
+
+        if (intersect_node && all_offset == 1) {
             valid_cache = true;
-            node_idx    = gmem_index;
+            node_idx = gmem_index;
             break;
         }
-        node_idx ++;
     }
     if (!valid_cache) return min_dist;    
 
@@ -172,13 +165,11 @@ CPT_GPU float ray_intersect_bvh(
     while (node_idx < node_num) {
         const LinearNode node(tex1Dfetch<float4>(node_fronts, node_idx), 
                         tex1Dfetch<float4>(node_backs, node_idx));
-        int all_offset = tex1Dfetch<int>(node_offsets, node_idx);
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
-        if (!intersect_node) {
-            node_idx += all_offset;
-            continue;
-        }
-        if (all_offset == 1) {
+        int all_offset = tex1Dfetch<int>(node_offsets, node_idx);
+        int increment = (!intersect_node) * all_offset + int(intersect_node);
+
+        if (intersect_node && all_offset == 1) {
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
             for (int idx = beg_idx; idx < end_idx; idx ++) {
@@ -187,21 +178,18 @@ CPT_GPU float ray_intersect_bvh(
                     tex1Dfetch<float4>(bvh_fronts, idx), 
                     tex1Dfetch<float4>(bvh_backs,  idx)
                 );
-                if (bvh.aabb.intersect(ray, aabb_tmin)) {
-                    int obj_idx = 0, prim_idx = 0;
-                    bvh.get_info(obj_idx, prim_idx);
-                    // we might not need an obj_idx stored in shapes, if we use BVH 
-                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
-                    bool valid = dist > EPSILON && dist < min_dist;
-                    min_dist = valid ? dist : min_dist;
-                    prim_u   = valid ? it_u : prim_u;
-                    prim_v   = valid ? it_v : prim_v;
-                    min_index = valid ? prim_idx : min_index;
-                    min_obj_idx = valid ? obj_idx : min_obj_idx;
-                }
+                bool valid  = false;
+                int obj_idx = bvh.aabb.obj_idx(), prim_idx = bvh.aabb.prim_idx();
+                float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
+                valid = dist > EPSILON && dist < min_dist;
+                min_dist = valid ? dist : min_dist;
+                prim_u   = valid ? it_u : prim_u;
+                prim_v   = valid ? it_v : prim_v;
+                min_index = valid ? prim_idx : min_index;
+                min_obj_idx = valid ? obj_idx : min_obj_idx;
             }
         }
-        node_idx ++;
+        node_idx += increment;
     }
     return min_dist;
 }

@@ -22,7 +22,7 @@ using ConstSharedVec2Ptr = const Vec2 (*)[32];
 // All static
 class Primitive {
 private:
-    CPT_CPU_GPU_INLINE static float intersect_sphere(
+    CPT_GPU_INLINE static float intersect_sphere(
         const Ray& ray,
         const PrecomputedArray& verts, 
         int index,
@@ -33,7 +33,6 @@ private:
     ) {
         Vec4 center_r = verts.x(index);
         auto op = Vec3(center_r.x(), center_r.y(), center_r.z()) - ray.o; 
-        auto _pt = verts.x(index);
         float b = op.dot(ray.d);
         float determinant = b * b - op.dot(op) + center_r.w() * center_r.w(), result = 0;
         if (determinant >= 0) {
@@ -47,7 +46,7 @@ private:
         return result;
     }
 
-    CPT_CPU_GPU_INLINE static float intersect_triangle(
+    CPT_GPU_INLINE static float intersect_triangle(
         const Ray& ray,
         const PrecomputedArray& verts, 
         int index,
@@ -68,7 +67,7 @@ private:
         return solution.z() * valid;
     }
 public:
-    CPT_CPU_GPU static float intersect(
+    CPT_GPU static float intersect(
         const Ray& ray,
         const PrecomputedArray& verts, 
         int index,
@@ -89,7 +88,7 @@ public:
 #endif
     }
 
-    CPT_CPU_GPU_INLINE static Interaction get_interaction(
+    CPT_GPU_INLINE static Interaction get_interaction(
         const PrecomputedArray& verts, 
         const ArrayType<Vec3>& norms, 
         const ArrayType<Vec2>& uvs, 

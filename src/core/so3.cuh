@@ -132,9 +132,9 @@ public:
         temp2[0] = fmaf(rows[1].z(), rows[2].x(), - rows[1].x() * rows[2].z());
         temp2[1] = fmaf(rows[0].x(), rows[2].z(), - rows[0].z() * rows[2].x());
         temp2[2] = fmaf(rows[0].z(), rows[1].x(), - rows[0].x() * rows[1].z());
-
+        Vec3 temp3(temp1.x(), temp2.x(), a20);
         // other elements can not be precomputed, due to 
-        float inv_det = 1.f / (rows[0].x() * temp1.x() + rows[0].y() * temp2.x() + rows[0].z() * a20);
+        float inv_det = 1.f / temp3.dot(rows[0]);
         return Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (a20 * v.x() + a21 * v.y() + a22 * v.z()) * inv_det);
     }
 

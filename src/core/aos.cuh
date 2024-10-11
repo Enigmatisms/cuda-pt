@@ -173,30 +173,29 @@ public:
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
 
-    CPT_CPU_GPU const Vec4& x(int index) const { return data[INDEX_X(index, size)]; }
-    CPT_CPU_GPU const Vec4& y(int index) const { return data[INDEX_Y(index, size)]; }
-    CPT_CPU_GPU const Vec4& z(int index) const { return data[INDEX_Z(index, size)]; }
+    CPT_CPU_GPU_INLINE const Vec4& x(int index) const { return data[INDEX_X(index, size)]; }
+    CPT_CPU_GPU_INLINE const Vec4& y(int index) const { return data[INDEX_Y(index, size)]; }
+    CPT_CPU_GPU_INLINE const Vec4& z(int index) const { return data[INDEX_Z(index, size)]; }
 
-    CPT_CPU_GPU Vec4& x(int index) { return data[INDEX_X(index, size)]; }
-    CPT_CPU_GPU Vec4& y(int index) { return data[INDEX_Y(index, size)]; }
-    CPT_CPU_GPU Vec4& z(int index) { return data[INDEX_Z(index, size)]; }
+    CPT_CPU_GPU_INLINE Vec4& x(int index) { return data[INDEX_X(index, size)]; }
+    CPT_CPU_GPU_INLINE Vec4& y(int index) { return data[INDEX_Y(index, size)]; }
+    CPT_CPU_GPU_INLINE Vec4& z(int index) { return data[INDEX_Z(index, size)]; }
 
-
-    CPT_CPU_GPU Vec3 x_clipped(int index) const { 
+    CPT_CPU_GPU_INLINE Vec3 x_clipped(int index) const { 
         auto v = data[INDEX_X(index, size)]; 
         return Vec3(v.x(), v.y(), v.z());
     }
-    CPT_CPU_GPU Vec3 y_clipped(int index) const { 
+    CPT_CPU_GPU_INLINE Vec3 y_clipped(int index) const { 
         auto v = data[INDEX_Y(index, size)]; 
         return Vec3(v.x(), v.y(), v.z());
     }
-    CPT_CPU_GPU Vec3 z_clipped(int index) const { 
+    CPT_CPU_GPU_INLINE Vec3 z_clipped(int index) const { 
         auto v = data[INDEX_Z(index, size)]; 
         return Vec3(v.x(), v.y(), v.z());
     }
 
-    CPT_CPU_GPU Vec3 get_sphere_point(const Vec3& normal, int index) const { 
-        auto v = data[INDEX_X(index, size)]; 
+    CPT_CPU_GPU_INLINE Vec3 get_sphere_point(const Vec3& normal, int index) const { 
+        auto v = data[INDEX_Z(index, size)]; 
         return normal * v.w() + Vec3(v.x(), v.y(), v.z());      // center + radius * direction
     }
 };
