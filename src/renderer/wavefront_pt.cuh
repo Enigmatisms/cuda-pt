@@ -53,7 +53,7 @@ namespace {
     constexpr int PATCH_Y = BLOCK_Y * THREAD_Y;
     constexpr int TOTAL_RAY = PATCH_X * PATCH_Y;
 
-    using IndexBuffer = uint32_t* const;
+    using IndexBuffer = uint32_t* const __restrict__;
 }
 
 union PDFInteraction {

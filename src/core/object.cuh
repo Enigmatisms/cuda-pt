@@ -18,7 +18,7 @@ public:
     float inv_area;         // inverse area
     uint8_t emitter_id;     // index to the emitter, 0xff means not an emitter
 public:
-    CPT_CPU_GPU_INLINE bool intersect(const Ray& ray, float& t_near) const noexcept {
+    CPT_GPU_INLINE bool intersect(const Ray& ray, float& t_near) const noexcept {
         return _aabb.intersect(ray, t_near);
     }
 

@@ -212,7 +212,7 @@ public:
 #undef INDEX_Y
 #undef INDEX_Z
 
-using ConstF4Ptr   = const float4* const;
-using ConstVertPtr = const PrecomputedArray* const;
-using ConstNormPtr = const ArrayType<Vec3>* const;
-using ConstUVPtr   = const ArrayType<Vec2>* const;
+using ConstF4Ptr   = const float4* const __restrict__;
+using ConstVertPtr = const PrecomputedArray* const __restrict__;
+using ConstNormPtr = const ArrayType<Vec3>* const __restrict__;
+using ConstUVPtr   = const ArrayType<Vec2>* const __restrict__;

@@ -16,10 +16,10 @@
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
 
-using ConstNodePtr = const LinearNode* const;
-using ConstObjPtr   = const ObjInfo* const;
-using ConstBSDFPtr  = const BSDF* const;
-using ConstIndexPtr = const int* const;
+using ConstNodePtr  = const LinearNode* const __restrict__;
+using ConstObjPtr   = const ObjInfo* const __restrict__;
+using ConstBSDFPtr  = const BSDF* const __restrict__;
+using ConstIndexPtr = const int* const __restrict__;
 
 /**
  * Occlusion test, computation is done on global memory
@@ -105,7 +105,7 @@ CPT_KERNEL void render_pt_kernel(
     const cudaTextureObject_t node_backs,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
-    float* output_buffer,
+    float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
@@ -137,7 +137,7 @@ CPT_KERNEL void render_lt_kernel(
     const cudaTextureObject_t node_backs,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
-    float* output_buffer,
+    float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,

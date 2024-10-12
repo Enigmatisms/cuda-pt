@@ -23,7 +23,7 @@ CPT_CPU_GPU void ObjInfo::setup(const ArrayType<Vec3>& prims, bool is_polygon) {
             _aabb.maxi.maximized(prims.z(i));
             _aabb.mini -= AABB_EPS;
             _aabb.maxi += AABB_EPS;
-            inv_area += (prims.y(i) - prims.x(i)).cross(prims.z(i) - prims.x(i)).length();
+            inv_area += (prims.y(i) - prims.x(i)).cross(prims.z(i) - prims.x(i)).length_h();
         } else {
             _aabb.mini = prims.x(i) - prims.y(i).x();
             _aabb.maxi = prims.x(i) + prims.y(i).x();
@@ -48,7 +48,7 @@ CPT_CPU void ObjInfo::setup(const std::array<std::vector<Vec3>, 3>& prims, bool 
             _aabb.maxi.maximized(prims[2][i]);
             _aabb.mini -= AABB_EPS;
             _aabb.maxi += AABB_EPS;
-            inv_area += (prims[1][i] - prims[0][i]).cross(prims[2][i] - prims[0][i]).length();
+            inv_area += (prims[1][i] - prims[0][i]).cross(prims[2][i] - prims[0][i]).length_h();
         } else {
             _aabb.mini = prims[0][i] - prims[1][i].x();
             _aabb.maxi = prims[0][i] + prims[1][i].x();

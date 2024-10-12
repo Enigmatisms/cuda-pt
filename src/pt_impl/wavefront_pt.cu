@@ -7,7 +7,7 @@
 #include "renderer/wavefront_pt.cuh"
 
 namespace {
-    using PayLoadBuffer      = PayLoadBufferSoA* const;
+    using PayLoadBuffer      = PayLoadBufferSoA* const __restrict__;
     using ConstPayLoadBuffer = const PayLoadBuffer;
 }
 

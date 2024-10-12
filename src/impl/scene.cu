@@ -338,7 +338,7 @@ void parseObjShape(
             if (!has_normal) {      // compute normals ourselves
                 printf("Normal vector not found in '%s' primitive %llu, computing yet normal direction is not guaranteed.\n", name.c_str(), i);
                 Vec3 diff = verts_list[1][i] - verts_list[0][i];
-                Vec3 normal = diff.cross(verts_list[2][i] - verts_list[0][i]).normalized();
+                Vec3 normal = diff.cross(verts_list[2][i] - verts_list[0][i]).normalized_h();
                 for (int j = 0; j < 3; j++) {
                     norms_list[j].push_back(normal);
                 }

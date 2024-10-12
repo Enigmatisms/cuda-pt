@@ -38,9 +38,9 @@ CPT_CPU_GPU DeviceCamera::DeviceCamera(
     const Vec3& from, const Vec3& lookat, float fov, 
     float w, float h, float hsign, float vsign, Vec3 up
 ): t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f), signs(hsign, vsign), use_orthogonal(false) {
-    Vec3 forward = (lookat - from).normalized();
-    up.normalize();
-    Vec3 right = up.cross(forward).normalized();
+    Vec3 forward = (lookat - from).normalized_h();
+    up.normalize_h();
+    Vec3 right = up.cross(forward).normalized_h();
     R = SO3(right, up, forward, false);
 }
 
@@ -49,11 +49,11 @@ CPT_CPU void DeviceCamera::rotate(float yaw, float pitch) {
             quat_pit = Quaternion::angleAxis(pitch, Vec3(-signs.y(), 0, 0));
     SO3 rot = SO3::from_quat(quat_yaw * quat_pit);
     R = R * rot;
-    Vec3 forward = R.col(2).normalized(),
+    Vec3 forward = R.col(2).normalized_h(),
          right   = R.col(0);
     right.y() = 0;
     right *= 1.f / sqrtf(right.x() * right.x() + right.z() * right.z());
-    Vec3 up = -right.cross(forward).normalized();
+    Vec3 up = -right.cross(forward).normalized_h();
     R = SO3(right, up, forward, false);
 }
 

@@ -43,13 +43,13 @@ public:
     CPT_GPU void set_ex_id(int v) noexcept { this->ex_tex_id = v; }
     CPT_GPU void set_lobe(int v) noexcept { this->bsdf_flag = v; }
 
-    CPT_CPU_GPU virtual float pdf(const Interaction& it, const Vec3& out, const Vec3& in) const = 0;
+    CPT_GPU virtual float pdf(const Interaction& it, const Vec3& out, const Vec3& in) const = 0;
 
-    CPT_CPU_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const = 0;
+    CPT_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const = 0;
 
-    CPT_CPU_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Vec2&& uv) const = 0;
+    CPT_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Vec2&& uv) const = 0;
 
-    CPT_CPU_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {
+    CPT_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {
         return (bsdf_flag & (int)flags) > 0;
     }
 };
@@ -64,14 +64,14 @@ public:
 
     CPT_CPU_GPU LambertianBSDF(): BSDF() {}
     
-    CPT_CPU_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override {
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override {
         // printf("it.norm: %f, %f, %f\n", it.shading_norm.x(), it.shading_norm.y(), it.shading_norm.z());
         // printf("out: %f, %f, %f\n", out.x(), out.y(), out.z());
         float dot_val = it.shading_norm.dot(out);
         return max(it.shading_norm.dot(out), 0.f) * M_1_Pi;
     }
 
-    CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
         float cos_term = it.shading_norm.dot(out);
         float dot_in  = it.shading_norm.dot(in);
         float same_side = (dot_in > 0) ^ (cos_term > 0);     // should be positive or negative at the same time
@@ -79,7 +79,7 @@ public:
         return k_d * max(0.f, cos_term) * M_1_Pi * same_side;
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
         auto local_ray = sample_cosine_hemisphere(std::move(uv), pdf);
         auto out_ray = delocalize_rotate(it.shading_norm, local_ray);
         // throughput *= f / pdf --> k_d * cos / pi / (pdf = cos / pi) == k_d
@@ -98,16 +98,16 @@ public:
 
     CPT_CPU_GPU SpecularBSDF(): BSDF() {}
     
-    CPT_CPU_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override {
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override {
         return 0.f;
     }
 
-    CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
         auto ref_dir = in.advance(it.shading_norm, -2.f * in.dot(it.shading_norm)).normalized();
         return k_s * (out.dot(ref_dir) > 0.99999f);
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
         // throughput *= f / pdf
         pdf = 1.f;
         throughput *= k_s * (indir.dot(it.shading_norm) < 0);
@@ -125,11 +125,11 @@ public:
 
     CPT_CPU_GPU TranslucentBSDF(): BSDF() {}
     
-    CPT_CPU_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& incid) const override {
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& incid) const override {
         return 0.f;
     }
 
-    CPT_CPU_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
         float dot_normal = in.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
@@ -143,7 +143,7 @@ public:
         return k_s * (reflc_dot | refra_dot);
     }
 
-    CPT_CPU_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
         float dot_normal = indir.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
@@ -160,11 +160,11 @@ public:
         return ret_dir;
     }
 
-    CPT_CPU_GPU_INLINE static bool is_total_reflection(float dot_normal, float ni, float nr) {
+    CPT_GPU_INLINE static bool is_total_reflection(float dot_normal, float ni, float nr) {
         return (1.f - (ni * ni) / (nr * nr) * (1.f - dot_normal * dot_normal)) < 0.f;
     }
 
-    CPT_CPU_GPU static Vec3 snell_refraction(const Vec3& incid, const Vec3& normal, float& cos_r2, float dot_n, float ni, float nr) {
+    CPT_GPU static Vec3 snell_refraction(const Vec3& incid, const Vec3& normal, float& cos_r2, float dot_n, float ni, float nr) {
         /* Refraction vector by Snell's Law, note that an extra flag will be returned */
         float ratio = ni / nr;
         cos_r2 = 1.f - (ratio * ratio) * (1. - dot_n * dot_n);        // refraction angle cosine
@@ -173,7 +173,7 @@ public:
         return (ratio * incid - ratio * dot_n * normal + sgn(dot_n) * sqrtf(fabsf(cos_r2)) * normal).normalized() * (cos_r2 > 0.f);
     }
 
-    CPT_CPU_GPU static float fresnel_equation(float n_in, float n_out, float cos_inc, float cos_ref) {
+    CPT_GPU static float fresnel_equation(float n_in, float n_out, float cos_inc, float cos_ref) {
         /**
             Fresnel Equation for calculating specular ratio
             Since Schlick's Approximation is not clear about n1->n2, n2->n1 (different) effects

@@ -95,17 +95,17 @@ public:
         return *this;
     }
 
-    CPT_CPU_GPU_INLINE
-    Vec2 normalized() const { return *this * rsqrtf(length2()); }
+    CPT_GPU_INLINE
+    Vec2 normalized() const { return *this * rhypotf(_data.x, _data.y); }
 
-    CPT_CPU_GPU_INLINE
-    void normalize() { this->operator*=(rsqrtf(length2())); }
+    CPT_GPU_INLINE
+    void normalize() { this->operator*=(rhypotf(_data.x, _data.y)); }
 
     CPT_CPU_GPU_INLINE
     float length2() const { return _data.x * _data.x + _data.y * _data.y; }
 
-    CPT_CPU_GPU_INLINE
-    float length() const { return sqrt(length2()); }
+    CPT_GPU_INLINE
+    float length() const { return hypotf(_data.x, _data.y); }
 
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE

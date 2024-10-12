@@ -139,17 +139,28 @@ public:
         return Vec3(fmaf(d.x(), t, _data.x), fmaf(d.y(), t, _data.y), fmaf(d.z(), t, _data.z));
     } 
 
-    CPT_CPU_GPU_INLINE
-    Vec3 normalized() const { return *this * rsqrtf(length2()); }
+    // ============== Specialized version using CUDA math function ===============
+    CPT_GPU_INLINE
+    Vec3 normalized() const { return *this * rnorm3df(_data.x, _data.y, _data.z); }
 
-    CPT_CPU_GPU_INLINE
-    void normalize() { this->operator*=(rsqrtf(length2())); }
+    CPT_GPU_INLINE
+    void normalize() { this->operator*=(rnorm3df(_data.x, _data.y, _data.z)); }
+
+    CPT_GPU_INLINE
+    float length() const { return norm3df(_data.x, _data.y, _data.z); }
+    // ============== Specialized version using CUDA math function ===============
 
     CPT_CPU_GPU_INLINE
     float length2() const { return fmaf(_data.x, _data.x, fmaf(_data.y, _data.y, _data.z * _data.z)); }
 
     CPT_CPU_GPU_INLINE
-    float length() const { return sqrt(length2()); }
+    Vec3 normalized_h() const { return *this * rsqrtf(length2()); }
+
+    CPT_CPU_GPU_INLINE
+    void normalize_h() { this->operator*=(rsqrtf(length2())); }
+    
+    CPT_CPU_GPU_INLINE
+    float length_h() const { return sqrtf(length2()); }
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
@@ -195,6 +206,8 @@ public:
     CPT_CPU_GPU_INLINE
     float min_elem() const noexcept { return fminf(_data.x, fminf(_data.y, _data.z)); }
 
+    CPT_GPU_INLINE Vec3 rcp() const noexcept { return Vec3(__frcp_rn(_data.x), __frcp_rn(_data.y), __frcp_rn(_data.z)); }
+
     CPT_CPU_GPU_INLINE operator float3() const {return _data;}
 };
 
@@ -207,5 +220,5 @@ CPT_CPU_GPU_INLINE
 Vec3 operator*(float b, VecType&& v) noexcept { return Vec3(v.x() * b, v.y() * b, v.z() * b); }
 
 CONDITION_TEMPLATE(VecType, Vec3)
-CPT_CPU_GPU_INLINE
-Vec3 operator/(float b, VecType&& v) noexcept { return Vec3(b / v.x(), b / v.y(), b / v.z()); }
+CPT_GPU_INLINE
+Vec3 operator/(float b, VecType&& v) noexcept { return Vec3(b * __frcp_rn(v.x()), b * __frcp_rn(v.y()), b * __frcp_rn(v.z())); }

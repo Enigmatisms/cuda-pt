@@ -44,16 +44,15 @@ public:
     CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
 
-    CPT_CPU_GPU bool intersect(const Ray& ray, float& t_near) const {
-        auto invDir = 1.0f / ray.d;
-        // long scoreboard
-        auto t1s = (mini - ray.o) * invDir;
+    CPT_GPU bool intersect(const Ray& ray, float& t_near) const {
+        auto invDir = ray.d.rcp();
+        auto t1s = (mini - ray.o) * invDir;             // long scoreboard
         auto t2s = (maxi - ray.o) * invDir;
 
         float tmin = t1s.minimize(t2s).max_elem();
         float tmax = t1s.maximize(t2s).min_elem();
         t_near = tmin;
-        return tmax > tmin && tmax > 0;
+        return (tmax > tmin) && (tmax > 0);             // local memory access problem
     }
 
     CONDITION_TEMPLATE(AABBType, AABB)
@@ -104,5 +103,5 @@ struct AABBWrapper {
     float4 _padding;            // padding is here to avoid bank conflict
 };
 
-using ConstAABBPtr = const AABB* const;
-using ConstAABBWPtr = const AABBWrapper* const;
+using ConstAABBPtr = const AABB* const __restrict__;
+using ConstAABBWPtr = const AABBWrapper* const __restrict__;

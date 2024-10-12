@@ -12,14 +12,8 @@
 #include "core/ray.cuh"
 #include "core/interaction.cuh"
 
-using SharedVec3Ptr = Vec3 (*)[32];
-using SharedVec2Ptr = Vec2 (*)[32];
-using ConstSharedVec3Ptr = const Vec3 (*)[32];
-using ConstSharedVec2Ptr = const Vec2 (*)[32];
-
 // #define TRIANGLE_ONLY
 
-// All static
 class Primitive {
 private:
     CPT_GPU_INLINE static float intersect_sphere(

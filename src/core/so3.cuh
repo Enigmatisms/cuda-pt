@@ -192,8 +192,8 @@ public:
         return output;
     }
 
-    friend CPT_CPU_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
-    friend CPT_CPU_GPU SO3 rotation_local_to_world(const Vec3& to);
+    friend CPT_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
+    friend CPT_GPU SO3 rotation_local_to_world(const Vec3& to);
 };
 
 CPT_CPU_GPU_INLINE SO3 skew_symmetry(const Vec3& v) {
@@ -213,7 +213,7 @@ CPT_CPU_GPU_INLINE SO3 vec_mul(const Vec3& v1, const Vec3& v2) {
 }
 
 // This can be improved (maybe not, Rodrigues tranformation is already good enough)
-CPT_CPU_GPU_INLINE SO3 rotation_between(Vec3&& from, const Vec3& to) {
+CPT_GPU_INLINE SO3 rotation_between(Vec3&& from, const Vec3& to) {
     auto axis = from.cross(to);
     float cos_theta = from.dot(to);
     SO3 R = SO3::diag(cos_theta);
@@ -225,7 +225,7 @@ CPT_CPU_GPU_INLINE SO3 rotation_between(Vec3&& from, const Vec3& to) {
     return R;
 }
 
-CPT_CPU_GPU_INLINE SO3 rotation_local_to_world(const Vec3& to) {
+CPT_GPU_INLINE SO3 rotation_local_to_world(const Vec3& to) {
     auto axis = Vec3(-to.y(), to.x(), 0);
     SO3 R = SO3::diag(to.z());
     if (abs(to.z()) < 1.f - 1e-5f) {
@@ -237,12 +237,12 @@ CPT_CPU_GPU_INLINE SO3 rotation_local_to_world(const Vec3& to) {
 }
 
 CONDITION_TEMPLATE(VecType, Vec3)
-CPT_CPU_GPU_INLINE Vec3 delocalize_rotate(VecType&& anchor, const Vec3& to, const Vec3& input) {
+CPT_GPU_INLINE Vec3 delocalize_rotate(VecType&& anchor, const Vec3& to, const Vec3& input) {
     SO3 R = rotation_between(std::move(anchor), to);
     return R.rotate(input);
 }   
 
 // Specialized, when the anchor is (0, 0, 1)
-CPT_CPU_GPU_INLINE Vec3 delocalize_rotate(const Vec3& to, const Vec3& input) {
+CPT_GPU_INLINE Vec3 delocalize_rotate(const Vec3& to, const Vec3& input) {
     return rotation_local_to_world(to).rotate(input);
 }   
