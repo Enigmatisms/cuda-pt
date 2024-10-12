@@ -16,7 +16,6 @@
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
 extern __constant__ BSDF*    c_material[32];
 
-using ConstBVHPtr  = const LinearBVH* const;
 using ConstNodePtr = const LinearNode* const;
 using ConstObjPtr   = const ObjInfo* const;
 using ConstBSDFPtr  = const BSDF* const;
@@ -37,11 +36,9 @@ CPT_GPU bool occlusion_test(
 // occlusion test is any hit shader
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     const int node_num,
@@ -55,11 +52,9 @@ CPT_GPU bool occlusion_test_bvh(
 */
 CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     int& min_index,
@@ -83,11 +78,9 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param verts         vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param norms         normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param uvs           uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
- * @param bvh_fronts    BVH leaf nodes first float4 (128 bit)
- * @param bvh_backs     BVH leaf nodes last float4 (128 bit)
+ * @param bvh_lveas     BVH leaf nodes (int2 texture, storing obj index and primtive index)
  * @param node_fronts   BVH nodes first float4 (128 bit)
  * @param node_backs    BVH nodes last float4 (128 bit)
- * @param node_offsets  BVH nodes node offsets (int, 32 bit)
  * @param cached_nodes  BVH cached nodes (in shared memory): first half: front float4, second half: back float4
  * @param image         GPU image buffer
  * @param output_buffer Possible visualization buffer
@@ -107,11 +100,9 @@ CPT_KERNEL void render_pt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
@@ -141,11 +132,9 @@ CPT_KERNEL void render_lt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,

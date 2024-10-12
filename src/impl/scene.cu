@@ -485,14 +485,14 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         bvh_build(
             verts_list[0], verts_list[1], verts_list[2], 
             objects, sphere_objs, world_min, world_max, 
-            bvh_fronts, bvh_backs, node_fronts, node_backs, 
-            cache_fronts, cache_backs, node_offsets, config.cache_level
+            bvh_leaves, node_fronts, node_backs, 
+            cache_fronts, cache_backs, config.cache_level
         );
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
         auto elapsed = static_cast<double>(count) / 1e3;
         printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
-        printf("[BVH] Total nodes: %lu, leaves: %lu\n", node_fronts.size(), bvh_fronts.size());
+        printf("[BVH] Total nodes: %lu, leaves: %lu\n", node_fronts.size(), bvh_leaves.size());
     }
 }
 

@@ -55,11 +55,24 @@ private:
         float min_range = EPSILON, 
         float max_range = std::numeric_limits<float>::infinity()
     ) {
-        // solve a linear equation
-        auto anchor = verts.x(index), v1 = verts.y(index), v2 = verts.z(index);
-        SO3 M(v1, v2, -ray.d, false);       // column wise input
+        // solve a linear equation, the current solution is inlined
+        auto v1 = verts.y(index), v2 = verts.z(index), anchor = verts.x(index);
         // use precomputed 
-        auto solution = M.inverse_transform_precomputed(ray.o - Vec3(anchor.x(), anchor.y(), anchor.z()), anchor.w(), v1.w(), v2.w());
+        Vec3 v = ray.o - Vec3(anchor.x(), anchor.y(), anchor.z()), 
+        temp1(
+            fmaf(v2.y(), -ray.d.z(), ray.d.y() * v2.z()),
+            fmaf(-ray.d.x(), v2.z(), v2.x() * ray.d.z()),
+            fmaf(v2.x(), -ray.d.y(), ray.d.x() * v2.y())
+        ),
+        temp2(
+            fmaf(-ray.d.y(), v1.z(), v1.y() * ray.d.z()),
+            fmaf(v1.x(), -ray.d.z(), ray.d.x() * v1.z()),
+            fmaf(-ray.d.x(), v1.y(), v1.x() * ray.d.y())
+        );
+
+        float inv_det = 1.f / (temp1.x() * v1.x() + temp2.x() * v2.x() - anchor.w() * ray.d.x());
+        Vec3 solution(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (anchor.w() * v.x() + v1.w() * v.y() + v2.w() * v.z()) * inv_det);
+
         bool valid    = (solution.x() > 0 && solution.y() > 0 && solution.x() + solution.y() < 1 &&
                             solution.z() > EPSILON && solution.z() < max_range);
         solved_u = solution.x();

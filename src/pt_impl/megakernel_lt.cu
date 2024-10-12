@@ -38,11 +38,9 @@ CPT_KERNEL void render_lt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
@@ -98,8 +96,7 @@ CPT_KERNEL void render_lt_kernel(
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
         min_dist = ray_intersect_bvh(
-            ray, bvh_fronts, bvh_backs, 
-            node_fronts, node_backs, node_offsets, 
+            ray, bvh_leaves, node_fronts, node_backs, 
             s_cached, verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
@@ -145,8 +142,8 @@ CPT_KERNEL void render_lt_kernel(
             if (constraint_cnt > specular_constraints &&
                 dev_cam.get_splat_pixel(shadow_ray.d, pixel_x, pixel_y) && 
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                        node_backs, node_offsets, s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
+            occlusion_test_bvh(shadow_ray, bvh_leaves, node_fronts, node_backs, 
+                        s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -193,11 +190,9 @@ template CPT_KERNEL void render_lt_kernel<true>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
@@ -220,11 +215,9 @@ template CPT_KERNEL void render_lt_kernel<false>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,

@@ -45,8 +45,8 @@ CPT_CPU void WavefrontPathTracer::render_online(
         // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
         raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
             *camera, *verts, payload_buffer, obj_info, aabbs, 
-            norms, uvs, bvh_fronts, bvh_backs, node_fronts, node_backs, 
-            node_offsets, _cached_nodes, ray_idx_buffer, stream_offset, num_prims, 
+            norms, uvs, bvh_leaves, node_fronts, node_backs, 
+            _cached_nodes, ray_idx_buffer, stream_offset, num_prims, 
             patch_x, patch_y, accum_cnt, stream_id, image.w(), num_nodes, num_cache);
         int num_valid_ray = TOTAL_RAY;
         auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
@@ -86,8 +86,8 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
             // step5: NEE shader
             nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_fronts, 
-                bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes, ray_idx_buffer, 
+                *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_leaves, 
+                node_fronts, node_backs, _cached_nodes, ray_idx_buffer, 
                 stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
             );
 
@@ -101,7 +101,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
             if (bounce + 1 >= max_depth) break;
             closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                 *verts, payload_buffer, obj_info, aabbs, norms, uvs, 
-                bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes,
+                bvh_leaves, node_fronts, node_backs, _cached_nodes,
                 ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
             );
         }
@@ -143,8 +143,8 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
             raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                 *camera, *verts, payload_buffer, obj_info, aabbs, 
-                norms, uvs, bvh_fronts, bvh_backs, node_fronts, node_backs, 
-                node_offsets, _cached_nodes, ray_idx_buffer, stream_offset, num_prims, 
+                norms, uvs, bvh_leaves, node_fronts, node_backs, 
+                _cached_nodes, ray_idx_buffer, stream_offset, num_prims, 
                 patch_x, patch_y, i, stream_id, image.w(), num_nodes, num_cache);
             int num_valid_ray = TOTAL_RAY;
             auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
@@ -184,8 +184,8 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
 
                 // step5: NEE shader
                 nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                    *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_fronts, 
-                    bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes, ray_idx_buffer, 
+                    *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_leaves, 
+                    node_fronts, node_backs, _cached_nodes, ray_idx_buffer, 
                     stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
                 );
 
@@ -199,7 +199,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
                 if (bounce + 1 >= max_depth) break;
                 closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                     *verts, payload_buffer, obj_info, aabbs, norms, uvs, 
-                    bvh_fronts, bvh_backs, node_fronts, node_backs, node_offsets, _cached_nodes,
+                    bvh_leaves, node_fronts, node_backs, _cached_nodes,
                     ray_idx_buffer, stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
                 );
             }

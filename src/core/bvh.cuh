@@ -45,18 +45,6 @@ struct BVHInfo {
     }
 };
 
-struct AxisBins {
-    AABB bound;
-    int prim_cnt;
-
-    AxisBins(): bound(1e5f, -1e5f, 0, 0), prim_cnt(0) {}
-
-    void push(const BVHInfo& bvh) {
-        bound += bvh.bound;
-        prim_cnt ++;
-    }
-};
-
 class BVHNode {
 public:
     BVHNode(): bound(1e5f, -1e5f, 0, 0), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
@@ -131,30 +119,11 @@ public:
 
     CPT_CPU_GPU_INLINE void get_range(int& beg, int& end) const noexcept {
         beg = aabb.base();
-        end = beg + aabb.prim_cnt();
+        end = aabb.prim_cnt();
     }
 
     CPT_GPU_INLINE void export_aabb(LinearNode& node) const noexcept {
         node.aabb.copy_from(aabb);
-    }
-};
-
-class LinearBVH {
-public:
-    CPT_CPU_GPU LinearBVH(): aabb(1e5f, -1e5f, 0, 0) {}
-    CPT_CPU_GPU LinearBVH(const BVHInfo& bvh): aabb(bvh.bound) {}
-
-    CPT_GPU LinearBVH(float4 p1, float4 p2) {
-        FLOAT4(aabb.mini) = p1;
-        FLOAT4(aabb.maxi) = p2;
-    }
-public:
-    // compressed linear BVH
-    AABB aabb;
-
-    CPT_CPU_GPU_INLINE void get_info(int& obj_idx, int& prim_idx) const noexcept {
-        obj_idx = aabb.obj_idx();
-        prim_idx = aabb.prim_idx();
     }
 };
 
@@ -165,12 +134,10 @@ void bvh_build(
     const std::vector<ObjInfo>& objects,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
-    std::vector<float4>& bvh_fronts, 
-    std::vector<float4>& bvh_backs, 
+    std::vector<int2>& bvh_nodes, 
     std::vector<float4>& node_fronts,
     std::vector<float4>& node_backs,
     std::vector<float4>& cache_fronts,
     std::vector<float4>& cache_backs,
-    std::vector<int>& node_offsets,
     int& max_cache_level
 );

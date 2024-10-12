@@ -16,11 +16,9 @@ static constexpr int SEED_SCALER = 11451;       //-4!
 
 class PathTracer: public TracerBase {
 private:
-    float4* _bvh_fronts;
-    float4* _bvh_backs;
+    int2* _bvh_leaves;
     float4* _node_fronts;
     float4* _node_backs;
-    int* _node_offsets;
 protected:
     using TracerBase::aabbs;
     using TracerBase::verts;
@@ -37,11 +35,9 @@ protected:
     int num_cache;                  // number of cached BVH nodes
     int num_emitter;
 
-    cudaTextureObject_t bvh_fronts;
-    cudaTextureObject_t bvh_backs;
+    cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t node_fronts;
     cudaTextureObject_t node_backs;
-    cudaTextureObject_t node_offsets;
     float4* _cached_nodes;
 
     DeviceCamera* camera;
@@ -113,8 +109,8 @@ public:
     template <typename TexType>
     static void createTexture1D(const TexType* tex_src, size_t size, TexType* tex_dst, cudaTextureObject_t& tex_obj) {
         cudaChannelFormatDesc channel_desc;
-        if constexpr (std::is_same_v<std::decay_t<TexType>, int>) {
-            channel_desc = cudaCreateChannelDesc<int>();
+        if constexpr (std::is_same_v<std::decay_t<TexType>, int2>) {
+            channel_desc = cudaCreateChannelDesc<int2>();
         } else {
             channel_desc = cudaCreateChannelDesc<float4>();
         }

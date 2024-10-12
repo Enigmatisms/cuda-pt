@@ -43,11 +43,9 @@ CPT_GPU bool occlusion_test(
 // occlusion test is any hit shader
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     const int node_num,
@@ -58,49 +56,46 @@ CPT_GPU bool occlusion_test_bvh(
     int node_idx     = 0;
     float aabb_tmin  = 0;
     // There can be much control flow divergence, not good
-    while (node_idx < cache_num) {
+    while (node_idx < cache_num && !valid_cache) {
         const LinearNode node(
             cached_nodes[node_idx],
             cached_nodes[node_idx + cache_num]
         );
         bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
-        int increment = (!intersect_node) * all_offset + (intersect_node && all_offset != 1) * 1;
+        int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
         node_idx += increment;
 
         if (intersect_node && all_offset == 1) {
             valid_cache = true;
             node_idx = gmem_index;
-            break;
         }
     }
     // no intersected nodes, for the near root level, meaning that the path is not occluded
-    if (!valid_cache) return true;      
+    if (valid_cache) {
+        while (node_idx < node_num) {
+            const LinearNode node(
+                tex1Dfetch<float4>(node_fronts, node_idx), 
+                tex1Dfetch<float4>(node_backs, node_idx)
+            );
 
-    while (node_idx < node_num) {
-        const LinearNode node(
-            tex1Dfetch<float4>(node_fronts, node_idx), 
-            tex1Dfetch<float4>(node_backs, node_idx)
-        );
-        int all_offset = tex1Dfetch<int>(node_offsets, node_idx);
-        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
-        int increment = (!intersect_node) * all_offset + int(intersect_node);
-
-        if (intersect_node && all_offset == 1) {
+            bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
-            for (int idx = beg_idx; idx < end_idx; idx ++) {
-                // if current ray intersects primitive at [idx], tasks will store it
-                const LinearBVH bvh(tex1Dfetch<float4>(bvh_fronts, idx), 
-                                    tex1Dfetch<float4>(bvh_backs,  idx));
-                int obj_idx = 0, prim_idx = 0;
-                bvh.get_info(obj_idx, prim_idx);
-                float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
-                if (dist > EPSILON && dist < max_dist)
-                    return false;
+            // Strange `increment`, huh? See the comments in function `ray_intersect_bvh`
+            int increment = (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
+            if (intersect_node && end_idx > 0) {
+                end_idx += beg_idx;
+                for (int idx = beg_idx; idx < end_idx; idx ++) {
+                    // if current ray intersects primitive at [idx], tasks will store it
+                    int2 obj_prim_idx = tex1Dfetch<int2>(bvh_leaves, idx);
+                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, obj_prim_idx.y, it_u, it_v, obj_prim_idx.x >= 0);
+                    if (dist > EPSILON && dist < max_dist)
+                        return false;
+                }
             }
+            node_idx += increment;
         }
-        node_idx += increment;
     }
     return true;
 }
@@ -123,11 +118,9 @@ CPT_GPU bool occlusion_test_bvh(
 */
 CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     int& min_index,
@@ -142,7 +135,7 @@ CPT_GPU float ray_intersect_bvh(
     int node_idx     = 0;
     float aabb_tmin  = 0;
     // There can be much control flow divergence, not good
-    while (node_idx < cache_num) {
+    while (node_idx < cache_num && !valid_cache) {
         const LinearNode node(
             cached_nodes[node_idx],
             cached_nodes[node_idx + cache_num]
@@ -156,40 +149,38 @@ CPT_GPU float ray_intersect_bvh(
         if (intersect_node && all_offset == 1) {
             valid_cache = true;
             node_idx = gmem_index;
-            break;
         }
     }
-    if (!valid_cache) return min_dist;    
-
-    // There can be much control flow divergence, not good
-    while (node_idx < node_num) {
-        const LinearNode node(tex1Dfetch<float4>(node_fronts, node_idx), 
-                        tex1Dfetch<float4>(node_backs, node_idx));
-        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
-        int all_offset = tex1Dfetch<int>(node_offsets, node_idx);
-        int increment = (!intersect_node) * all_offset + int(intersect_node);
-
-        if (intersect_node && all_offset == 1) {
+    if (valid_cache) {
+        // There can be much control flow divergence, not good
+        while (node_idx < node_num) {
+            const LinearNode node(tex1Dfetch<float4>(node_fronts, node_idx), 
+                            tex1Dfetch<float4>(node_backs, node_idx));
+            bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
-            for (int idx = beg_idx; idx < end_idx; idx ++) {
-                // if current ray intersects primitive at [idx], tasks will store it
-                const LinearBVH bvh(
-                    tex1Dfetch<float4>(bvh_fronts, idx), 
-                    tex1Dfetch<float4>(bvh_backs,  idx)
-                );
-                bool valid  = false;
-                int obj_idx = bvh.aabb.obj_idx(), prim_idx = bvh.aabb.prim_idx();
-                float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_idx, it_u, it_v, obj_idx >= 0);
-                valid = dist > EPSILON && dist < min_dist;
-                min_dist = valid ? dist : min_dist;
-                prim_u   = valid ? it_u : prim_u;
-                prim_v   = valid ? it_v : prim_v;
-                min_index = valid ? prim_idx : min_index;
-                min_obj_idx = valid ? obj_idx : min_obj_idx;
+            // The logic here: end_idx is reuse, if end_idx < 0, meaning that the current node is
+            // non-leaf, non-leaf node stores (-all_offset) as end_idx, so to skip the node and its children
+            // -end_idx will be the offset. While for leaf node, 1 will be the offset, and `POSITIVE` end_idx
+            // is stored. So the following for loop can naturally run (while for non-leaf, naturally skip)
+            int increment = (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
+            if (intersect_node && end_idx > 0) {
+                end_idx += beg_idx;
+                for (int idx = beg_idx; idx < end_idx; idx ++) {
+                    // if current ray intersects primitive at [idx], tasks will store it
+                    bool valid  = false;
+                    int2 obj_prim_idx = tex1Dfetch<int2>(bvh_leaves, idx);
+                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, obj_prim_idx.y, it_u, it_v, obj_prim_idx.x >= 0);
+                    valid = dist > EPSILON && dist < min_dist;
+                    min_dist = valid ? dist : min_dist;
+                    prim_u   = valid ? it_u : prim_u;
+                    prim_v   = valid ? it_v : prim_v;
+                    min_index = valid ? obj_prim_idx.y : min_index;
+                    min_obj_idx = valid ? obj_prim_idx.x : min_obj_idx;
+                }
             }
+            node_idx += increment;
         }
-        node_idx += increment;
     }
     return min_dist;
 }
@@ -232,11 +223,9 @@ CPT_KERNEL void render_pt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
@@ -282,8 +271,7 @@ CPT_KERNEL void render_pt_kernel(
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
         min_dist = ray_intersect_bvh(
-            ray, bvh_fronts, bvh_backs, 
-            node_fronts, node_backs, node_offsets, 
+            ray, bvh_leaves, node_fronts, node_backs, 
             s_cached, verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
@@ -341,8 +329,8 @@ CPT_KERNEL void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
-                occlusion_test_bvh(shadow_ray, bvh_fronts, bvh_backs, node_fronts, 
-                            node_backs, node_offsets, s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
+                occlusion_test_bvh(shadow_ray, bvh_leaves, node_fronts, node_backs, 
+                        s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
                 occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -391,11 +379,9 @@ template CPT_KERNEL void render_pt_kernel<true>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
@@ -416,11 +402,9 @@ template CPT_KERNEL void render_pt_kernel<false>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
-    const cudaTextureObject_t bvh_fronts,
-    const cudaTextureObject_t bvh_backs,
+    const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
-    const cudaTextureObject_t node_offsets,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* output_buffer,
