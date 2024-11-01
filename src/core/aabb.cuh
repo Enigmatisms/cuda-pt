@@ -44,15 +44,14 @@ public:
     CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
 
-    CPT_GPU bool intersect(const Ray& ray, float& t_near) const {
-        auto invDir = ray.d.rcp();
-        auto t1s = (mini - ray.o) * invDir;             // long scoreboard
-        auto t2s = (maxi - ray.o) * invDir;
+    CPT_GPU_INLINE bool intersect(const Ray& ray, float& t_near) const {
+        auto t2s = ray.d.rcp();
+        auto t1s = (mini - ray.o) * t2s;             // long scoreboard
+        t2s = (maxi - ray.o) * t2s;
 
-        float tmin = t1s.minimize(t2s).max_elem();
+        t_near     = t1s.minimize(t2s).max_elem();
         float tmax = t1s.maximize(t2s).min_elem();
-        t_near = tmin;
-        return (tmax > tmin) && (tmax > 0);             // local memory access problem
+        return (tmax > t_near) && (tmax > 0);             // local memory access problem
     }
 
     CONDITION_TEMPLATE(AABBType, AABB)
