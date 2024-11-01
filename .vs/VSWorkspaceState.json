@@ -13,7 +13,6 @@
     "\\scene",
     "\\scene\\xml",
     "\\src",
-    "\\src\\bvh",
     "\\src\\core",
     "\\src\\renderer",
     "\\test"

@@ -5,6 +5,29 @@ Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 trait
 
 This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).
 
+##### Compile & Run
+
+The repo contains several external dependencies, therefore, using the following command:
+```
+git clone https://github.com/Enigmatisms/cuda-pt.git --recursive
+```
+
+Dependent on GLEW for the interactive viewer (`./build/xx/cpt`). If GLEW is not installed, only offline application is available (`./build/xx/pt`). Initially, this code base can be run on Linux (tested on Ubuntu 22.04) but I haven't try that since the day my Ubuntu machine broke down. Currently, using MSVC (VS2022) with CMake:
+```shell
+mkdir build && cd build
+cmake --DCMAKE_BUILD_TYPE=release ..
+cmake --build . --config Release
+```
+
+(`./build/xx/cpt.exe`) and (`./build/xx/pt.exe`) will be the executable files. To run the code, an example is:
+
+```
+cd build/Release
+./cpt.exe ../../scene/xml/bunny.xml
+```
+
+##### More info
+ 
 This repo currently **has no plan for OptiX**, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated in the experimental path tracer AdaPT. Check my github homepage for more information.
 
 The scalability of this repo might be worse than that of AdaPT, but it will improve over time, since I plan to migrate from Taichi Lang to a pure-CUDA code base. Currently, this repo supports:

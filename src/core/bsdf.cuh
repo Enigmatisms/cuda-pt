@@ -45,9 +45,9 @@ public:
 
     CPT_GPU virtual float pdf(const Interaction& it, const Vec3& out, const Vec3& in) const = 0;
 
-    CPT_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const = 0;
+    CPT_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const = 0;
 
-    CPT_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Vec2&& uv) const = 0;
+    CPT_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Vec2&& uv, bool is_radiance = true) const = 0;
 
     CPT_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {
         return (bsdf_flag & (int)flags) > 0;
@@ -71,7 +71,7 @@ public:
         return max(it.shading_norm.dot(out), 0.f) * M_1_Pi;
     }
 
-    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override {
         float cos_term = it.shading_norm.dot(out);
         float dot_in  = it.shading_norm.dot(in);
         float same_side = (dot_in > 0) ^ (cos_term > 0);     // should be positive or negative at the same time
@@ -79,7 +79,7 @@ public:
         return k_d * max(0.f, cos_term) * M_1_Pi * same_side;
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv, bool is_radiance = true) const override {
         auto local_ray = sample_cosine_hemisphere(std::move(uv), pdf);
         auto out_ray = delocalize_rotate(it.shading_norm, local_ray);
         // throughput *= f / pdf --> k_d * cos / pi / (pdf = cos / pi) == k_d
@@ -102,12 +102,12 @@ public:
         return 0.f;
     }
 
-    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override {
         auto ref_dir = in.advance(it.shading_norm, -2.f * in.dot(it.shading_norm)).normalized();
         return k_s * (out.dot(ref_dir) > 0.99999f);
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv, bool is_radiance = true) const override {
         // throughput *= f / pdf
         pdf = 1.f;
         throughput *= k_s * (indir.dot(it.shading_norm) < 0);
@@ -129,34 +129,38 @@ public:
         return 0.f;
     }
 
-    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false) const override {
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override {
         float dot_normal = in.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
         float ni = dot_normal < 0 ? 1.f : k_d.x();
         float nr = dot_normal < 0 ? k_d.x() : 1.f, cos_r2 = 0;
+        float eta2 = ni * ni / (nr * nr);
         Vec3 ret_dir = in.advance(it.shading_norm, -2.f * dot_normal).normalized(),
              refra_vec = snell_refraction(in, it.shading_norm, cos_r2, dot_normal, ni, nr);
         bool total_ref = is_total_reflection(dot_normal, ni, nr);
         nr = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
         bool reflc_dot = out.dot(ret_dir) > 0.99999f, refra_dot = out.dot(refra_vec) > 0.99999f;        // 0.9999  means 0.26 deg
-        return k_s * (reflc_dot | refra_dot);
+        
+        return k_s * (reflc_dot | refra_dot) * (refra_dot && is_radiance ? eta2 : 1.f);
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv, bool is_radiance = true) const override {
         float dot_normal = indir.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
         float ni = dot_normal < 0 ? 1.f : k_d.x();
         float nr = dot_normal < 0 ? k_d.x() : 1.f, cos_r2 = 0;
+        float eta2 = ni * ni / (nr * nr);
         Vec3 ret_dir = indir.advance(it.shading_norm, -2.f * dot_normal).normalized(),
              refra_vec = snell_refraction(indir, it.shading_norm, cos_r2, dot_normal, ni, nr);
         bool total_ref = is_total_reflection(dot_normal, ni, nr);
         nr = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
-        ret_dir = select(ret_dir, refra_vec, total_ref || uv.x() < nr);
-        pdf     = total_ref ? 1.f : (uv.x() < nr ? nr : 1.f - nr);
+        bool reflect = total_ref || uv.x() < nr;
+        ret_dir = select(ret_dir, refra_vec, reflect);
+        pdf     = total_ref ? 1.f : (reflect ? nr : 1.f - nr);
         // throughput *= f / pdf
-        throughput *= k_s;
+        throughput *= k_s * (is_radiance && !reflect ? eta2 : 1.f);
         return ret_dir;
     }
 
