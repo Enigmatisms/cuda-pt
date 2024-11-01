@@ -88,8 +88,8 @@ CPT_GPU bool occlusion_test_bvh(
                 end_idx += beg_idx;
                 for (int idx = beg_idx; idx < end_idx; idx ++) {
                     // if current ray intersects primitive at [idx], tasks will store it
-                    int2 obj_prim_idx = tex1Dfetch<int2>(bvh_leaves, idx);
-                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, obj_prim_idx.y, it_u, it_v, obj_prim_idx.x >= 0);
+                    int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
                     if (dist > EPSILON && dist < max_dist)
                         return false;
                 }
@@ -169,14 +169,14 @@ CPT_GPU float ray_intersect_bvh(
                 for (int idx = beg_idx; idx < end_idx; idx ++) {
                     // if current ray intersects primitive at [idx], tasks will store it
                     bool valid  = false;
-                    int2 obj_prim_idx = tex1Dfetch<int2>(bvh_leaves, idx);
-                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, obj_prim_idx.y, it_u, it_v, obj_prim_idx.x >= 0);
+                    int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
                     valid = dist > EPSILON && dist < min_dist;
                     min_dist = valid ? dist : min_dist;
                     prim_u   = valid ? it_u : prim_u;
                     prim_v   = valid ? it_v : prim_v;
-                    min_index = valid ? obj_prim_idx.y : min_index;
-                    min_obj_idx = valid ? obj_prim_idx.x : min_obj_idx;
+                    min_index = valid ? idx : min_index;
+                    min_obj_idx = valid ? obj_idx : min_obj_idx;
                 }
             }
             node_idx += increment;
@@ -223,6 +223,7 @@ CPT_KERNEL void render_pt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -246,9 +247,9 @@ CPT_KERNEL void render_pt_kernel(
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, object_id = 0;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    extern __shared__ float4 s_cached[];
 #ifdef RENDERER_USE_BVH
     // cache near root level BVH nodes for faster traversal
-    extern __shared__ float4 s_cached[];
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
@@ -319,6 +320,7 @@ CPT_KERNEL void render_pt_kernel(
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
+            emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
             Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
             shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sampler.next2D(), &verts, norms, emitter_id) - shadow_ray.o;
@@ -379,6 +381,7 @@ template CPT_KERNEL void render_pt_kernel<true>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -402,6 +405,7 @@ template CPT_KERNEL void render_pt_kernel<false>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,

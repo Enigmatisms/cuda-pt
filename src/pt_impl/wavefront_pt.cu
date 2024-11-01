@@ -239,6 +239,7 @@ CPT_KERNEL void nee_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr,         
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -282,6 +283,7 @@ CPT_KERNEL void nee_shader(
 
         Emitter* emitter = sample_emitter(sg, direct_pdf, num_emitter, emitter_id);
         emitter_id       = objects[emitter->get_obj_ref()].sample_emitter_primitive(sg.discrete1D(), direct_pdf);
+        emitter_id       = emitter_prims[emitter_id];
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
         // use ray.o to avoid creating another shadow_int variable
         Vec4 direct_comp(0, 0, 0, 1);

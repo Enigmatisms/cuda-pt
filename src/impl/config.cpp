@@ -18,10 +18,10 @@ RenderingConfig RenderingConfig::from_xml(const tinyxml2::XMLElement *sensor_nod
         else if (name == "cache_level") {
             int cache_level = 0;
             node->QueryIntAttribute("value", &cache_level);
-            if (cache_level <= 0 || cache_level > 6) {
-                std::cout << "Cache level clipped to [1, 6], originally: " << cache_level << std::endl;
+            if (cache_level < 0 || cache_level > 6) {
+                std::cout << "Cache level clipped to [0, 6], originally: " << cache_level << std::endl;
             }
-            config.cache_level = std::max(std::min(cache_level, 6), 1);
+            config.cache_level = std::max(std::min(cache_level, 6), 0);
         }
         node = node->NextSiblingElement("integer");
     }

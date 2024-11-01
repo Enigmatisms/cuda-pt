@@ -4,6 +4,7 @@
  * @author: Qianyue He
  * @date:   2024.9.6
 */
+#include <numeric>
 #include "core/scene.cuh"
 
 std::string getFolderPath(std::string filePath) {
@@ -482,17 +483,96 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
             obj.export_bound(world_min, world_max);
         }
         auto tp = std::chrono::system_clock::now();
+        std::vector<int> prim_idxs;     // won't need this if BVH is built
         bvh_build(
             verts_list[0], verts_list[1], verts_list[2], 
             objects, sphere_objs, world_min, world_max, 
-            bvh_leaves, node_fronts, node_backs, 
+            obj_idxs, prim_idxs, node_fronts, node_backs, 
             cache_fronts, cache_backs, config.cache_level
         );
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
         auto elapsed = static_cast<double>(count) / 1e3;
         printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
-        printf("[BVH] Total nodes: %lu, leaves: %lu\n", node_fronts.size(), bvh_leaves.size());
+        printf("[BVH] Total nodes: %lu, leaves: %lu\n", node_fronts.size(), prim_idxs.size());
+
+        tp = std::chrono::system_clock::now();
+        std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
+        std::array<Vec2Arr, 3> reorder_uvs;
+        std::vector<bool> reorder_sph_flags(num_prims);
+        for (int i = 0; i < 3; i++) {
+            Vec3Arr &reorder_vs = reorder_verts[i],
+                    &reorder_ns = reorder_norms[i];
+            Vec2Arr &reorder_uv = reorder_uvs[i];
+            const Vec3Arr &origin_vs = verts_list[i],
+                          &origin_ns = norms_list[i];
+            const Vec2Arr &origin_uv = uvs_list[i];
+            reorder_vs.resize(num_prims);
+            reorder_ns.resize(num_prims);
+            reorder_uv.resize(num_prims);
+
+            for (int j = 0; j < num_prims; j++) {
+                int index = prim_idxs[j];
+                reorder_vs[j] = origin_vs[index];
+                reorder_ns[j] = origin_ns[index];
+                reorder_uv[j] = origin_uv[index];
+            }
+        }
+
+        // build an emitter primitive index map for emitter sampling
+        // before the reordering logic, the emitter primitives are gauranteed
+        // to be stored continuously, so we don't need an extra index map
+        std::vector<std::vector<int>> eprim_idxs(num_emitters);
+        for (int i = 0; i < num_prims; i++) {
+            int index = prim_idxs[i], obj_idx = obj_idxs[i];
+            const auto& object = objects[obj_idx];
+            reorder_sph_flags[i] = sphere_flags[index];
+            if (object.is_emitter()) {
+                int emitter_idx = object.emitter_id - 1;
+                eprim_idxs[emitter_idx].push_back(i);
+            }
+        }
+
+        // The following code does the following job:
+        // BVH op will 'shuffle' the primitive order (sort of)
+        // So, the emitter object might not have continuous
+        // primitives stored in the memory. In order to uniformly sample
+        // all the primitives on a given emitter, we should store the linearized
+        // indices to the primitives, so the following code (1) linearize
+        // the indices and (2) recalculate the object.prim_offset, while
+        // the object.prim_cnt stays unchanged
+        std::vector<int> e_prim_offsets;
+        e_prim_offsets.push_back(0);
+        for (const auto& eprim_idx: eprim_idxs) {
+            e_prim_offsets.push_back(eprim_idx.size());
+            for (int index: eprim_idx) 
+                emitter_prims.push_back(index);
+        }
+        std::partial_sum(e_prim_offsets.begin(), e_prim_offsets.end(), e_prim_offsets.begin());
+        for (ObjInfo& obj: objects) {
+            if (!obj.is_emitter()) continue;
+            obj.prim_offset = e_prim_offsets[obj.emitter_id - 1];
+        }
+
+        uvs_list     = std::move(reorder_uvs);
+        verts_list   = std::move(reorder_verts);
+        norms_list   = std::move(reorder_norms);
+        sphere_flags = std::move(reorder_sph_flags);
+        dur = std::chrono::system_clock::now() - tp;
+        count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+        elapsed = static_cast<double>(count) / 1e3;
+        printf("[BVH] Vertex data reordering completed within %.3lf ms\n", elapsed);
+    } else {
+        // To be consistent with the BVH branch, we store the primitive indices 
+        prim_offset = 0;
+        for (ObjInfo& obj: objects) {
+            if (!obj.is_emitter()) continue;
+            for (int cnt = 0; cnt < obj.prim_num; cnt++) {
+                emitter_prims.push_back(obj.prim_offset + cnt);
+            }
+            obj.prim_offset = prim_offset;
+            prim_offset += obj.prim_num;
+        }
     }
 }
 

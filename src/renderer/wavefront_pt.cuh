@@ -295,6 +295,7 @@ CPT_KERNEL void nee_shader(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr,         
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,

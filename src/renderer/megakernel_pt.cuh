@@ -78,7 +78,8 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param verts         vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param norms         normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param uvs           uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
- * @param bvh_lveas     BVH leaf nodes (int2 texture, storing obj index and primtive index)
+ * @param emitter_prims Primitive indices for emission objects
+ * @param bvh_leaves    BVH leaf nodes (int texture, storing primitive to obj index map)
  * @param node_fronts   BVH nodes first float4 (128 bit)
  * @param node_backs    BVH nodes last float4 (128 bit)
  * @param cached_nodes  BVH cached nodes (in shared memory): first half: front float4, second half: back float4
@@ -100,6 +101,7 @@ CPT_KERNEL void render_pt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -132,6 +134,7 @@ CPT_KERNEL void render_lt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,

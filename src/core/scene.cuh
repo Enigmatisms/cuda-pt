@@ -43,7 +43,7 @@ public:
     std::vector<ObjInfo> objects;
     std::vector<Shape> shapes;
     std::vector<bool> sphere_flags;
-    std::vector<int2> bvh_leaves;
+    std::vector<int> obj_idxs;
     std::vector<float4> node_fronts;
     std::vector<float4> node_backs;
     std::vector<float4> cache_fronts;
@@ -52,6 +52,7 @@ public:
     std::array<Vec3Arr, 3> verts_list;
     std::array<Vec3Arr, 3> norms_list;
     std::array<Vec2Arr, 3> uvs_list;
+    std::vector<int> emitter_prims;
 
     RenderingConfig config;
 

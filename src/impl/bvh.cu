@@ -284,7 +284,8 @@ void bvh_build(
     const std::vector<ObjInfo>& objects,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
-    std::vector<int2>& bvh_nodes, 
+    std::vector<int>& obj_idxs, 
+    std::vector<int>& prim_idxs, 
     std::vector<float4>& node_fronts,
     std::vector<float4>& node_backs,
     std::vector<float4>& cached_fronts,
@@ -305,9 +306,11 @@ void bvh_build(
     recursive_linearize(root_node, node_fronts, node_backs, cached_fronts, cached_backs, 0, cache_max_level);
     printf("[BVH] Number of nodes to cache: %llu\n", cached_fronts.size());
 
-    bvh_nodes.reserve(bvh_infos.size());
+    obj_idxs.reserve(bvh_infos.size());
+    prim_idxs.reserve(bvh_infos.size());
     for (BVHInfo& bvh: bvh_infos) {
-        bvh_nodes.emplace_back(make_int2(bvh.bound.__bytes1, bvh.bound.__bytes2));
+        obj_idxs.emplace_back(bvh.bound.__bytes1);
+        prim_idxs.emplace_back(bvh.bound.__bytes2);
     }
     delete root_node;
 }

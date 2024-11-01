@@ -38,6 +38,7 @@ CPT_KERNEL void render_lt_kernel(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -69,6 +70,7 @@ CPT_KERNEL void render_lt_kernel(
 
         Vec2 extras = sampler.next2D();
         emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), le_pdf);
+        emitter_id = emitter_prims[emitter_id];
         throughput = emitter->sample_le(ray.o, ray.d, le_pdf, sampler.next2D(), &verts, norms, emitter_id, extras.x(), extras.y());
         throughput *= 1.f / (emitter_sample_pdf * le_pdf);
     }
@@ -190,6 +192,7 @@ template CPT_KERNEL void render_lt_kernel<true>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -215,6 +218,7 @@ template CPT_KERNEL void render_lt_kernel<false>(
     ConstAABBPtr aabbs,
     ConstNormPtr norms, 
     ConstUVPtr uvs,
+    ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,

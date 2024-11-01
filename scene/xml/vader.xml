@@ -1,0 +1,96 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
+<scene version="1.1">
+    <renderer type="pt"/>
+	<bool name="use_bvh" value="true"/>
+
+	<sensor type="perspective">
+        <float name="fov" value="47.073"/>
+		<integer name="sample_count" value="128"/>
+        <integer name="max_bounce" value="16"/>
+		<integer name="cache_level" value="4"/>
+        <bool name="vflip" value="true"/>
+        <bool name="hflip" value="true"/>
+		
+		<transform name="toWorld">
+			<!-- <lookat target="1.91502038 -0.18183145 5.9032135" origin="2.2166431 -0.20736285 6.85629892" up="0, 1, 0"/> -->
+			<lookat target="1.940958, 0.600080, 2.770657" origin="2.644605, 0.604483, 3.481193" up="-0.002901, 0.999990, -0.003324"/>
+		</transform>
+
+		<integer name="start_t" value="1"/>       
+        <integer name="end_t" value="100"/>       
+        <integer name="start_s" value="0"/>       
+        <integer name="end_s" value="100"/>   
+
+		<film type="film">
+			<integer name="width" value="768"/>
+			<integer name="height" value="768"/>
+			<integer name="specular_constraint" value="0"/>
+			<bool name="gamma_correction" value="false"/>
+			<bool name="bidirectional" value="false"/>
+			<float name="caustic_scaling" value="1.5"/>
+		</film>
+	</sensor>
+
+	<brdf type="lambertian" id="light">
+		<rgb name="k_d" value="#555555"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="floor">
+		<rgb name="k_d" value="#A29D9A"/>
+		<rgb name="k_g" value="1"/>
+		<rgb name="k_s" value="0"/>
+	</brdf>
+
+	<brdf type="det-refraction" id="glass">
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+    <brdf type="specular" id="mirror">
+		<rgb name="k_d" value="0"/>
+		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
+		<rgb name="k_g" value="0"/>
+	</brdf>
+
+	<emitter type="area" id="area1">
+		<rgb name="emission" value="50.0, 50.0, 50.0"/>
+		<rgb name="scaler" value="1.2"/>
+        <string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="area2">
+		<rgb name="emission" value="50.0, 50.0, 50.0"/>
+		<rgb name="scaler" value="0.6"/>
+        <string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/vader/vader-emitter.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area1"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/vader/vader-emitter2.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area2"/>
+	</shape>
+
+    <shape type="obj">
+		<string name="filename" value="../meshes/vader/vader.obj"/>
+		<ref type="material" id="floor"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/vader/big-floor.obj"/>
+		<ref type="material" id="floor"/>
+	</shape>
+
+</scene>

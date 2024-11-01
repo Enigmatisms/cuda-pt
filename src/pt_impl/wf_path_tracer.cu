@@ -86,8 +86,8 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
             // step5: NEE shader
             nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_leaves, 
-                node_fronts, node_backs, _cached_nodes, ray_idx_buffer, 
+                *verts, payload_buffer, obj_info, aabbs, norms, uvs, emitter_prims,
+                bvh_leaves, node_fronts, node_backs, _cached_nodes, ray_idx_buffer, 
                 stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
             );
 
@@ -184,8 +184,8 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
 
                 // step5: NEE shader
                 nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                    *verts, payload_buffer, obj_info, aabbs, norms, uvs, bvh_leaves, 
-                    node_fronts, node_backs, _cached_nodes, ray_idx_buffer, 
+                    *verts, payload_buffer, obj_info, aabbs, norms, uvs, emitter_prims,
+                    bvh_leaves, node_fronts, node_backs, _cached_nodes, ray_idx_buffer, 
                     stream_offset, num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
                 );
 
