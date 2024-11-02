@@ -196,6 +196,16 @@ public:
         );
     }
 
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
+    CPT_CPU_GPU_INLINE
+    Vec3 fmsub(VType1&& b, VType2&& c) const noexcept {
+        return Vec3(
+            fmaf(_data.x, b.x(), -c.x()),
+            fmaf(_data.y, b.y(), -c.y()),
+            fmaf(_data.z, b.z(), -c.z())
+        );
+    }
+
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE
     Vec3 maximize(VecType&& b) const noexcept { return Vec3(fmaxf(_data.x, b.x()), fmaxf(_data.y, b.y()), fmaxf(_data.z, b.z())); }
