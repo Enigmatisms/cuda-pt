@@ -44,11 +44,21 @@ public:
     CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
 
+    CPT_GPU_INLINE void intersect(const Ray& ray, float& t_near, int& valid) const {
+        auto t2s = ray.d.rcp(), o_div = ray.o * t2s;
+        auto t1s = mini.fmsub(t2s, o_div);
+        t2s      = maxi.fmsub(t2s, o_div);
+
+        float tmax = 0;
+        t1s.min_max(t2s, t_near, tmax);
+        valid = (tmax > t_near) && (tmax > 0);             // local memory access problem
+    }
+
+    // the old version which can have local memory access due to the separate compilation
     CPT_GPU_INLINE bool intersect(const Ray& ray, float& t_near) const {
         auto t2s = ray.d.rcp(), o_div = ray.o * t2s;
-        auto t1s = 
-         (mini - ray.o) * t2s;             // long scoreboard
-        t2s = (maxi - ray.o) * t2s;
+        auto t1s = mini.fmsub(t2s, o_div);
+        t2s      = maxi.fmsub(t2s, o_div);
 
         float tmax = 0;
         t1s.min_max(t2s, t_near, tmax);

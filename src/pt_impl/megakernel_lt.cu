@@ -84,6 +84,7 @@ CPT_KERNEL void render_lt_kernel(
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
+    int* s_flags = reinterpret_cast<int*>(&s_cached[cache_num * 2]);
     __syncthreads();
 #else
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
@@ -99,7 +100,7 @@ CPT_KERNEL void render_lt_kernel(
 #ifdef RENDERER_USE_BVH
         min_dist = ray_intersect_bvh(
             ray, bvh_leaves, node_fronts, node_backs, 
-            s_cached, verts, min_index, object_id, 
+            s_cached, verts, s_flags[tid], min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
 #else   // RENDERER_USE_BVH
@@ -144,7 +145,7 @@ CPT_KERNEL void render_lt_kernel(
                 dev_cam.get_splat_pixel(shadow_ray.d, pixel_x, pixel_y) && 
 #ifdef RENDERER_USE_BVH
             occlusion_test_bvh(shadow_ray, bvh_leaves, node_fronts, node_backs, 
-                        s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
+                        s_cached, verts, s_flags[tid], node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH

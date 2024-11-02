@@ -41,6 +41,7 @@ CPT_GPU bool occlusion_test_bvh(
     const cudaTextureObject_t node_backs,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
+    int& s_flags,
     const int node_num,
     const int cache_num,
     float max_dist
@@ -57,6 +58,7 @@ CPT_GPU float ray_intersect_bvh(
     const cudaTextureObject_t node_backs,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
+    int& s_flags,
     int& min_index,
     int& min_obj_idx,
     float& prim_u,

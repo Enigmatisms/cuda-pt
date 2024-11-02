@@ -212,6 +212,7 @@ public:
 #undef INDEX_Y
 #undef INDEX_Z
 
+using UIntBuffer   = uint32_t* const __restrict__;
 using ConstF4Ptr   = const float4* const __restrict__;
 using ConstVertPtr = const PrecomputedArray* const __restrict__;
 using ConstNormPtr = const ArrayType<Vec3>* const __restrict__;

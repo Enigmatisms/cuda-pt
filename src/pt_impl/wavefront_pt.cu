@@ -67,9 +67,10 @@ CPT_KERNEL void raygen_primary_hit_shader(
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
+    int* s_flags = reinterpret_cast<int*>(&s_cached[cache_num * 2]);
     __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, node_fronts, 
-                    node_backs, s_cached, verts, min_index, 
+                    node_backs, s_cached, verts, s_flags[tid], min_index, 
                     min_object_id, prim_u, prim_v, node_num, cache_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
@@ -174,9 +175,10 @@ CPT_KERNEL void closesthit_shader(
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
+    int* s_flags = reinterpret_cast<int*>(&s_cached[cache_num * 2]);
     __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, node_fronts, 
-                    node_backs, s_cached, verts, min_index, 
+                    node_backs, s_cached, verts, s_flags[tid], min_index, 
                     min_object_id, prim_u, prim_v, node_num, cache_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
@@ -263,6 +265,7 @@ CPT_KERNEL void nee_shader(
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
+    int* s_flags = reinterpret_cast<int*>(&s_cached[cache_num * 2]);
     __syncthreads();
 #endif  // RENDERER_USE_BVH
     
@@ -295,7 +298,7 @@ CPT_KERNEL void nee_shader(
         if (emitter != c_emitter[0] && 
 #ifdef RENDERER_USE_BVH
             occlusion_test_bvh(shadow_ray, bvh_leaves, node_fronts, node_backs, 
-                    s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
+                    s_cached, verts, s_flags[tid], node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH

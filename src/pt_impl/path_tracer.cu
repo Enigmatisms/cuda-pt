@@ -75,7 +75,8 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
 ) {
     printf("Rendering starts.\n");
     TicToc _timer("render_pt_kernel()", num_iter);
-    size_t cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
+    size_t s_flag_size = 1 << (SHFL_THREAD_X + SHFL_THREAD_Y - 2);      // (1 << 4) * (1 << 4) / 4 -> 1 << (4 + 4 - 2)
+    size_t cached_size = std::max(2 * num_cache * sizeof(float4) + s_flag_size * sizeof(int), sizeof(float4));
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
@@ -95,7 +96,8 @@ CPT_CPU void PathTracer::render_online(
     int max_depth
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
-    size_t _num_bytes = 0, cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
+    size_t s_flag_size = 1 << (SHFL_THREAD_X + SHFL_THREAD_Y - 2);      // (1 << 4) * (1 << 4) / 4 -> 1 << (4 + 4 - 2)
+    size_t _num_bytes = 0, cached_size = std::max(2 * num_cache * sizeof(float4) + s_flag_size * sizeof(int), sizeof(float4));
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
     accum_cnt ++;
