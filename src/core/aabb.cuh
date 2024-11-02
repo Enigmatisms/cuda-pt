@@ -45,12 +45,13 @@ public:
     CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
 
     CPT_GPU_INLINE bool intersect(const Ray& ray, float& t_near) const {
-        auto t2s = ray.d.rcp();
-        auto t1s = (mini - ray.o) * t2s;             // long scoreboard
+        auto t2s = ray.d.rcp(), o_div = ray.o * t2s;
+        auto t1s = 
+         (mini - ray.o) * t2s;             // long scoreboard
         t2s = (maxi - ray.o) * t2s;
 
-        t_near     = t1s.minimize(t2s).max_elem();
-        float tmax = t1s.maximize(t2s).min_elem();
+        float tmax = 0;
+        t1s.min_max(t2s, t_near, tmax);
         return (tmax > t_near) && (tmax > 0);             // local memory access problem
     }
 

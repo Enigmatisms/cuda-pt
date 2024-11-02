@@ -123,6 +123,16 @@ public:
         _data.z *= b.z();
     }
 
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
+    CPT_CPU_GPU_INLINE
+    Vec3 fma(VType1&& b, VType2&& c) noexcept {
+        return Vec3(
+            fmaf(_data.x, b.x(), c.x()),
+            fmaf(_data.y, b.y(), c.y()),
+            fmaf(_data.z, b.z(), c.z())
+        );
+    }
+
     CPT_CPU_GPU_INLINE void fill(float v) noexcept {
         _data = make_float3(v, v, v);
     }
@@ -205,6 +215,22 @@ public:
 
     CPT_CPU_GPU_INLINE
     float min_elem() const noexcept { return fminf(_data.x, fminf(_data.y, _data.z)); }
+
+    // Get the minimum value of the maximized vector, and the maximum value of the minized vector
+    CPT_GPU_INLINE
+    void min_max(const Vec3& input, float& mini, float& maxi) const noexcept { 
+        float min_x = _data.x < input.x() ? _data.x   : input.x();
+        float max_x = _data.x < input.x() ? input.x() : _data.x;
+
+        float min_y = _data.y < input.y() ? _data.y   : input.y();
+        float max_y = _data.y < input.y() ? input.y() : _data.y;
+
+        float min_z = _data.z < input.z() ? _data.z   : input.z();
+        float max_z = _data.z < input.z() ? input.z() : _data.z;
+
+        mini = fmaxf(min_x, fmaxf(min_y, min_z));
+        maxi = fminf(max_x, fminf(max_y, max_z));
+    }
 
     CPT_GPU_INLINE Vec3 rcp() const noexcept { return Vec3(__frcp_rn(_data.x), __frcp_rn(_data.y), __frcp_rn(_data.z)); }
 

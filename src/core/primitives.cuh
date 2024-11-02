@@ -64,7 +64,7 @@ private:
             fmaf(-ray.d.x(), v1.y(), v1.x() * ray.d.y())
         );
 
-        float inv_det = 1.f / (temp1.x() * v1.x() + temp2.x() * v2.x() - anchor.w() * ray.d.x());
+        float inv_det = __frcp_rn(temp1.x() * v1.x() + temp2.x() * v2.x() - anchor.w() * ray.d.x());
         Vec3 solution(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (anchor.w() * v.x() + v1.w() * v.y() + v2.w() * v.z()) * inv_det);
 
         bool valid    = (solution.x() > 0 && solution.y() > 0 && solution.x() + solution.y() < 1 &&
