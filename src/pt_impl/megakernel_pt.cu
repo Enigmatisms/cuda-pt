@@ -48,7 +48,6 @@ CPT_GPU bool occlusion_test_bvh(
     const cudaTextureObject_t node_backs,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
-    int& s_flag,
     const int node_num,
     const int cache_num,
     float max_dist
@@ -62,8 +61,7 @@ CPT_GPU bool occlusion_test_bvh(
             cached_nodes[node_idx],
             cached_nodes[node_idx + cache_num]
         );
-        node.aabb.intersect(ray, aabb_tmin, s_flag);
-        bool intersect_node = (s_flag > 0) && aabb_tmin < max_dist;
+        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
         node_idx += increment;
@@ -81,17 +79,16 @@ CPT_GPU bool occlusion_test_bvh(
                 tex1Dfetch<float4>(node_backs, node_idx)
             );
 
-            node.aabb.intersect(ray, aabb_tmin, s_flag);
-            bool intersect_node = (s_flag > 0) && aabb_tmin < max_dist;
+            bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
             // Strange `increment`, huh? See the comments in function `ray_intersect_bvh`
             int increment = (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
             if (intersect_node && end_idx > 0) {
                 end_idx += beg_idx;
-                for (s_flag = beg_idx; s_flag < end_idx; s_flag ++) {
+                for (int idx = beg_idx; idx < end_idx; idx ++) {
                     // if current ray intersects primitive at [idx], tasks will store it
-                    int idx = s_flag, obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+                    int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
                     float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
                     if (dist > EPSILON && dist < max_dist)
                         return false;
@@ -126,7 +123,6 @@ CPT_GPU float ray_intersect_bvh(
     const cudaTextureObject_t node_backs,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
-    int& s_flag,       // special flag tag stored in shared mem to avoid local memory access
     int& min_index,
     int& min_obj_idx,
     float& prim_u,
@@ -144,8 +140,7 @@ CPT_GPU float ray_intersect_bvh(
             cached_nodes[node_idx],
             cached_nodes[node_idx + cache_num]
         );
-        node.aabb.intersect(ray, aabb_tmin, s_flag);
-        bool intersect_node = (s_flag > 0) && aabb_tmin < min_dist;
+        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         int increment = (!intersect_node) * all_offset + (intersect_node && all_offset != 1) * 1;
 
@@ -161,8 +156,7 @@ CPT_GPU float ray_intersect_bvh(
         while (node_idx < node_num) {
             const LinearNode node(tex1Dfetch<float4>(node_fronts, node_idx), 
                             tex1Dfetch<float4>(node_backs, node_idx));
-            node.aabb.intersect(ray, aabb_tmin, s_flag);
-            bool intersect_node = (s_flag > 0) && aabb_tmin < min_dist;
+            bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
             // The logic here: end_idx is reuse, if end_idx < 0, meaning that the current node is
@@ -172,10 +166,10 @@ CPT_GPU float ray_intersect_bvh(
             int increment = (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
             if (intersect_node && end_idx > 0) {
                 end_idx += beg_idx;
-                for (s_flag = beg_idx; s_flag < end_idx; s_flag ++) {
+                for (int idx = beg_idx; idx < end_idx; idx ++) {
                     // if current ray intersects primitive at [idx], tasks will store it
                     bool valid  = false;
-                    int idx = s_flag, obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+                    int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
                     float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
                     valid = dist > EPSILON && dist < min_dist;
                     min_dist = valid ? dist : min_dist;
@@ -259,7 +253,6 @@ CPT_KERNEL void render_pt_kernel(
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
-    int* s_flags = reinterpret_cast<int*>(&s_cached[cache_num * 2]);
     Ray ray = dev_cam.generate_ray(px, py, sampler);
     __syncthreads();
 #else
@@ -280,7 +273,7 @@ CPT_KERNEL void render_pt_kernel(
 #ifdef RENDERER_USE_BVH
         min_dist = ray_intersect_bvh(
             ray, bvh_leaves, node_fronts, node_backs, 
-            s_cached, verts, s_flags[tid], min_index, object_id, 
+            s_cached, verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
 #else   // RENDERER_USE_BVH
@@ -339,7 +332,7 @@ CPT_KERNEL void render_pt_kernel(
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
                 occlusion_test_bvh(shadow_ray, bvh_leaves, node_fronts, node_backs, 
-                        s_cached, verts, s_flags[tid], node_num, cache_num, emit_len_mis - EPSILON)
+                        s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
                 occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
