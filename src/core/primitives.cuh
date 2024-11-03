@@ -106,25 +106,23 @@ public:
         bool is_mesh = true
     ) {
 #ifdef TRIANGLE_ONLY
-        float diff_x = 1.f - u, diff_y = 1.f - v;
         return Interaction((
-            norms.x(index) * diff_x * diff_y + \
-            norms.y(index) * u * diff_y + \
-            norms.z(index) * v * diff_x).normalized(),
-            uvs.x(index) * diff_x * diff_y + \
-            uvs.y(index) * u * diff_y + \
-            uvs.z(index) * v * diff_x
+            norms.x(index) * (1.f - u - v) + \
+            norms.y(index) * u + \
+            norms.z(index) * v).normalized(),
+            uvs.x(index) * (1.f - u - v) + \
+            uvs.y(index) * u + \
+            uvs.z(index) * v
         );
 #else
         if (is_mesh) {
-            float diff_x = 1.f - u, diff_y = 1.f - v;
             return Interaction((
-                norms.x(index) * diff_x * diff_y + \
-                norms.y(index) * u * diff_y + \
-                norms.z(index) * v * diff_x).normalized(),
-                uvs.x(index) * diff_x * diff_y + \
-                uvs.y(index) * u * diff_y + \
-                uvs.z(index) * v * diff_x
+                norms.x(index) * (1.f - u - v) + \
+                norms.y(index) * u + \
+                norms.z(index) * v).normalized(),
+                uvs.x(index) * (1.f - u - v) + \
+                uvs.y(index) * u + \
+                uvs.z(index) * v
             );
         } else {
             return Interaction(

@@ -37,7 +37,7 @@ The scalability of this repo might be worse than that of AdaPT, but it will impr
 - [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is not as fast as megakernel PT due to the simplicity of the test scenes (and maybe, coalesced GMEM access problems, being working on this).
 - [x] GPU BVH: A stackless GPU surface area heuristic BVH. The current implementation is not optimal (since the ordering of left-child and right child is left unaccounted for, and there is no 'look-back' op), but fast enough. Profiling for this part is not every complete. 1D CUDA texture is used to store the BVH nodes, for better cache performance.
 
-|Depth Renderer|Unidirection PT|
+|Unidirectional PT|Unidirectional PT|
 |:--:|:--:|
 |![](assets/depth-render.png)|![](assets/whiskey.png)|
 |![](assets/render-balls.png)|![](assets/render-bvh-50.png)|
