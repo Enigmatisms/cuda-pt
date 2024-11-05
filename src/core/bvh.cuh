@@ -54,13 +54,15 @@ public:
         if (rchild != nullptr) delete rchild;
     }
 
-    CPT_CPU_GPU int base() const { return bound.base(); }
-    CPT_CPU_GPU int& base() { return bound.base(); }
+    bool is_leaf() const { return lchild == nullptr; }
 
-    CPT_CPU_GPU int prim_num() const { return bound.prim_cnt(); }
-    CPT_CPU_GPU int& prim_num() { return bound.prim_cnt(); }
+    int base() const { return bound.base(); }
+    int& base() { return bound.base(); }
 
-    CPT_CPU void get_float4(float4& node_f, float4& node_b) const {
+    int prim_num() const { return bound.prim_cnt(); }
+    int& prim_num() { return bound.prim_cnt(); }
+
+    void get_float4(float4& node_f, float4& node_b) const {
         node_f.x = bound.mini.x();
         node_f.y = bound.mini.y();
         node_f.z = bound.mini.z();
@@ -107,7 +109,7 @@ public:
     CPT_CPU_GPU LinearNode(): aabb(1e5f, -1e5f, 0, 0) {}
 
     // linear nodes are initialized during DFS binary tree traversal
-    CPT_CPU_GPU LinearNode(const BVHNode *const bvh): aabb(bvh->bound.mini, bvh->bound.maxi, bvh->base(), bvh->prim_num()) {};       
+    CPT_CPU LinearNode(const BVHNode *const bvh): aabb(bvh->bound.mini, bvh->bound.maxi, bvh->base(), bvh->prim_num()) {};       
 
     CPT_GPU LinearNode(float4 p1, float4 p2) {
         FLOAT4(aabb.mini) = p1;

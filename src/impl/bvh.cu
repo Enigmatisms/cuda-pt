@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <numeric>
 #include <array>
-#include "core/bvh.cuh"
+#include "core/bvh_opt.cuh"
 
 struct PrimMappingInfo {
     int obj_id;
@@ -34,7 +34,7 @@ struct AxisBins {
 static constexpr int num_bins = 12;
 static constexpr int max_node_prim = 4;
 static constexpr int sah_split_threshold = 8;
-static constexpr float traverse_cost = 0.25;
+static constexpr float traverse_cost = 0.3;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const {
     int _base = base(), _prim_num = prim_num();
@@ -294,6 +294,7 @@ void bvh_build(
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
     create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos);
+    printf("[BVH] Traversed BVH SAH cost: %.7f\n", calculate_cost(root_node, traverse_cost));
     cache_max_level = std::min((int)std::floor(std::log2(node_num)), cache_max_level);
     nodes.reserve(node_num << 1);
     cached_fronts.reserve(1 << cache_max_level);

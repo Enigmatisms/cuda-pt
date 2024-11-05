@@ -157,7 +157,7 @@ CPT_GPU float ray_intersect_bvh(
             node.get_range(beg_idx, end_idx);
             // The logic here: end_idx is reuse, if end_idx < 0, meaning that the current node is
             // non-leaf, non-leaf node stores (-all_offset) as end_idx, so to skip the node and its children
-            // -end_idx will be the offset. While for leaf node, 1 will be the offset, and `POSITIVE` end_idx
+            // -end_idx will be the offset. While for leaf node, 1 will be the increment offset, and `POSITIVE` end_idx
             // is stored. So the following for loop can naturally run (while for non-leaf, naturally skip)
             int increment = (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
             if (intersect_node && end_idx > 0) {
