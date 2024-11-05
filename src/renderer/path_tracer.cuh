@@ -17,8 +17,7 @@ static constexpr int SEED_SCALER = 11451;       //-4!
 class PathTracer: public TracerBase {
 private:
     int* _obj_idxs;
-    float4* _node_fronts;
-    float4* _node_backs;
+    float4* _nodes;
 protected:
     using TracerBase::aabbs;
     using TracerBase::verts;
@@ -36,8 +35,7 @@ protected:
     int num_emitter;
 
     cudaTextureObject_t bvh_leaves;
-    cudaTextureObject_t node_fronts;
-    cudaTextureObject_t node_backs;
+    cudaTextureObject_t nodes;
     float4* _cached_nodes;
 
     DeviceCamera* camera;

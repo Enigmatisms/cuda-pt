@@ -37,8 +37,7 @@ CPT_GPU bool occlusion_test(
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     const int node_num,
@@ -53,8 +52,7 @@ CPT_GPU bool occlusion_test_bvh(
 CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     int& min_index,
@@ -80,8 +78,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param uvs           uv coordinates, Packed 3 Half2 and 1 int for padding (sum up to 128 bits)
  * @param emitter_prims Primitive indices for emission objects
  * @param bvh_leaves    BVH leaf nodes (int texture, storing primitive to obj index map)
- * @param node_fronts   BVH nodes first float4 (128 bit)
- * @param node_backs    BVH nodes last float4 (128 bit)
+ * @param nodes         BVH nodes (32 Bytes)
  * @param cached_nodes  BVH cached nodes (in shared memory): first half: front float4, second half: back float4
  * @param image         GPU image buffer
  * @param output_buffer Possible visualization buffer
@@ -103,8 +100,7 @@ CPT_KERNEL void render_pt_kernel(
     ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* __restrict__ output_buffer,
@@ -136,8 +132,7 @@ CPT_KERNEL void render_lt_kernel(
     ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* __restrict__ output_buffer,

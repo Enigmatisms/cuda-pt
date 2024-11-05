@@ -24,16 +24,16 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
         if (bidirectional) {
             render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
                 *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
-                bvh_leaves, node_fronts, node_backs, _cached_nodes, 
-                image, output_buffer, num_prims, num_objs, num_emitter, 
+                bvh_leaves, nodes, _cached_nodes, image, 
+                output_buffer, num_prims, num_objs, num_emitter, 
                 accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         render_lt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
             *camera, verts, norms, uvs, obj_info, aabbs,
-            emitter_prims, bvh_leaves, node_fronts, node_backs,
-            _cached_nodes, image, nullptr, num_prims, num_objs, num_emitter, 
+            emitter_prims, bvh_leaves, nodes, _cached_nodes, 
+            image, nullptr, num_prims, num_objs, num_emitter, 
             i * SEED_SCALER, max_depth, num_nodes, spec_constraint
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -54,16 +54,16 @@ CPT_CPU void LightTracer::render_online(
     if (bidirectional) {
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
             *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
-            bvh_leaves, node_fronts, node_backs, _cached_nodes,
-            image, output_buffer, num_prims, num_objs, num_emitter, 
+            bvh_leaves, nodes, _cached_nodes, image, 
+            output_buffer, num_prims, num_objs, num_emitter, 
             accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
     render_lt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
         *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
-        bvh_leaves, node_fronts, node_backs, _cached_nodes, 
-        image, output_buffer, num_prims, num_objs, num_emitter, 
+        bvh_leaves, nodes, _cached_nodes, image, 
+        output_buffer, num_prims, num_objs, num_emitter, 
         accum_cnt * SEED_SCALER, max_depth, num_nodes, 
         accum_cnt, num_cache, spec_constraint, caustic_scaling
     ); 

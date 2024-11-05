@@ -32,8 +32,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
@@ -71,9 +70,9 @@ CPT_KERNEL void raygen_primary_hit_shader(
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
-    ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, node_fronts, 
-                    node_backs, s_cached, verts, min_index, 
-                    min_object_id, prim_u, prim_v, node_num, cache_num, MAX_DIST);
+    ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
+                    s_cached, verts, min_index, min_object_id, 
+                    prim_u, prim_v, node_num, cache_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
@@ -146,8 +145,7 @@ CPT_KERNEL void closesthit_shader(
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
@@ -178,9 +176,9 @@ CPT_KERNEL void closesthit_shader(
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
-    ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, node_fronts, 
-                    node_backs, s_cached, verts, min_index, 
-                    min_object_id, prim_u, prim_v, node_num, cache_num, MAX_DIST);
+    ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
+                    s_cached, verts, min_index, min_object_id, 
+                    prim_u, prim_v, node_num, cache_num, MAX_DIST);
 #else   // RENDERER_USE_BVH
     const int tid = threadIdx.x + threadIdx.y * blockDim.x;
     __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
@@ -244,8 +242,7 @@ CPT_KERNEL void nee_shader(
     ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
@@ -298,7 +295,7 @@ CPT_KERNEL void nee_shader(
         // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
         if (emitter != c_emitter[0] && 
 #ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, bvh_leaves, node_fronts, node_backs, 
+            occlusion_test_bvh(shadow_ray, bvh_leaves, nodes, 
                     s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)

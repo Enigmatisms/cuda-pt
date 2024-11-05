@@ -487,14 +487,16 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         bvh_build(
             verts_list[0], verts_list[1], verts_list[2], 
             objects, sphere_objs, world_min, world_max, 
-            obj_idxs, prim_idxs, node_fronts, node_backs, 
+            obj_idxs, prim_idxs, nodes, 
             cache_fronts, cache_backs, config.cache_level
         );
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
         auto elapsed = static_cast<double>(count) / 1e3;
         printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
-        printf("[BVH] Total nodes: %lu, leaves: %lu\n", node_fronts.size(), prim_idxs.size());
+        // The nodes.size is actually twice the number of nodes
+        // since Each BVH node will be separated to two float4, nodes will store two float4 for each node
+        printf("[BVH] Total nodes: %lu, leaves: %lu\n", nodes.size() >> 1, prim_idxs.size());
 
         tp = std::chrono::system_clock::now();
         std::array<Vec3Arr, 3> reorder_verts, reorder_norms;

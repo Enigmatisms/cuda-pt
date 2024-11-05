@@ -44,8 +44,7 @@ public:
     std::vector<Shape> shapes;
     std::vector<bool> sphere_flags;
     std::vector<int> obj_idxs;
-    std::vector<float4> node_fronts;
-    std::vector<float4> node_backs;
+    std::vector<float4> nodes;
     std::vector<float4> cache_fronts;
     std::vector<float4> cache_backs;
 
@@ -71,7 +70,7 @@ public:
     void export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ConstBuffer<PackedHalf2>& uvs) const;
 
     bool bvh_available() const noexcept {
-        return !node_fronts.empty();
+        return !nodes.empty();
     }
 
     void print() const noexcept;

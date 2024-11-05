@@ -44,8 +44,7 @@ CPT_GPU bool occlusion_test(
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     const int node_num,
@@ -74,10 +73,8 @@ CPT_GPU bool occlusion_test_bvh(
     // no intersected nodes, for the near root level, meaning that the path is not occluded
     if (valid_cache) {
         while (node_idx < node_num) {
-            const LinearNode node(
-                tex1Dfetch<float4>(node_fronts, node_idx), 
-                tex1Dfetch<float4>(node_backs, node_idx)
-            );
+            const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
+                            tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
 
             bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
             int beg_idx = 0, end_idx = 0;
@@ -119,8 +116,7 @@ CPT_GPU bool occlusion_test_bvh(
 CPT_GPU float ray_intersect_bvh(
     const Ray& ray,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     int& min_index,
@@ -154,8 +150,8 @@ CPT_GPU float ray_intersect_bvh(
     if (valid_cache) {
         // There can be much control flow divergence, not good
         while (node_idx < node_num) {
-            const LinearNode node(tex1Dfetch<float4>(node_fronts, node_idx), 
-                            tex1Dfetch<float4>(node_backs, node_idx));
+            const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
+                            tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
             bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
@@ -200,21 +196,6 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
     return c_emitter[emit_id * uint32_t(no_sample == 0 || num > 1)];
 }
 
-/**
- * @brief this version does not employ object-level culling
- * we use shared memory to accelerate rendering instead, for object-level culling
- * shared memory might not be easy to use, since the memory granularity will be
- * too difficult to control
- * 
- * @param objects   object encapsulation
- * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param uvs       uv coordinates, Packed 3 Half2 and 1 int for padding (sum up to 128 bits)
- * @param camera    GPU camera model (constant memory)
- * @param image     GPU image buffer
- * @param num_prims number of primitives (to be intersected with)
- * @param max_depth maximum allowed bounce
-*/
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
@@ -225,8 +206,7 @@ CPT_KERNEL void render_pt_kernel(
     ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* __restrict__ output_buffer,
@@ -272,8 +252,8 @@ CPT_KERNEL void render_pt_kernel(
         // ============= step 1: ray intersection =================
 #ifdef RENDERER_USE_BVH
         min_dist = ray_intersect_bvh(
-            ray, bvh_leaves, node_fronts, node_backs, 
-            s_cached, verts, min_index, object_id, 
+            ray, bvh_leaves, nodes, s_cached, 
+            verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
 #else   // RENDERER_USE_BVH
@@ -331,8 +311,8 @@ CPT_KERNEL void render_pt_kernel(
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
 #ifdef RENDERER_USE_BVH
-                occlusion_test_bvh(shadow_ray, bvh_leaves, node_fronts, node_backs, 
-                        s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
+                occlusion_test_bvh(shadow_ray, bvh_leaves, nodes, s_cached, 
+                            verts, node_num, cache_num, emit_len_mis - EPSILON)
 #else   // RENDERER_USE_BVH
                 occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
@@ -382,8 +362,7 @@ template CPT_KERNEL void render_pt_kernel<true>(
     ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* __restrict__ output_buffer,
@@ -406,8 +385,7 @@ template CPT_KERNEL void render_pt_kernel<false>(
     ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
-    const cudaTextureObject_t node_fronts,
-    const cudaTextureObject_t node_backs,
+    const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* __restrict__ output_buffer,

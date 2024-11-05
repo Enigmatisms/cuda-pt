@@ -20,16 +20,16 @@ PathTracer::PathTracer(
 #ifdef RENDERER_USE_BVH
     if (scene.bvh_available()) {
         size_t num_bvh  = scene.obj_idxs.size();
-        num_nodes = scene.node_fronts.size();
+        // Comment in case I forget: scene.nodes combines nodes_front and nodes_back
+        // So the size of nodes is exactly twice the number of nodes 
+        num_nodes = scene.nodes.size() >> 1;
         num_cache = scene.cache_fronts.size();
         CUDA_CHECK_RETURN(cudaMalloc(&_obj_idxs,  num_bvh * sizeof(int)));
-        CUDA_CHECK_RETURN(cudaMalloc(&_node_fronts, num_nodes * sizeof(float4)));
-        CUDA_CHECK_RETURN(cudaMalloc(&_node_backs,  num_nodes * sizeof(float4)));
+        CUDA_CHECK_RETURN(cudaMalloc(&_nodes, 2 * num_nodes * sizeof(float4)));
         CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, 2 * num_cache * sizeof(float4)));
         // note that BVH leaf node only stores the primitive to object mapping
         PathTracer::createTexture1D<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs, bvh_leaves);
-        PathTracer::createTexture1D<float4>(scene.node_fronts.data(), num_nodes, _node_fronts, node_fronts);
-        PathTracer::createTexture1D<float4>(scene.node_backs.data(),  num_nodes, _node_backs,  node_backs);
+        PathTracer::createTexture1D<float4>(scene.nodes.data(), 2 * num_nodes, _nodes, nodes);
         CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, scene.cache_fronts.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
         CUDA_CHECK_RETURN(cudaMemcpy(&_cached_nodes[num_cache], scene.cache_backs.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
     } else {
@@ -55,11 +55,9 @@ PathTracer::~PathTracer() {
     CUDA_CHECK_RETURN(cudaFree(emitter_prims));
 #ifdef RENDERER_USE_BVH
     CUDA_CHECK_RETURN(cudaDestroyTextureObject(bvh_leaves));
-    CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_fronts));
-    CUDA_CHECK_RETURN(cudaDestroyTextureObject(node_backs));
+    CUDA_CHECK_RETURN(cudaDestroyTextureObject(nodes));
     CUDA_CHECK_RETURN(cudaFree(_obj_idxs));
-    CUDA_CHECK_RETURN(cudaFree(_node_fronts));
-    CUDA_CHECK_RETURN(cudaFree(_node_backs));
+    CUDA_CHECK_RETURN(cudaFree(_nodes));
     CUDA_CHECK_RETURN(cudaFree(_cached_nodes));
 #endif  // RENDERER_USE_BVH
     printf("[Renderer] Path Tracer Object destroyed.\n");
@@ -76,8 +74,8 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-            *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
-            bvh_leaves, node_fronts, node_backs, _cached_nodes,
+            *camera, verts, norms, uvs, obj_info, aabbs, 
+            emitter_prims, bvh_leaves, nodes, _cached_nodes,
             image, output_buffer, num_prims, num_objs, num_emitter, 
             i * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache
         ); 
@@ -97,8 +95,8 @@ CPT_CPU void PathTracer::render_online(
 
     accum_cnt ++;
     render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-        *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims, 
-        bvh_leaves, node_fronts, node_backs, _cached_nodes,
+        *camera, verts, norms, uvs, obj_info, aabbs, 
+        emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, output_buffer, num_prims, num_objs, num_emitter, 
         accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache
     ); 

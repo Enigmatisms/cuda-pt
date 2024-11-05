@@ -121,10 +121,6 @@ public:
         beg = aabb.base();
         end = aabb.prim_cnt();
     }
-
-    CPT_GPU_INLINE void export_aabb(LinearNode& node) const noexcept {
-        node.aabb.copy_from(aabb);
-    }
 };
 
 void bvh_build(
@@ -136,8 +132,7 @@ void bvh_build(
     const Vec3& world_min, const Vec3& world_max,
     std::vector<int>& obj_idxs, 
     std::vector<int>& prim_idxs, 
-    std::vector<float4>& node_fronts,
-    std::vector<float4>& node_backs,
+    std::vector<float4>& nodes,
     std::vector<float4>& cache_fronts,
     std::vector<float4>& cache_backs,
     int& max_cache_level

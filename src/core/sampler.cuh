@@ -62,6 +62,12 @@ private:
     RandState rand_state;
 };
 
+/**
+ * Small sampler is my own encapsulation of the CUDA random sampler
+ * curand implements the random number generator in the exact same way
+ * Yet, I think this sampler requires way too many state variables
+ * So it is not used anymore, please refer to TinySampler
+ */
 class SmallSampler {
 struct RandState {
     unsigned int v[4], d[2];
@@ -137,7 +143,7 @@ private:
 };
 
 #ifdef USE_CUDA_SAMPLER
-using Sampler = CudaSampler;
+using Sampler = SmallSampler;
 #else
 using Sampler = TinySampler;
 #endif // USE_CUDA_SAMPLER
