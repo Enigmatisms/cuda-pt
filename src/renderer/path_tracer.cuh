@@ -49,23 +49,7 @@ protected:
     int* emitter_prims;
     int accum_cnt;
 public:
-    /**
-     * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
-     * @param camera    GPU camera model (constant memory)
-     * @param image     GPU image buffer
-     * 
-     * @todo: initialize emitters
-     * @todo: initialize objects
-    */
-    PathTracer(
-        const Scene& scene,
-        const PrecomputedArray& _verts,
-        const ArrayType<Vec3>& _norms, 
-        const ConstBuffer<PackedHalf2>& _uvs,
-        int num_emitter
-    );
+    PathTracer(const Scene& scene);
 
     virtual ~PathTracer();
 

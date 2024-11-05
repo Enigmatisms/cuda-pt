@@ -72,8 +72,10 @@ public:
     }
 
     CPT_CPU void destroy() {
-        size = 0;
-        CUDA_CHECK_RETURN(cudaFree(data));
+        if (size > 0) {
+            size = 0;
+            CUDA_CHECK_RETURN(cudaFree(data));
+        }
     }
 
     // GPU implements SoA constructor very differently
@@ -131,8 +133,10 @@ public:
     }
 
     CPT_CPU void destroy() {
-        size = 0;
-        CUDA_CHECK_RETURN(cudaFree(data));
+        if (size > 0) {
+            size = 0;
+            CUDA_CHECK_RETURN(cudaFree(data));
+        }
     }
 
     // GPU implements SoA constructor very differently

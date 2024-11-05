@@ -12,13 +12,9 @@ static constexpr int SHFL_THREAD_X = 4;     // blockDim.x: 1 << SHFL_THREAD_X, b
 static constexpr int SHFL_THREAD_Y = 3;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
 PathTracer::PathTracer(
-    const Scene& scene,
-    const PrecomputedArray& _verts,
-    const ArrayType<Vec3>& _norms, 
-    const ConstBuffer<PackedHalf2>& _uvs,
-    int num_emitter
-): TracerBase(scene.shapes, _verts, _norms, _uvs, scene.config.width, scene.config.height), 
-    num_objs(scene.objects.size()), num_nodes(-1), num_emitter(num_emitter), 
+    const Scene& scene
+): TracerBase(scene), 
+    num_objs(scene.objects.size()), num_nodes(-1), num_emitter(scene.num_emitters), 
     cuda_texture_id(0), pbo_id(0), output_buffer(nullptr), accum_cnt(0)
 {
 #ifdef RENDERER_USE_BVH
@@ -80,7 +76,7 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-            *camera, *verts, obj_info, aabbs, norms, uvs, emitter_prims,
+            *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
             bvh_leaves, node_fronts, node_backs, _cached_nodes,
             image, output_buffer, num_prims, num_objs, num_emitter, 
             i * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache
@@ -101,7 +97,7 @@ CPT_CPU void PathTracer::render_online(
 
     accum_cnt ++;
     render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-        *camera, *verts, obj_info, aabbs, norms, uvs, emitter_prims, 
+        *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims, 
         bvh_leaves, node_fronts, node_backs, _cached_nodes,
         image, output_buffer, num_prims, num_objs, num_emitter, 
         accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache

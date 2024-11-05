@@ -36,7 +36,7 @@
 #include "renderer/path_tracer.cuh"
 
 // When doing profiling, this can be set as 1, otherwise, 8 is optimal
-static constexpr int NUM_STREAM = 1;
+static constexpr int NUM_STREAM = 16;
 
 class WavefrontPathTracer: public PathTracer {
 private:
@@ -50,24 +50,7 @@ private:
     const int num_patches;
     const dim3 GRID, BLOCK;
 public:
-    /**
-     * @param shapes    shape information (for ray intersection)
-     * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
-     * @param camera    GPU camera model (constant memory)
-     * @param image     GPU image buffer
-     * 
-     * @todo: initialize emitters
-     * @todo: initialize objects
-    */
-    WavefrontPathTracer(
-        const Scene& scene,
-        const PrecomputedArray& _verts,
-        const ArrayType<Vec3>& _norms, 
-        const ConstBuffer<PackedHalf2>& _uvs,
-        int num_emitter
-    );
+    WavefrontPathTracer(const Scene& scene);
 
     ~WavefrontPathTracer() {
         payload_buffer.destroy();

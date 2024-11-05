@@ -96,11 +96,11 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
-    const PrecomputedArray& verts,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
@@ -129,11 +129,11 @@ CPT_KERNEL void render_pt_kernel(
 template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
-    const PrecomputedArray& verts,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,

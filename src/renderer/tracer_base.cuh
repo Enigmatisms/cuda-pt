@@ -4,21 +4,16 @@
  * @author: Qianyue He
 */
 #pragma once
-#include "core/aos.cuh"
-#include "core/bsdf.cuh"
-#include "core/object.cuh"
+#include "core/scene.cuh"
 #include "core/host_device.cuh"
-#include "core/camera_model.cuh"
-#include "core/shapes.cuh"
-#include "core/shapes.cuh"
 #include "renderer/base_pt.cuh"
 
 class TracerBase {
 protected:
     AABB* aabbs;
-    PrecomputedArray* verts;
-    ArrayType<Vec3>* norms; 
-    ConstBuffer<PackedHalf2>* uvs;
+    PrecomputedArray verts;
+    ArrayType<Vec3> norms; 
+    ConstBuffer<PackedHalf2> uvs;
     DeviceImage image;
     int num_prims;
     int w;
@@ -33,32 +28,29 @@ public:
      * @param image     GPU image buffer
     */
     TracerBase(
-        const std::vector<Shape>& _shapes,
-        const PrecomputedArray& _verts,
-        const ArrayType<Vec3>& _norms, 
-        const ConstBuffer<PackedHalf2>& _uvs,
-        int width, int height
-    ): image(width, height), num_prims(_shapes.size()), w(width), h(height)
+        const Scene& scene
+    ): verts(scene.num_prims), norms(scene.num_prims), uvs(scene.num_prims),
+       image(scene.config.width, scene.config.height), 
+       num_prims(scene.num_prims), 
+       w(scene.config.width), 
+       h(scene.config.height)
     {
+        scene.export_prims(verts, norms, uvs);
         CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
-        ShapeAABBVisitor aabb_visitor(_verts, aabbs);
+        ShapeAABBVisitor aabb_visitor(verts, aabbs);
         // calculate AABB for each primitive
         for (int i = 0; i < num_prims; i++) {
             aabb_visitor.set_index(i);
-            std::visit(aabb_visitor, _shapes[i]);
+            std::visit(aabb_visitor, scene.shapes[i]);
         }
-
-        verts = to_gpu(_verts);
-        norms = to_gpu(_norms);
-        uvs   = to_gpu(_uvs);
     }
 
     ~TracerBase() {
         CUDA_CHECK_RETURN(cudaFree(aabbs));
-        CUDA_CHECK_RETURN(cudaFree(verts));
-        CUDA_CHECK_RETURN(cudaFree(norms));
-        CUDA_CHECK_RETURN(cudaFree(uvs));
         image.destroy();
+        verts.destroy();
+        norms.destroy();
+        uvs.destroy();
     }
 
     CPT_CPU virtual std::vector<uint8_t> render(

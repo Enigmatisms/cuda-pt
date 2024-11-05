@@ -34,7 +34,7 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
-// #define NO_STREAM_COMPACTION
+#define NO_STREAM_COMPACTION
 // #define STABLE_PARTITION
 #define NO_RAY_SORTING
 #define FUSED_MISS_SHADER
@@ -199,12 +199,12 @@ public:
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
-    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -224,12 +224,12 @@ CPT_KERNEL void raygen_primary_hit_shader(
  * and we need the index to port the 
 */ 
 CPT_KERNEL void closesthit_shader(
-    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -247,12 +247,12 @@ CPT_KERNEL void closesthit_shader(
  * we sample a light source then start ray intersection test
 */
 CPT_KERNEL void nee_shader(
-    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr,         
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
@@ -274,9 +274,9 @@ CPT_KERNEL void nee_shader(
 */
 CPT_KERNEL void bsdf_local_shader(
     PayLoadBufferSoA payloads,
+    const ConstBuffer<PackedHalf2>,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
-    ConstUVPtr,         
+    ConstAABBPtr aabbs,    
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims, 
@@ -298,6 +298,7 @@ CPT_KERNEL void bsdf_local_shader(
 CPT_KERNEL void miss_shader(
     PayLoadBufferSoA payloads,
     const IndexBuffer idx_buffer,
+    const int bounce,
     int stream_offset,
     int num_valid
 );

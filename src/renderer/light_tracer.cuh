@@ -18,25 +18,16 @@ private:
     float caustic_scaling;
 public:
     /**
-     * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
-     * @param camera    GPU camera model (constant memory)
-     * @param image     GPU image buffer
-     * 
-     * @todo: initialize emitters
-     * @todo: initialize objects
+     * @param spec_constraint number of specular bounces required for a path to be recorded
+     * @param bidir           If true, the backward path tracing will be interleaved
+     * @param caustics_scale  scale of the light tracing (to make the light tracing result brighter or darker)
     */
     LightTracer(
         const Scene& scene,
-        const PrecomputedArray& _verts,
-        const ArrayType<Vec3>& _norms, 
-        const ConstBuffer<PackedHalf2>& _uvs,
-        int num_emitter,
         int spec_constraint,
         bool bidir = false,
         float caustics_scale = 1.f
-    ): PathTracer(scene, _verts, _norms, _uvs, num_emitter), 
+    ): PathTracer(scene), 
         spec_constraint(spec_constraint), 
         bidirectional(bidir),
         caustic_scaling(caustics_scale) {}

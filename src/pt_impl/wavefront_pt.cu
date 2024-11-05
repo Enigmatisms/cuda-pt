@@ -11,6 +11,9 @@ namespace {
     using ConstPayLoadBuffer = const PayLoadBuffer;
 }
 
+static constexpr int RR_BOUNCE = 2;
+static constexpr float RR_THRESHOLD = 0.1;
+
 /**
  * @brief ray generation kernel 
  * note that, all the kernels are called per stream, each stream can have multiple blocks (since it is a kernel call)
@@ -22,12 +25,12 @@ namespace {
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
-    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -114,7 +117,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+        it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     // compress two int (to int16) to a uint32_t 
@@ -136,12 +139,12 @@ CPT_KERNEL void raygen_primary_hit_shader(
  * and we need the index to port the 
 */ 
 CPT_KERNEL void closesthit_shader(
-    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
     const cudaTextureObject_t node_backs,
@@ -221,7 +224,7 @@ CPT_KERNEL void closesthit_shader(
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+        it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     payloads.set_ray(px, py, ray);
@@ -233,12 +236,12 @@ CPT_KERNEL void closesthit_shader(
  * we sample a light source then start ray intersection test
 */
 CPT_KERNEL void nee_shader(
-    const PrecomputedArray& verts,
     PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr,         
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
@@ -288,7 +291,7 @@ CPT_KERNEL void nee_shader(
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
         // use ray.o to avoid creating another shadow_int variable
         Vec4 direct_comp(0, 0, 0, 1);
-        shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sg.next2D(), &verts, norms, emitter_id) - shadow_ray.o;
+        shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sg.next2D(), verts, norms, emitter_id) - shadow_ray.o;
 
         float emit_len_mis = shadow_ray.d.length();
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
@@ -318,9 +321,9 @@ CPT_KERNEL void nee_shader(
 */
 CPT_KERNEL void bsdf_local_shader(
     PayLoadBufferSoA payloads,
+    const ConstBuffer<PackedHalf2>,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstUVPtr,         
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims, 
@@ -385,6 +388,7 @@ CPT_KERNEL void bsdf_local_shader(
 CPT_KERNEL void miss_shader(
     PayLoadBufferSoA payloads,
     const IndexBuffer idx_buffer,
+    const int bounce,
     int stream_offset,
     int num_valid
 ) {
@@ -395,11 +399,21 @@ CPT_KERNEL void miss_shader(
     if (block_index < num_valid) {
         uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
-        Vec4 thp = payloads.thp(px, py);
-        if ((!payloads.is_hit(px, py)) || thp.max_elem() <= 1e-5f) {
+        Vec4 thp        = payloads.thp(px, py);
+        Sampler sampler = payloads.get_sampler(px, py);
+        // using BVH enables the usage of RR, since there is no within-loop synchronization
+        float max_value = thp.max_elem_3d();
+
+        if (bounce >= RR_BOUNCE && max_value < RR_THRESHOLD) {
+            max_value = (sampler.next1D() > max_value || max_value < THP_EPS) ? 0 : max_value;
+            thp *= max_value == 0 ? 0 : (1.f / max_value);
+        }
+        if ((!payloads.is_hit(px, py)) || max_value <= 1e-5f) {
             // TODO: process no-hit ray, environment map lighting
             payloads.set_active(px, py, false);
         }
+        payloads.thp(px, py) = thp;
+        payloads.set_sampler(px, py, sampler);
     }
 }
 

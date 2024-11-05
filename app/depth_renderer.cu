@@ -14,14 +14,7 @@ int main(int argc, char** argv) {
     std::cout << "Loading scenes from '" << xml_path << "'\n";
     Scene scene(xml_path);
 
-    // scene setup
-    PrecomputedArray vert_data(scene.num_prims);
-    ArrayType<Vec3> norm_data(scene.num_prims);
-    ConstBuffer<PackedHalf2> uvs_data(scene.num_prims);
-
-    scene.export_prims(vert_data, norm_data, uvs_data);
-    
-    DepthTracer dtracer(scene.shapes, vert_data, norm_data, uvs_data, *scene.cam, scene.config.width, scene.config.height);
+    DepthTracer dtracer(scene);
     auto bytes_buffer = dtracer.render(16);
 
     std::string file_name = "depth-render.png";
@@ -34,8 +27,5 @@ int main(int argc, char** argv) {
 
     printf("image saved to `%s`\n", file_name.c_str());
 
-    vert_data.destroy();
-    norm_data.destroy();
-    uvs_data.destroy();
     return 0;
 }

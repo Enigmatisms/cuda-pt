@@ -16,13 +16,6 @@ int main(int argc, char** argv) {
     std::cout << "[SCENE] Loading scenes from '" << xml_path << "'\n";
     Scene scene(xml_path);
 
-    // scene setup
-    PrecomputedArray vert_data(scene.num_prims);
-    ArrayType<Vec3> norm_data(scene.num_prims);
-    ConstBuffer<PackedHalf2> uvs_data(scene.num_prims);
-
-    scene.export_prims(vert_data, norm_data, uvs_data);
-
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
@@ -30,18 +23,18 @@ int main(int argc, char** argv) {
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {
-            renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters); 
+            renderer = std::make_unique<PathTracer>(scene); 
             std::cout << "\tMegakernel Path Tracing.\n";
             break;
         }
         case RendererType::WavefrontPT: {
-            renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters);
+            renderer = std::make_unique<WavefrontPathTracer>(scene);
             std::cout << "\tWavefront Path Tracing.\n";
             break;
         }
         case RendererType::MegeKernelLT: {
-            renderer = std::make_unique<LightTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters, 
-                scene.config.spec_constraint, scene.config.bidirectional, scene.config.caustic_scaling); 
+            renderer = std::make_unique<LightTracer>(scene, scene.config.spec_constraint, 
+                    scene.config.bidirectional, scene.config.caustic_scaling); 
             if (scene.config.bidirectional)
                 std::cout << "\tNaive Bidirectional Megakernel Light Tracing.\n";
             else
@@ -71,10 +64,5 @@ int main(int argc, char** argv) {
 
     printf("[IMAGE] Image saved to `%s`\n", file_name.c_str());
     scene.print();
-
-    vert_data.destroy();
-    norm_data.destroy();
-    uvs_data.destroy();
-
     return 0;
 }

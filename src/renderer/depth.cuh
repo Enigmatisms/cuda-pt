@@ -19,10 +19,10 @@
 */
 CPT_KERNEL static void render_depth_kernel(
     const DeviceCamera& dev_cam,
-    const PrecomputedArray& verts,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     DeviceImage image,
     int num_prims,
     int max_bounce = 1/* max depth, useless for depth renderer, 1 anyway */
@@ -82,24 +82,9 @@ using TracerBase::h;
 
 DeviceCamera* camera;
 public:
-    /**
-     * @param shapes    shape information (for AABB generation)
-     * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
-     * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
-     * @param camera    GPU camera model (constant memory)
-     * @param image     GPU image buffer
-    */
-    DepthTracer(
-        const std::vector<Shape>& _shapes,
-        const PrecomputedArray& _verts,
-        const ArrayType<Vec3>& _norms, 
-        const ConstBuffer<PackedHalf2>& _uvs,
-        const DeviceCamera& cam,
-        int width, int height
-    ): TracerBase(_shapes, _verts, _norms, _uvs, width, height) {
+    DepthTracer(const Scene& scene): TracerBase(scene) {
         CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
-        CUDA_CHECK_RETURN(cudaMemcpy(camera, &cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemcpy(camera, &scene.cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
     }
 
     ~DepthTracer() {
@@ -116,7 +101,7 @@ public:
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_depth_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                    *camera, *verts, aabbs, norms, uvs, image, num_prims, max_depth); 
+                    *camera, verts, norms, uvs, aabbs, image, num_prims, max_depth); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         return image.export_cpu(1.f / (15.f * num_iter), gamma_correction);

@@ -33,11 +33,11 @@ static constexpr float RR_THRESHOLD = 0.1;
 template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
-    const PrecomputedArray& verts,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
@@ -71,7 +71,7 @@ CPT_KERNEL void render_lt_kernel(
         Vec2 extras = sampler.next2D();
         emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), le_pdf);
         emitter_id = emitter_prims[emitter_id];
-        throughput = emitter->sample_le(ray.o, ray.d, le_pdf, sampler.next2D(), &verts, norms, emitter_id, extras.x(), extras.y());
+        throughput = emitter->sample_le(ray.o, ray.d, le_pdf, sampler.next2D(), verts, norms, emitter_id, extras.x(), extras.y());
         throughput *= 1.f / (emitter_sample_pdf * le_pdf);
     }
 
@@ -125,7 +125,7 @@ CPT_KERNEL void render_lt_kernel(
 #endif  // RENDERER_USE_BVH
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
-            auto it = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
+            auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
             object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
 
             // ============= step 3: next event estimation ================
@@ -186,11 +186,11 @@ CPT_KERNEL void render_lt_kernel(
 
 template CPT_KERNEL void render_lt_kernel<true>(
     const DeviceCamera& dev_cam, 
-    const PrecomputedArray& verts,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
@@ -212,11 +212,11 @@ template CPT_KERNEL void render_lt_kernel<true>(
 
 template CPT_KERNEL void render_lt_kernel<false>(
     const DeviceCamera& dev_cam, 
-    const PrecomputedArray& verts,
+    const PrecomputedArray verts,
+    const ArrayType<Vec3> norms, 
+    const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstAABBPtr aabbs,
-    ConstNormPtr norms, 
-    ConstUVPtr uvs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t node_fronts,
