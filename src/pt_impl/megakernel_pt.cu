@@ -54,13 +54,14 @@ CPT_GPU bool occlusion_test_bvh(
     bool valid_cache = false;
     int node_idx     = 0;
     float aabb_tmin  = 0;
+    Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
     // There can be much control flow divergence, not good
     while (node_idx < cache_num && !valid_cache) {
         const LinearNode node(
             cached_nodes[node_idx],
             cached_nodes[node_idx + cache_num]
         );
-        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
+        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < max_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
         node_idx += increment;
@@ -76,7 +77,7 @@ CPT_GPU bool occlusion_test_bvh(
             const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
                             tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
 
-            bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist;
+            bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < max_dist;
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
             // Strange `increment`, huh? See the comments in function `ray_intersect_bvh`
@@ -131,12 +132,13 @@ CPT_GPU float ray_intersect_bvh(
     int node_idx     = 0;
     float aabb_tmin  = 0;
     // There can be much control flow divergence, not good
+    Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
     while (node_idx < cache_num && !valid_cache) {
         const LinearNode node(
             cached_nodes[node_idx],
             cached_nodes[node_idx + cache_num]
         );
-        bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         int increment = (!intersect_node) * all_offset + (intersect_node && all_offset != 1) * 1;
 
@@ -152,7 +154,7 @@ CPT_GPU float ray_intersect_bvh(
         while (node_idx < node_num) {
             const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
                             tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
-            bool intersect_node = node.aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+            bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
             int beg_idx = 0, end_idx = 0;
             node.get_range(beg_idx, end_idx);
             // The logic here: end_idx is reuse, if end_idx < 0, meaning that the current node is

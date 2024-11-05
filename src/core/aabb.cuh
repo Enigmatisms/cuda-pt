@@ -54,6 +54,15 @@ public:
         return (tmax > t_near) && (tmax > 0);             // local memory access problem
     }
 
+    CPT_GPU bool intersect(Vec3 inv_d, Vec3 o_div, float& t_near) const {
+        auto t1s = mini.fmsub(inv_d, o_div);
+        inv_d    = maxi.fmsub(inv_d, o_div);
+
+        float tmax = 0;
+        t1s.min_max(inv_d, t_near, tmax);
+        return (tmax > t_near) && (tmax > 0);             // local memory access problem
+    }
+
     CONDITION_TEMPLATE(AABBType, AABB)
     CPT_CPU_GPU AABB& operator += (AABBType&& _aabb) noexcept {
         mini = mini.minimize(_aabb.mini);
