@@ -29,6 +29,9 @@
 #define CONDITION_TEMPLATE(VecType, TargetType) \
     template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>>>
 
+#define CONDITION_TEMPLATE_DEFAULT(VecType, TargetType) \
+    template<typename VecType, std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>, int> = 0>
+
 #define CONDITION_TEMPLATE_2(T1, T2, TargetType) \
     template<typename T1, typename T2, typename = \
         std::enable_if_t<\
@@ -41,6 +44,14 @@
         std::enable_if_t<\
            std::is_same_v<std::decay_t<T1>, TargetType1> && \
            std::is_same_v<std::decay_t<T2>, TargetType2> \
+        >>
+
+#define CONDITION_TEMPLATE_SEP_3(T1, T2, T3, TargetType1, TargetType2, TargetType3) \
+    template<typename T1, typename T2, typename T3, typename = \
+        std::enable_if_t<\
+           std::is_same_v<std::decay_t<T1>, TargetType1> && \
+           std::is_same_v<std::decay_t<T2>, TargetType2> && \
+           std::is_same_v<std::decay_t<T3>, TargetType3> \
         >>
 
 #ifndef NO_CUDA

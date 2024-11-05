@@ -98,7 +98,7 @@ public:
     CPT_GPU_INLINE static Interaction get_interaction(
         const PrecomputedArray& verts, 
         const ArrayType<Vec3>& norms, 
-        const ArrayType<Vec2>& uvs, 
+        const ConstBuffer<PackedHalf2>& uvs, 
         Vec3&& hit_pos,
         float u,
         float v,
@@ -110,9 +110,7 @@ public:
             norms.x(index) * (1.f - u - v) + \
             norms.y(index) * u + \
             norms.z(index) * v).normalized(),
-            uvs.x(index) * (1.f - u - v) + \
-            uvs.y(index) * u + \
-            uvs.z(index) * v
+            uvs[index].lerp(u, v)
         );
 #else
         if (is_mesh) {
@@ -120,13 +118,11 @@ public:
                 norms.x(index) * (1.f - u - v) + \
                 norms.y(index) * u + \
                 norms.z(index) * v).normalized(),
-                uvs.x(index) * (1.f - u - v) + \
-                uvs.y(index) * u + \
-                uvs.z(index) * v
+                uvs[index].lerp(u, v)
             );
         } else {
             return Interaction(
-                (hit_pos - verts.x_clipped(index)).normalized(), Vec2(0, 0)
+                (hit_pos - verts.x_clipped(index)).normalized(), Vec2Half(0, 0)
             );
         }
 #endif

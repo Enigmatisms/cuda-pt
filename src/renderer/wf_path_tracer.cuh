@@ -36,7 +36,7 @@
 #include "renderer/path_tracer.cuh"
 
 // When doing profiling, this can be set as 1, otherwise, 8 is optimal
-static constexpr int NUM_STREAM = 8;
+static constexpr int NUM_STREAM = 1;
 
 class WavefrontPathTracer: public PathTracer {
 private:
@@ -65,7 +65,7 @@ public:
         const Scene& scene,
         const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
-        const ArrayType<Vec2>& _uvs,
+        const ConstBuffer<PackedHalf2>& _uvs,
         int num_emitter
     );
 
@@ -73,6 +73,7 @@ public:
         payload_buffer.destroy();
         for (int i = 0; i < NUM_STREAM; i++)
             cudaStreamDestroy(streams[i]);
+        printf("[Renderer] Wavefront Path Tracer Object destroyed.\n");
     }
     
     CPT_CPU std::vector<uint8_t> render(

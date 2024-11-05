@@ -18,7 +18,7 @@ protected:
     AABB* aabbs;
     PrecomputedArray* verts;
     ArrayType<Vec3>* norms; 
-    ArrayType<Vec2>* uvs;
+    ConstBuffer<PackedHalf2>* uvs;
     DeviceImage image;
     int num_prims;
     int w;
@@ -36,7 +36,7 @@ public:
         const std::vector<Shape>& _shapes,
         const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
-        const ArrayType<Vec2>& _uvs,
+        const ConstBuffer<PackedHalf2>& _uvs,
         int width, int height
     ): image(width, height), num_prims(_shapes.size()), w(width), h(height)
     {

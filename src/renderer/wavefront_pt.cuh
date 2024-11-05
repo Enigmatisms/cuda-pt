@@ -26,6 +26,7 @@
 #include <thrust/partition.h>
 #include <thrust/device_vector.h>
 #include <thrust/execution_policy.h>
+#include <cuda_fp16.h>
 #include "core/progress.h"
 #include "core/emitter.cuh"
 #include "core/object.cuh"
@@ -34,7 +35,7 @@
 #include "renderer/path_tracer.cuh"
 
 // #define NO_STREAM_COMPACTION
-#define STABLE_PARTITION
+// #define STABLE_PARTITION
 #define NO_RAY_SORTING
 #define FUSED_MISS_SHADER
 
@@ -55,27 +56,6 @@ namespace {
 
     using IndexBuffer = uint32_t* const __restrict__;
 }
-
-union PDFInteraction {
-    struct {
-        float pdf;
-        Interaction it;
-    } v;
-    struct {
-        float4 p1;
-        float2 p2;
-    } data;
-
-    CPT_CPU_GPU PDFInteraction() {}
-    CPT_CPU_GPU_INLINE PDFInteraction(float pdf) { v.pdf = pdf; }
-
-    CPT_CPU_GPU_INLINE Interaction& it() { return this->v.it; }    
-    CPT_CPU_GPU_INLINE const Interaction& it_const() const { return this->v.it; }    
-
-    CPT_CPU_GPU_INLINE float& pdf() { return this->v.pdf; }    
-    CPT_CPU_GPU_INLINE float pdf_v() const { return this->v.pdf; }    
-
-};
 
 class PayLoadBufferSoA {
 public:
@@ -107,28 +87,15 @@ public:
             return (ray_tag & 0x20000000) > 0;
         }
     };
-private:
-    template <typename VectorType>
-    struct Length4Data {
-        VectorType data;
-        CPT_CPU_GPU_INLINE Length4Data() {}
-    };
-    template <typename VectorType>
-    struct Length2Data {
-        VectorType data;
-        CPT_CPU_GPU_INLINE Length2Data() {}
-    };
 public:
-
     Vec4* thps;             // direct malloc
     Vec4* Ls;               // direct malloc
     
     RayOrigin* ray_os;
     RayDirTag* ray_ds;
-    Length4Data<uint4>* samp_heads;
-    Length2Data<uint2>* samp_tails;
-    Length4Data<float4>* its_heads;
-    Length2Data<float2>* its_tails;
+    Interaction* interactions;
+    uint2* samplers;
+    float* pdfs;
 
     int    _width;       
 
@@ -141,10 +108,9 @@ public:
         CUDA_CHECK_RETURN(cudaMalloc(&Ls,   sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMalloc(&ray_os, sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMalloc(&ray_ds, sizeof(Vec4) * full_size));
-        CUDA_CHECK_RETURN(cudaMalloc(&samp_heads, sizeof(Length4Data<uint4>) * full_size));
-        CUDA_CHECK_RETURN(cudaMalloc(&its_heads,  sizeof(Length4Data<float4>) * full_size));
-        CUDA_CHECK_RETURN(cudaMalloc(&samp_tails, sizeof(Length2Data<uint2>) * full_size));
-        CUDA_CHECK_RETURN(cudaMalloc(&its_tails,  sizeof(Length2Data<float2>) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&interactions, sizeof(uint4) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&samplers, sizeof(uint2) * full_size));
+        CUDA_CHECK_RETURN(cudaMalloc(&pdfs, sizeof(float) * full_size));
     }
 
     CPT_CPU_GPU_INLINE Vec4& thp(int col, int row) { return thps[col + row * _width]; }
@@ -183,39 +149,32 @@ public:
     }
 
     CPT_CPU_GPU_INLINE Sampler get_sampler(int col, int row) const { 
-        static_assert(std::is_same_v<Sampler, TinySampler>);
         Sampler samp;
         int index = col + row * _width;
-        UINT4(samp._get_v_front()) = samp_heads[index].data;
-        UINT2(samp._get_d_front()) = samp_tails[index].data;
+        UINT2(samp._get_d_front()) = samplers[index];
         return samp; 
     }
 
-    CONDITION_TEMPLATE(SamplerType, TinySampler)
+    CONDITION_TEMPLATE(SamplerType, Sampler)
     CPT_CPU_GPU_INLINE void set_sampler(int col, int row, SamplerType&& sampler) { 
         int index = col + row * _width;
-        samp_heads[index].data = CONST_UINT4(sampler._get_v_front());
-        samp_tails[index].data = CONST_UINT2(sampler._get_d_front());
+        samplers[index] = CONST_UINT2(sampler._get_d_front());
     }
 
-    CPT_CPU_GPU_INLINE PDFInteraction get_interaction(int col, int row) const { 
-        PDFInteraction it;
-        int index = col + row * _width;
-        it.data.p1 = its_heads[index].data;
-        it.data.p2 = its_tails[index].data;
-        return it; 
+    CPT_CPU_GPU_INLINE Interaction interaction(int col, int row) const { 
+        return interactions[col + row * _width]; 
     }
 
-    CONDITION_TEMPLATE(ItType, PDFInteraction)
-    CPT_CPU_GPU_INLINE void set_interaction(int col, int row, ItType&& it) { 
-        int index = col + row * _width;
-        its_heads[index].data = it.data.p1;
-        its_tails[index].data = it.data.p2;
+    CPT_CPU_GPU_INLINE Interaction& interaction(int col, int row) { 
+        return interactions[col + row * _width]; 
     }
 
-    CPT_CPU_GPU_INLINE void set_it_head(int col, int row, float4 p1) { 
-        int index = col + row * _width;
-        its_heads[index].data = p1;
+    CPT_CPU_GPU_INLINE float pdf(int col, int row) const { 
+        return pdfs[col + row * _width]; 
+    }
+
+    CPT_CPU_GPU_INLINE float& pdf(int col, int row) { 
+        return pdfs[col + row * _width]; 
     }
 
     CPT_CPU void destroy() {
@@ -223,10 +182,9 @@ public:
         CUDA_CHECK_RETURN(cudaFree(Ls));
         CUDA_CHECK_RETURN(cudaFree(ray_os));
         CUDA_CHECK_RETURN(cudaFree(ray_ds));
-        CUDA_CHECK_RETURN(cudaFree(samp_heads));
-        CUDA_CHECK_RETURN(cudaFree(samp_tails));
-        CUDA_CHECK_RETURN(cudaFree(its_heads));
-        CUDA_CHECK_RETURN(cudaFree(its_tails));
+        CUDA_CHECK_RETURN(cudaFree(interactions));
+        CUDA_CHECK_RETURN(cudaFree(samplers));
+        CUDA_CHECK_RETURN(cudaFree(pdfs));
     }
 };
 

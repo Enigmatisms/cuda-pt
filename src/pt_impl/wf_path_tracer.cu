@@ -12,7 +12,7 @@ WavefrontPathTracer::WavefrontPathTracer(
         const Scene& scene,
         const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
-        const ArrayType<Vec2>& _uvs,
+        const ConstBuffer<PackedHalf2>& _uvs,
         int num_emitter
 ): PathTracer(scene, _verts, _norms, _uvs, num_emitter),
     x_patches(w / PATCH_X), y_patches(h / PATCH_Y),

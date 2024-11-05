@@ -48,7 +48,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     Sampler sg = Sampler(px + sx + (py + sy) * width, iter * SEED_SCALER);
     Ray ray = dev_cam.generate_ray(px + sx, py + sy, sg.next2D());
 
-    PDFInteraction it;            // To local register
+    Interaction it;                          // To local register
 
     int min_index = -1, min_object_id = 0;   // round up
     ray.hit_t = MAX_DIST;
@@ -114,7 +114,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it.it() = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+        it = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     // compress two int (to int16) to a uint32_t 
@@ -123,7 +123,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     // note that we only have stream_number * payloadbuffers
     // so row indices won't be offset by sy, col indices should only be offseted by stream_offset
     payloads.set_ray(px + buffer_xoffset, py, ray);
-    payloads.set_interaction(px + buffer_xoffset, py, it);
+    payloads.interaction(px + buffer_xoffset, py) = it;
      
     // px has already encoded stream_offset (stream_id * PATCH_X)
 }
@@ -159,8 +159,8 @@ CPT_KERNEL void closesthit_shader(
 
     uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
     py >>= 16;
-    Ray           ray = payloads.get_ray(px, py);
-    PDFInteraction it = payloads.get_interaction(px, py);            // To local register
+    Ray        ray = payloads.get_ray(px, py);
+    Interaction it = payloads.interaction(px, py);                           // To local register
     ray.reset();
     
     float prim_u = 0, prim_v = 0;
@@ -221,11 +221,11 @@ CPT_KERNEL void closesthit_shader(
 #ifdef FUSED_MISS_SHADER
         ray.set_active(true);
 #endif   // FUSED_MISS_SHADER
-        it.it() = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+        it = Primitive::get_interaction(verts, *norms, *uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
     }
 
     payloads.set_ray(px, py, ray);
-    payloads.set_interaction(px, py, it);
+    payloads.interaction(px, py) = it;
 }
 
 /***
@@ -272,18 +272,19 @@ CPT_KERNEL void nee_shader(
         Vec4 thp = payloads.thp(px, py);
         Ray ray  = payloads.get_ray(px, py);
         Sampler sg = payloads.get_sampler(px, py);
-        const PDFInteraction it = payloads.get_interaction(px, py);
+        const Interaction it = payloads.interaction(px, py);
 
         auto aabb_front = CONST_FLOAT4(aabbs[ray.hit_id()].mini);       // hope to have coalesced access
-        int object_id   = __float_as_int(aabb_front.w),
-            material_id = objects[object_id].bsdf_id,
+        int object_id   = __float_as_int(aabb_front.w);
+        object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
+        int material_id = objects[object_id].bsdf_id,
             emitter_id  = objects[object_id].emitter_id;
 
         float direct_pdf = 1;
 
         Emitter* emitter = sample_emitter(sg, direct_pdf, num_emitter, emitter_id);
-        emitter_id       = objects[emitter->get_obj_ref()].sample_emitter_primitive(sg.discrete1D(), direct_pdf);
-        emitter_id       = emitter_prims[emitter_id];
+        emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sg.discrete1D(), direct_pdf);
+        emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
         // use ray.o to avoid creating another shadow_int variable
         Vec4 direct_comp(0, 0, 0, 1);
@@ -302,8 +303,8 @@ CPT_KERNEL void nee_shader(
         ) {
             // MIS for BSDF / light sampling, to achieve better rendering
             // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
-            emit_len_mis = direct_pdf + c_material[material_id]->pdf(it.it_const(), shadow_ray.d, ray.d) * emitter->non_delta();
-            payloads.L(px, py) += thp * direct_comp * c_material[material_id]->eval(it.it_const(), shadow_ray.d, ray.d) * \
+            emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
+            payloads.L(px, py) += thp * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
                 (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
             // numerical guard, in case emit_len_mis is 0
         }
@@ -337,32 +338,36 @@ CPT_KERNEL void bsdf_local_shader(
         Vec4 thp = payloads.thp(px, py);
         Ray ray  = payloads.get_ray(px, py);
         Sampler sg = payloads.get_sampler(px, py);
-        PDFInteraction it = payloads.get_interaction(px, py);
+        Interaction it = payloads.interaction(px, py);
         Vec2 sample = sg.next2D();
         payloads.set_sampler(px, py, sg);
 
+        // this is incorrect, since AABB should be reordered, too
         auto aabb_front = CONST_FLOAT4(aabbs[ray.hit_id()].mini);       // hope to have coalesced access
-        int object_id   = __float_as_int(aabb_front.w),
-            emitter_id  = objects[object_id].emitter_id,
+        int object_id   = __float_as_int(aabb_front.w);
+        object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
+        int emitter_id  = objects[object_id].emitter_id,
             material_id = objects[object_id].bsdf_id;
+        
         bool hit_emitter = emitter_id > 0;
 
         // emitter MIS
-        float emission_weight = it.pdf_v() / (it.pdf_v() + 
-                objects[object_id].solid_angle_pdf(it.it_const().shading_norm, ray.d, ray.hit_t) * hit_emitter * secondary_bounce);
+        float pdf = payloads.pdf(px, py), emission_weight = pdf / (pdf + 
+                objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, ray.hit_t) * hit_emitter * secondary_bounce);
         // (2) check if the ray hits an emitter
         Vec4 direct_comp = thp *\
-                    c_emitter[emitter_id]->eval_le(&ray.d, &it.it_const().shading_norm);
+                    c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
         payloads.L(px, py) += direct_comp * emission_weight;
         
         ray.o = ray.advance(ray.hit_t);
         ray.d = c_material[material_id]->sample_dir(
-            ray.d, it.it_const(), thp, it.pdf(), std::move(sample)
+            ray.d, it, thp, pdf, std::move(sample)
         );
 
         payloads.thp(px, py) = thp;
         payloads.set_ray(px, py, ray);
-        payloads.set_it_head(px, py, it.data.p1);
+        payloads.interaction(px, py) = it;
+        payloads.pdf(px, py) = pdf;
     }
 }
 

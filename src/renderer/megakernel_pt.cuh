@@ -77,7 +77,7 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param objects       object encapsulation
  * @param verts         vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param norms         normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param uvs           uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
+ * @param uvs           uv coordinates, Packed 3 Half2 and 1 int for padding (sum up to 128 bits)
  * @param emitter_prims Primitive indices for emission objects
  * @param bvh_leaves    BVH leaf nodes (int texture, storing primitive to obj index map)
  * @param node_fronts   BVH nodes first float4 (128 bit)

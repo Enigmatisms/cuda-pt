@@ -147,7 +147,7 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
     return std::unique_ptr<GLFWwindow, GLFWWindowDeleter>(window);
 }
 
-bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap)
+bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap, bool& exiting)
 {
     ImGuiIO& io = ImGui::GetIO();
     bool update = false;
@@ -170,6 +170,9 @@ bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap)
     if (io.KeysDown[ImGuiKey_P]) {
         frame_cap = true;
         printf("Frame capture keyboard event.\n");
+    }
+    if (io.KeysDown[ImGuiKey_Escape]) {
+        exiting = true;
     }
     if (io.KeysDown[ImGuiKey_E]) {
         printf("Camera Pose:\n");

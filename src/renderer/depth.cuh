@@ -94,7 +94,7 @@ public:
         const std::vector<Shape>& _shapes,
         const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
-        const ArrayType<Vec2>& _uvs,
+        const ConstBuffer<PackedHalf2>& _uvs,
         const DeviceCamera& cam,
         int width, int height
     ): TracerBase(_shapes, _verts, _norms, _uvs, width, height) {

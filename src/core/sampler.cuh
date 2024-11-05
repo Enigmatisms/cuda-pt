@@ -13,12 +13,63 @@
 
 class TinySampler {
 struct RandState {
-    unsigned int v[4], d[2];
+    unsigned int d[2];
 };
+
 public:
     CPT_CPU_GPU TinySampler() {}
 
     CPT_CPU_GPU TinySampler(int seed, int offset = 0) {
+        _init_state(seed + offset);
+    }
+
+    CPT_CPU_GPU_INLINE Vec2 next2D() noexcept {
+        return Vec2(
+            _uniform_uint_to_float(discrete1D()),
+            _uniform_uint_to_float(discrete1D())
+        ); 
+    }
+
+    CPT_CPU_GPU_INLINE float next1D() noexcept {
+        return _uniform_uint_to_float(discrete1D());
+    }
+
+    CPT_CPU_GPU_INLINE int discrete1D() {
+        unsigned int t = rand_state.d[0];
+        t ^= (t << 13);
+        t ^= (t >> 17);
+        t ^= (t << 5);
+        int output = static_cast<int>(t + rand_state.d[1]);
+        rand_state.d[1] = rand_state.d[0];
+        rand_state.d[0] = static_cast<uint32_t>(output);
+
+        return output;
+    }
+
+    // unsafe method, be sure that you know what you are doing when calling this
+    CPT_CPU_GPU_INLINE unsigned int& _get_d_front() { return rand_state.d[0]; }
+private:
+    CPT_CPU_GPU_INLINE float _uniform_uint_to_float(unsigned int x) {
+        return x * CURAND_2POW32_INV + (CURAND_2POW32_INV / 2.0f);
+    }
+
+    CPT_CPU_GPU_INLINE void _init_state(unsigned long long seed) {
+        rand_state.d[0] = static_cast<unsigned int>(seed) ^ 0x12345678;
+        rand_state.d[1] = static_cast<unsigned int>(seed >> 32) ^ 0x87654321;
+    }
+
+private:
+    RandState rand_state;
+};
+
+class SmallSampler {
+struct RandState {
+    unsigned int v[4], d[2];
+};
+public:
+    CPT_CPU_GPU SmallSampler() {}
+
+    CPT_CPU_GPU SmallSampler(int seed, int offset = 0) {
         _init_state(seed + offset);
     }
 

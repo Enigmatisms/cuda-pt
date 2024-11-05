@@ -523,10 +523,12 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         // before the reordering logic, the emitter primitives are gauranteed
         // to be stored continuously, so we don't need an extra index map
         std::vector<std::vector<int>> eprim_idxs(num_emitters);
+        std::vector<Shape> reorder_shapes(num_prims);
         for (int i = 0; i < num_prims; i++) {
             int index = prim_idxs[i], obj_idx = obj_idxs[i];
             const auto& object = objects[obj_idx];
             reorder_sph_flags[i] = sphere_flags[index];
+            reorder_shapes[i] = shapes[index];
             if (object.is_emitter()) {
                 int emitter_idx = object.emitter_id - 1;
                 eprim_idxs[emitter_idx].push_back(i);
@@ -558,6 +560,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         verts_list   = std::move(reorder_verts);
         norms_list   = std::move(reorder_norms);
         sphere_flags = std::move(reorder_sph_flags);
+        shapes       = std::move(reorder_shapes);
         dur = std::chrono::system_clock::now() - tp;
         count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
         elapsed = static_cast<double>(count) / 1e3;
@@ -586,10 +589,24 @@ Scene::~Scene() {
 
 }
 
-void Scene::export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ArrayType<Vec2>& uvs) const {
+CPT_KERNEL static void vec2_to_packed_half_kernel(const Vec2* src1, const Vec2* src2, const Vec2* src3, PackedHalf2* dst, size_t count) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    for (int i = idx; i < count; i += blockDim.x * gridDim.x) {
+        dst[i] = PackedHalf2(src1[i], src2[i], src3[i]);
+    }
+}
+
+void Scene::export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ConstBuffer<PackedHalf2>& uvs) const {
     verts.from_vectors(verts_list[0], verts_list[1], verts_list[2], &sphere_flags);
     norms.from_vectors(norms_list[0], norms_list[1], norms_list[2]);
-    uvs.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
+    ArrayType<Vec2> uvs_float(num_prims);
+    uvs_float.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
+
+    constexpr size_t block_size = 256;
+    int num_blocks = (num_prims + block_size - 1) / block_size; // 计算所需 block 数
+    vec2_to_packed_half_kernel<<<num_blocks, block_size>>>(&uvs_float.x(0), &uvs_float.y(0), &uvs_float.z(0), uvs.data(), num_prims);
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    uvs_float.destroy();
 }
 
 void Scene::print() const noexcept {

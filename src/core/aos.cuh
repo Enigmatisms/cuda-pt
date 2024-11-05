@@ -8,7 +8,7 @@
 */
 
 #pragma once
-#include "core/vec2.cuh"
+#include "core/vec2_half.cuh"
 #include "core/vec4.cuh"
 #include "core/host_device.cuh"
 
@@ -200,6 +200,46 @@ public:
     }
 };
 
+// ConstBuffer won't be destroyed, unless we manually call `destroy`
+template <typename Ty>
+class ConstBuffer {
+private:
+    Ty* _buffer;
+    size_t _size;
+public:
+    CPT_CPU ConstBuffer(size_t _sz): _size(_sz) {
+        if (_size <= 0) {
+            throw std::runtime_error("Allocated buffer size is not a positive value.\n");
+        }
+        CUDA_CHECK_RETURN(cudaMallocManaged(&_buffer, sizeof(Ty) * _sz));
+    }
+
+    CPT_CPU ConstBuffer(const Ty* const inputs, size_t _sz): _size(_sz) {
+        if (_size <= 0) {
+            throw std::runtime_error("Allocated buffer size is not a positive value.\n");
+        }
+        CUDA_CHECK_RETURN(cudaMallocManaged(&_buffer, sizeof(Ty) * _sz));
+        CUDA_CHECK_RETURN(cudaMemcpy(_buffer, inputs, sizeof(Ty) * _sz, cudaMemcpyHostToDevice));
+    }
+
+    CPT_CPU bool destroy() {
+        if (_size != 0) {
+            CUDA_CHECK_RETURN(cudaFree(_buffer));
+            _size = 0;
+            return true;
+        }
+        return false;
+    }
+
+    // setting the buffer can only occur in host side   
+    CPT_CPU_INLINE Ty& operator[](int index) { return _buffer[index]; }
+    CPT_CPU_INLINE Ty* data() noexcept { return _buffer; }
+
+    CPT_CPU_GPU_INLINE const Ty& operator[](int index) const { return _buffer[index]; }
+    CPT_CPU_GPU_INLINE const Ty* data() const noexcept { return _buffer; }
+    CPT_CPU_GPU_INLINE size_t size() const noexcept { return _size; }
+};
+
 #ifdef USE_SOA
     template<typename InnerType>
     using ArrayType = SoA3<InnerType>;
@@ -212,8 +252,7 @@ public:
 #undef INDEX_Y
 #undef INDEX_Z
 
-using UIntBuffer   = uint32_t* const __restrict__;
 using ConstF4Ptr   = const float4* const __restrict__;
 using ConstVertPtr = const PrecomputedArray* const __restrict__;
 using ConstNormPtr = const ArrayType<Vec3>* const __restrict__;
-using ConstUVPtr   = const ArrayType<Vec2>* const __restrict__;
+using ConstUVPtr   = const ConstBuffer<PackedHalf2>* const __restrict__;

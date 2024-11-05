@@ -46,51 +46,33 @@ Ty* make_filled_memory(Ty fill_value, size_t length) {
     return dev_mem;
 }
 
-
-
-template<typename ValType>
-class DeviceBuffer {
-protected:
-    ValType* _buffer;
+class DeviceImage {
+private:
+    Vec4* host_buffer;
+    Vec4* _buffer;
     int _w;
     int _h;
 public:
-    DeviceBuffer(int width = 800, int height = 800): _w(width), _h(height) {
-        CUDA_CHECK_RETURN(cudaMalloc(&_buffer, width * height * sizeof(ValType)));
-        CUDA_CHECK_RETURN(cudaMemset(_buffer, 0, width * height * sizeof(ValType)));
+    DeviceImage(int width = 800, int height = 800): _w(width), _h(height) {
+        host_buffer = new Vec4[width * height];
+        CUDA_CHECK_RETURN(cudaMalloc(&_buffer, width * height * sizeof(Vec4)));
+        CUDA_CHECK_RETURN(cudaMemset(_buffer, 0, width * height * sizeof(Vec4)));
     }
 
     // manually call the destroy to deallocate memory
     void destroy() {
         CUDA_CHECK_RETURN(cudaFree(_buffer));
+        delete [] host_buffer;
     }
 
-    // for cudaMallocPitch (with extra memory alignment), we need to use pitch to access
-    CPT_CPU_GPU_INLINE ValType& operator() (int col, int row) {  return _buffer[row * _w + col]; }
-    CPT_CPU_GPU_INLINE const ValType& operator() (int col, int row) const { return _buffer[row * _w + col]; }
+    CPT_CPU_GPU_INLINE Vec4& operator() (int col, int row) {  return _buffer[row * _w + col]; }
+    CPT_CPU_GPU_INLINE const Vec4& operator() (int col, int row) const { return _buffer[row * _w + col]; }
 
     CPT_CPU_GPU_INLINE int w() const noexcept { return _w; }
     CPT_CPU_GPU_INLINE int h() const noexcept { return _h; }
 
-    
-
-    CPT_CPU_GPU_INLINE ValType* data() {
+    CPT_CPU_GPU_INLINE Vec4* data() {
         return _buffer;
-    }
-};
-
-class DeviceImage: public DeviceBuffer<Vec4> {
-private:
-    Vec4* host_buffer;
-public:
-    DeviceImage(int width = 800, int height = 800): DeviceBuffer<Vec4>(width, height) {
-        host_buffer = new Vec4[width * height];
-    }
-
-    // manually call the destroy to deallocate memory
-    void destroy() {
-        DeviceBuffer<Vec4>::destroy();
-        delete [] host_buffer;
     }
 
     std::vector<uint8_t> export_cpu(float inv_factor = 1, bool gamma_cor = true, bool alpha_avg = false) const {

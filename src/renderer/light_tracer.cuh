@@ -31,7 +31,7 @@ public:
         const Scene& scene,
         const PrecomputedArray& _verts,
         const ArrayType<Vec3>& _norms, 
-        const ArrayType<Vec2>& _uvs,
+        const ConstBuffer<PackedHalf2>& _uvs,
         int num_emitter,
         int spec_constraint,
         bool bidir = false,

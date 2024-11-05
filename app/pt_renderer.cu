@@ -13,13 +13,13 @@ int main(int argc, char** argv) {
     }
     std::string xml_path = argv[1];
 
-    std::cout << "Loading scenes from '" << xml_path << "'\n";
+    std::cout << "[SCENE] Loading scenes from '" << xml_path << "'\n";
     Scene scene(xml_path);
 
     // scene setup
     PrecomputedArray vert_data(scene.num_prims);
     ArrayType<Vec3> norm_data(scene.num_prims);
-    ArrayType<Vec2> uvs_data(scene.num_prims);
+    ConstBuffer<PackedHalf2> uvs_data(scene.num_prims);
 
     scene.export_prims(vert_data, norm_data, uvs_data);
 
@@ -27,28 +27,29 @@ int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
     std::unique_ptr<PathTracer> renderer = nullptr;
-    std::cout << "Path tracer loaded: ";
+    std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {
             renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters); 
-            std::cout << "Megakernel Path Tracing.\n";
+            std::cout << "\tMegakernel Path Tracing.\n";
             break;
         }
         case RendererType::WavefrontPT: {
             renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters);
-            std::cout << "Wavefront Path Tracing.\n";
+            std::cout << "\tWavefront Path Tracing.\n";
             break;
         }
         case RendererType::MegeKernelLT: {
             renderer = std::make_unique<LightTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters, 
                 scene.config.spec_constraint, scene.config.bidirectional, scene.config.caustic_scaling); 
             if (scene.config.bidirectional)
-                std::cout << "Naive Bidirectional ";
-            std::cout << "Megakernel Light Tracing.\n";
+                std::cout << "\tNaive Bidirectional Megakernel Light Tracing.\n";
+            else
+                std::cout << "\tMegakernel Light Tracing.\n";
             break;
         } 
         case RendererType::VoxelSDFPT: {
-            std::cerr << "VoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
+            std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             return 0;
         }
         default: {
@@ -57,7 +58,7 @@ int main(int argc, char** argv) {
     }
     renderer->update_camera(scene.cam);
 
-    printf("Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.max_depth, scene.config.spp);
+    printf("[RENDERER] Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.max_depth, scene.config.spp);
     auto bytes_buffer = renderer->render(scene.config.spp, scene.config.max_depth, scene.config.gamma_correction);
 
     std::string file_name = "render.png";
@@ -68,7 +69,7 @@ int main(int argc, char** argv) {
         throw std::runtime_error("lodepng::encode() fail");
     }
 
-    printf("image saved to `%s`\n", file_name.c_str());
+    printf("[IMAGE] Image saved to `%s`\n", file_name.c_str());
     scene.print();
 
     vert_data.destroy();

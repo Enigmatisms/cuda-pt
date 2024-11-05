@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
     // scene setup
     PrecomputedArray vert_data(scene.num_prims);
     ArrayType<Vec3> norm_data(scene.num_prims);
-    ArrayType<Vec2> uvs_data(scene.num_prims);
+    ConstBuffer<PackedHalf2> uvs_data(scene.num_prims);
 
     scene.export_prims(vert_data, norm_data, uvs_data);
     

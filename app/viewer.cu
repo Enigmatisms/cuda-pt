@@ -30,20 +30,20 @@ std::string get_current_time() {
 }
 
 int main(int argc, char** argv) {
-    std::cerr << "Path tracing IMGUI viewer.\n";
+    std::cerr << "[MAIN] Path tracing IMGUI viewer.\n";
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
         exit(1);
     }
     std::string xml_path = argv[1];
 
-    std::cout << "Loading scenes from '" << xml_path << "'\n";
+    std::cout << "[SCENE] Loading scenes from '" << xml_path << "'\n";
     Scene scene(xml_path);
 
     // scene setup
     PrecomputedArray vert_data(scene.num_prims);
     ArrayType<Vec3> norm_data(scene.num_prims);
-    ArrayType<Vec2> uvs_data(scene.num_prims);
+    ConstBuffer<PackedHalf2> uvs_data(scene.num_prims);
 
     scene.export_prims(vert_data, norm_data, uvs_data);
 
@@ -51,28 +51,29 @@ int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
     std::unique_ptr<PathTracer> renderer = nullptr;
-    std::cout << "Path tracer loaded: ";
+    std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {
             renderer = std::make_unique<PathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters); 
-            std::cout << "Megakernel Path Tracing.\n";
+            std::cout << "\tMegakernel Path Tracing.\n";
             break;
         }
         case RendererType::WavefrontPT: {
             renderer = std::make_unique<WavefrontPathTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters);
-            std::cout << "Wavefront Path Tracing..\n";
+            std::cout << "\tWavefront Path Tracing..\n";
             break;
         }
         case RendererType::MegeKernelLT: {
             renderer = std::make_unique<LightTracer>(scene, vert_data, norm_data, uvs_data, scene.num_emitters, 
                 scene.config.spec_constraint, scene.config.bidirectional, scene.config.caustic_scaling); 
             if (scene.config.bidirectional)
-                std::cout << "Naive Bidirectional ";
-            std::cout << "Megakernel Light Tracing.\n";
+                std::cout << "\tNaive Bidirectional Megakernel Light Tracing.\n";
+            else
+                std::cout << "\tMegakernel Light Tracing.\n";
             break;
         } 
         case RendererType::VoxelSDFPT: {
-            std::cerr << "VoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
+            std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             return 0;
         }
         default: {
@@ -88,6 +89,7 @@ int main(int argc, char** argv) {
     bool show_frame_rate_bar = true;
     bool skip_mouse_event    = false;
     bool frame_capture       = false;
+    bool exit_main_loop      = false;
 
     while (!glfwWindowShouldClose(window.get())) {
         frame_capture = false;
@@ -102,7 +104,10 @@ int main(int argc, char** argv) {
             skip_mouse_event,
             show_frame_rate_bar
         );
-        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1, frame_capture);
+        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1, frame_capture, exit_main_loop);
+        if (exit_main_loop) {
+            break;
+        }
         cam_updated     |= gui::render_settings_interface(*scene.cam, show_main_settings, 
                             show_frame_rate_bar, skip_mouse_event, frame_capture);
         if (!skip_mouse_event) {        // no sub window (setting window or main menu) is focused
