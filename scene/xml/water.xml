@@ -1,0 +1,170 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
+<scene version="1.1">
+	<renderer type="pt"/>
+	<bool name="use_bvh" value="true"/>
+
+	<sensor type="perspective">
+		<float name="fov" value="42.2"/>
+        <integer name="sample_count" value="128"/>
+        <integer name="max_bounce" value="16"/>
+		<integer name="cache_level" value="4"/>
+        <bool name="vflip" value="true"/>
+        <bool name="hflip" value="true"/>
+		
+		<transform name="toWorld">
+			<!-- <lookat target="0.031568, 0.003045, -0.193984" origin="-0.648214, 0.323867, 0.465538" up="0.265440, 0.914012, -0.306796"/> -->
+			<!-- <lookat target="0.124368, -0.000682, -0.254114" origin="-0.604854, 0.243089, 0.385269" up="0.187101, 0.969817, -0.156361"/> -->
+			<lookat target="0.159210, 2.336197, 15.408566" origin="0.170299, 2.310919, 16.408184" up="0.000326, 0.999680, 0.025276"/>
+			
+		</transform>
+
+		<film type="film">
+			<integer name="width" value="1920"/>
+			<integer name="height" value="1080"/>
+			<integer name="specular_constraint" value="0"/>
+			<bool name="gamma_correction" value="false"/>
+			<bool name="bidirectional" value="false"/>
+			<float name="caustic_scaling" value="1"/>
+		</film>
+	</sensor>
+
+	<brdf type="lambertian" id="floor">
+		<rgb name="k_d" value="#BCBCCC"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="light">
+		<rgb name="k_d" value="#555555"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="det-refraction" id="glass">
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.90, 0.90, 0.93"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+	<brdf type="det-refraction" id="water">
+		<rgb name="k_d" value="1.33"/>
+		<rgb name="k_s" value="#F7F7FA"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+	<brdf type="specular" id="mirror">
+		<rgb name="k_d" value="0"/>
+		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
+		<rgb name="k_g" value="0"/>
+	</brdf>
+
+	<emitter type="area" id="area1">
+		<rgb name="emission" value="70.0, 70, 70"/>
+		<rgb name="scaler" value="0.6"/>
+		<!-- <rgb name="scaler" value="0.1"/> -->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="area2">
+		<rgb name="emission" value="70.0, 70, 70"/>
+		<rgb name="scaler" value="0.2"/>
+		<!-- <rgb name="scaler" value="0.1"/> -->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/light1.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area1"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/light2.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area2"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh013.obj"/>
+		<ref type="material" id="glass"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh007.obj"/>
+		<ref type="material" id="floor"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh011.obj"/>
+		<ref type="material" id="mirror"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh000.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh001.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh002.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh003.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh004.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh005.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh006.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh008.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh009.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh010.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh012.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh014.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/water/Mesh015.obj"/>
+		<ref type="material" id="water"/>
+	</shape>
+</scene>
