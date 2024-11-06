@@ -5,6 +5,9 @@ Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 trait
 
 This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).
 
+![render-2024-11-06-12-46-41](https://github.com/user-attachments/assets/6606b7fc-72a2-4933-b46f-b2741ab6c6d9)
+
+
 ##### Compile & Run
 
 The repo contains several external dependencies, therefore, using the following command:
