@@ -151,7 +151,8 @@ public:
         return 0.5f * (rs * rs + rp * rp);
     }
 
-    CPT_GPU static Vec3 fresnel_conductor(float cos_theta_i, const Vec3 &eta_t, const Vec3 &k) {
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
+    CPT_GPU static Vec4 fresnel_conductor(float cos_theta_i, VType1&& eta_t, VType2&& k) {
         cos_theta_i = fminf(fmaxf(cos_theta_i, -1), 1);
         Vec3 eta_k = k / eta_t;
 
@@ -174,7 +175,8 @@ public:
         Vec3 t4 = t2 * sin2_theta_i;
         Vec3 Rp = Rs * (t3 - t4) / (t3 + t4);
 
-        return 0.5 * (Rp + Rs);
+        Rp = 0.5 * (Rp + Rs);
+        return Vec4(Rp.x(), Rp.y(), Rp.z(), 1);
     }
 };
 
@@ -246,14 +248,20 @@ public:
     CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override;
 };
 
-class MicrofacetGGXBSDF: public BSDF {
-// k_g.x() is the mapped roughness (alpha)
+class GGXMetalBSDF: public BSDF {
+/**
+ * @brief GGX microfacet normal distribution based BSDF
+ * k_d is the eta_t of the metal
+ * k_s is the k (Vec3) and the mapped roughness (k_s[3])
+ * k_g is the underlying color (albedo)
+ */
 using BSDF::k_s;
 public:
-    CPT_CPU_GPU MicrofacetGGXBSDF(Vec4 _k_s, float roughness, int ks_id = -1):
-        BSDF(Vec4(0, 0, 0), std::move(_k_s), Vec4(roughness_to_alpha(roughness), 0, 0), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT) {}
+    CPT_CPU_GPU GGXMetalBSDF(Vec4 eta_t, Vec4 k_rough, Vec4 albedo, float roughness, int ks_id = -1):
+        BSDF(std::move(eta_t), Vec4(k_rough.xyz(), roughness_to_alpha(roughness)), 
+            std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT) {}
 
-    CPT_CPU_GPU MicrofacetGGXBSDF(): BSDF() {}
+    CPT_CPU_GPU GGXMetalBSDF(): BSDF() {}
     
     CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override;
 

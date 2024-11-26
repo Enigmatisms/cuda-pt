@@ -11,14 +11,14 @@
 #include "core/cuda_utils.cuh"
 #include "core/constants.cuh"
 
-class Vec4 {
+class  Vec4 {
 private:
     float4 _data;
 public:
     CPT_CPU_GPU Vec4() {}
 
     CPT_CPU_GPU
-    Vec4(float _v): 
+    explicit Vec4(float _v): 
         _data(make_float4(_v, _v, _v, _v)) {}
 
     CPT_CPU_GPU
@@ -27,6 +27,9 @@ public:
 
     CPT_CPU_GPU
     Vec4(float4&& v): _data(std::move(v)) {}
+
+    CPT_CPU_GPU
+    Vec4(float3&& v, float w): _data(make_float4(v.x, v.y, v.z, w)) {}
 
     CPT_CPU_GPU_INLINE 
     float& operator[](int index) {
@@ -47,6 +50,7 @@ public:
     CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
     CPT_CPU_GPU_INLINE const float& z() const { return _data.z; }
     CPT_CPU_GPU_INLINE const float& w() const { return _data.w; }
+    CPT_CPU_GPU_INLINE float3 xyz() const { return make_float3(_data.x, _data.y, _data.z); }
 
     CPT_CPU_GPU_INLINE
     Vec4 abs() const noexcept {

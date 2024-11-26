@@ -24,6 +24,9 @@ public:
     explicit Vec3(float _v): 
         _data(make_float3(_v, _v, _v)) {}
 
+    CPT_CPU_GPU
+    Vec3(float3&& data): _data(std::move(data)) {}
+
     CPT_CPU_GPU_INLINE 
     float& operator[](int index) {
         return *((&_data.x) + index);

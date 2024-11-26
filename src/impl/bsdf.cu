@@ -16,7 +16,7 @@
  * GGX microfacet model
  */
 class GGX {
-private:
+public:
     // input cos theta and roughness, with random sample uv, output scaled slopes
     CPT_GPU static void ggx_cos_sample(float cos_theta, float alpha, Vec2&& uv, Vec2& slopes) {
         if (cos_theta > 0.9999f) {
@@ -126,22 +126,21 @@ private:
 public:
     /**
      * @brief sample microfacet normal
-     * the inputs are all in the world frame, output: wh (world frame) half vector
-     * the returned value is of Vec4 type, containing spectrum and PDF (as alpha)
+     * the inputs should be in the local frame
      */
-    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
-    CPT_GPU static Vec4 sample_wh(VType1&& n_s, VType2&& indir, float alpha, Vec2&& uv, Vec3& wh, Vec3& refdir) {
-        auto R_w2l     = rotation_fixed_anchor(std::forward<VType1&&>(n_s), false);     // transpose will be l2w
-        Vec3 local_dir = R_w2l.rotate(std::forward<VType2&&>(indir)),                   // from world to local
-             local_whf = GGX::sample_local(local_dir, alpha, std::move(uv));
-        auto D_e = D(local_whf, alpha);
-        float pdf = D_e.x() * G1_with_e(D_e.y()) * fabsf(indir.dot(wh)) / fabsf(local_dir.z());
-        wh     = R_w2l.transposed_rotate(local_whf);            // world space microfacet normal
-        refdir = reflection(indir, wh);                         // world space reflection vector
-        Vec3 local_ref = reflection(local_dir, local_whf);      // local space reflection vector
-        // TODO: Fresnel term
-        Vec4 f = k_s * D_e.x() * G(local_dir, local_ref, alpha);
-        return ;
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_GPU_INLINE static Vec3 sample_wh(VecType&& local_indir, float alpha, Vec2&& uv) {
+        Vec3 wi_stretched = Vec3(local_indir.x() * alpha, local_indir.y() * alpha, local_indir.z()).normalized();
+        Vec2 slope;
+
+        ggx_cos_sample(wi_stretched.z(), alpha, std::move(uv), slope);
+        Vec2 cos_sin_phi = get_sincos_phi(wi_stretched);
+
+        float tmp = cos_sin_phi.x() * slope.x() - cos_sin_phi.y() * slope.y();
+        slope.y() = (cos_sin_phi.y() * slope.x() + cos_sin_phi.x() * slope.y()) * alpha;
+        slope.x() = tmp * alpha;
+
+        return Vec3(-slope.x(), -slope.y(), 1.).normalized();
     }
 
     CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec3, Vec3, Vec3)
@@ -181,24 +180,37 @@ CPT_GPU Vec3 RoughPlasticBSDF::sample_dir(
     return Vec3();
 }
 
-CPT_GPU float MicrofacetGGXBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const {
+CPT_GPU float GGXMetalBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const {
     return 0;
 }
 
-CPT_GPU Vec4 MicrofacetGGXBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
+CPT_GPU Vec4 GGXMetalBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
     return Vec4();
 }
 
-CPT_GPU Vec3 MicrofacetGGXBSDF::sample_dir(    
+CPT_GPU Vec3 GGXMetalBSDF::sample_dir(    
     const Vec3& indir, 
     const Interaction& it, 
     Vec4& throughput, 
     float& pdf, Sampler& sp, 
     bool is_radiance
 ) const {
-    Vec3 m_normal;
-    // the PDF is only the microfacet PDF, it needs to be divided by 4 * cos_theta_i  * cos_theta_o
-    // float pdf = GGX::sample_wh(indir, it.shading_norm, k_g.x(), sp.next2D(), m_normal),
-    //       dot_indir_m = indir.dot(m_normal);
-    // pdf = pdf > 0 && dot_indir_m > 1e-5f ? pdf / (4.f * dot_indir_m) : 0;
+    auto R_w2l     = rotation_fixed_anchor(it.shading_norm, false);     // transpose will be l2w
+    Vec3 local_in = R_w2l.rotate(indir), m_normal,                   // from world to local
+         local_whf = GGX::sample_wh(local_in, k_s.w(), sp.next2D());
+
+    auto D_e = GGX::D(local_whf, k_s.w());
+    float dot_indir_m = local_in.dot(local_whf);
+    // calculate PDF
+    pdf = D_e.x() * GGX::G1_with_e(D_e.y()) * fabsf(dot_indir_m) / fabsf(local_in.z());
+    pdf = pdf > 0 && dot_indir_m > 1e-5f ? pdf / (4.f * dot_indir_m) : 0;
+    // calculate reflected ray direction
+    Vec3 local_ref = reflection(local_in, local_whf, dot_indir_m),            // local space reflection vector
+         refdir = R_w2l.transposed_rotate(local_ref);                         // world space reflection vector
+    float cos_i = fabsf(local_in.z()), cos_o = fabsf(local_ref.z());
+    bool valid_result = cos_i > 0 && cos_o > 0;
+    // calculate throughput
+    throughput *= valid_result ? k_g * D_e.x() * GGX::G(local_in, local_ref, k_s.w()) * __frcp_rn(4.f * cos_i * cos_o) *
+        FresnelTerms::fresnel_conductor(fabsf(dot_indir_m), Vec3(k_d.xyz()), Vec3(k_s.xyz())) : Vec4(0);
+    return refdir;
 }
