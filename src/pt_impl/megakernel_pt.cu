@@ -329,7 +329,7 @@ CPT_KERNEL void render_pt_kernel(
 
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler.next2D());
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler);
 
             if (radiance.numeric_err())
                 radiance.fill(0);

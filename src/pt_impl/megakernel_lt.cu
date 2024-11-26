@@ -159,7 +159,7 @@ CPT_KERNEL void render_lt_kernel(
 
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler.next2D(), false);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, false);
             constraint_cnt += c_material[material_id]->require_lobe(BSDFFlag::BSDF_SPECULAR);
 
             if (throughput.numeric_err() || throughput < EPSILON) {

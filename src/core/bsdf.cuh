@@ -47,10 +47,14 @@ public:
 
     CPT_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const = 0;
 
-    CPT_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Vec2&& uv, bool is_radiance = true) const = 0;
+    CPT_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Sampler& sp, bool is_radiance = true) const = 0;
 
     CPT_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {
         return (bsdf_flag & (int)flags) > 0;
+    }
+
+    static CPT_CPU_GPU float roughness_to_alpha(float roughness) {
+        return 0.f;
     }
 };
 
@@ -79,8 +83,8 @@ public:
         return k_d * max(0.f, cos_term) * M_1_Pi * same_side;
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv, bool is_radiance = true) const override {
-        auto local_ray = sample_cosine_hemisphere(std::move(uv), pdf);
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override {
+        auto local_ray = sample_cosine_hemisphere(sp.next2D(), pdf);
         auto out_ray = delocalize_rotate(it.shading_norm, local_ray);
         // throughput *= f / pdf --> k_d * cos / pi / (pdf = cos / pi) == k_d
         float dot_in  = it.shading_norm.dot(indir);
@@ -107,11 +111,70 @@ public:
         return k_s * (out.dot(ref_dir) > 0.99999f);
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv, bool is_radiance = true) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override {
         // throughput *= f / pdf
+        float in_dot_n = indir.dot(it.shading_norm);
         pdf = 1.f;
-        throughput *= k_s * (indir.dot(it.shading_norm) < 0);
-        return indir - 2.f * indir.dot(it.shading_norm) * it.shading_norm;
+        throughput *= k_s * (in_dot_n < 0);
+        return reflection(indir, it.shading_norm, in_dot_n);
+    }
+};
+
+class FresnelTerms {
+public:
+    CPT_GPU_INLINE static bool is_total_reflection(float dot_normal, float ni, float nr) {
+        return (1.f - (ni * ni) / (nr * nr) * (1.f - dot_normal * dot_normal)) < 0.f;
+    }
+
+    CPT_GPU static Vec3 snell_refraction(const Vec3& incid, const Vec3& normal, float& cos_r2, float dot_n, float ni, float nr) {
+        /* Refraction vector by Snell's Law, note that an extra flag will be returned */
+        float ratio = ni / nr;
+        cos_r2 = 1.f - (ratio * ratio) * (1. - dot_n * dot_n);        // refraction angle cosine
+        // for ni > nr situation, there will be total reflection
+        // if cos_r2 <= 0.f, then return value will be Vec3(0, 0, 0)
+        return (ratio * incid - ratio * dot_n * normal + sgn(dot_n) * sqrtf(fabsf(cos_r2)) * normal).normalized() * (cos_r2 > 0.f);
+    }
+
+    CPT_GPU static float fresnel_dielectric(float n_in, float n_out, float cos_inc, float cos_ref) {
+        /**
+            Fresnel Equation for calculating specular ratio
+            Since Schlick's Approximation is not clear about n1->n2, n2->n1 (different) effects
+
+            This Fresnel equation is for dielectric, not for conductor
+        */
+        float n1cos_i = n_in * cos_inc;
+        float n2cos_i = n_out * cos_inc;
+        float n1cos_r = n_in * cos_ref;
+        float n2cos_r = n_out * cos_ref;
+        float rs = (n1cos_i - n2cos_r) / (n1cos_i + n2cos_r);
+        float rp = (n1cos_r - n2cos_i) / (n1cos_r + n2cos_i);
+        return 0.5f * (rs * rs + rp * rp);
+    }
+
+    CPT_GPU static Vec3 fresnel_conductor(float cos_theta_i, const Vec3 &eta_t, const Vec3 &k) {
+        cos_theta_i = fminf(fmaxf(cos_theta_i, -1), 1);
+        Vec3 eta_k = k / eta_t;
+
+        float cos2_theta_i = cos_theta_i * cos_theta_i;
+        float sin2_theta_i = 1. - cos2_theta_i;
+        Vec3 eta2  = eta_t * eta_t;
+        Vec3 etak2 = eta_k * eta_k;
+
+        Vec3 t0 = eta2 - etak2 - sin2_theta_i;
+        Vec3 a2plusb2 = t0 * t0 + 4 * eta2 * etak2;
+        a2plusb2 = Vec3(sqrtf(a2plusb2.x()), sqrtf(a2plusb2.y()), sqrtf(a2plusb2.z()));
+        Vec3 t1 = a2plusb2 + cos2_theta_i;
+        Vec3 a = 0.5f * (a2plusb2 + t0);
+        a = Vec3(sqrtf(a.x()), sqrtf(a.y()), sqrtf(a.z()));
+
+        Vec3 t2 = 2.f * cos_theta_i * a;
+        Vec3 Rs = (t1 - t2) / (t1 + t2);
+
+        Vec3 t3 = cos2_theta_i * a2plusb2 + sin2_theta_i * sin2_theta_i;
+        Vec3 t4 = t2 * sin2_theta_i;
+        Vec3 Rp = Rs * (t3 - t4) / (t3 + t4);
+
+        return 0.5 * (Rp + Rs);
     }
 };
 
@@ -137,15 +200,15 @@ public:
         float nr = dot_normal < 0 ? k_d.x() : 1.f, cos_r2 = 0;
         float eta2 = ni * ni / (nr * nr);
         Vec3 ret_dir = in.advance(it.shading_norm, -2.f * dot_normal).normalized(),
-             refra_vec = snell_refraction(in, it.shading_norm, cos_r2, dot_normal, ni, nr);
-        bool total_ref = is_total_reflection(dot_normal, ni, nr);
-        nr = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
+             refra_vec = FresnelTerms::snell_refraction(in, it.shading_norm, cos_r2, dot_normal, ni, nr);
+        bool total_ref = FresnelTerms::is_total_reflection(dot_normal, ni, nr);
+        nr = FresnelTerms::fresnel_dielectric(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
         bool reflc_dot = out.dot(ret_dir) > 0.99999f, refra_dot = out.dot(refra_vec) > 0.99999f;        // 0.9999  means 0.26 deg
         
         return k_s * (reflc_dot | refra_dot) * (refra_dot && is_radiance ? eta2 : 1.f);
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Vec2&& uv, bool is_radiance = true) const override {
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override {
         float dot_normal = indir.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
@@ -153,43 +216,48 @@ public:
         float nr = dot_normal < 0 ? k_d.x() : 1.f, cos_r2 = 0;
         float eta2 = ni * ni / (nr * nr);
         Vec3 ret_dir = indir.advance(it.shading_norm, -2.f * dot_normal).normalized(),
-             refra_vec = snell_refraction(indir, it.shading_norm, cos_r2, dot_normal, ni, nr);
-        bool total_ref = is_total_reflection(dot_normal, ni, nr);
-        nr = fresnel_equation(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
-        bool reflect = total_ref || uv.x() < nr;
+             refra_vec = FresnelTerms::snell_refraction(indir, it.shading_norm, cos_r2, dot_normal, ni, nr);
+        bool total_ref = FresnelTerms::is_total_reflection(dot_normal, ni, nr);
+        nr = FresnelTerms::fresnel_dielectric(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
+        bool reflect = total_ref || sp.next1D() < nr;
         ret_dir = select(ret_dir, refra_vec, reflect);
         pdf     = total_ref ? 1.f : (reflect ? nr : 1.f - nr);
-        // throughput *= f / pdf
         throughput *= k_s * (is_radiance && !reflect ? eta2 : 1.f);
         return ret_dir;
     }
+};
 
-    CPT_GPU_INLINE static bool is_total_reflection(float dot_normal, float ni, float nr) {
-        return (1.f - (ni * ni) / (nr * nr) * (1.f - dot_normal * dot_normal)) < 0.f;
-    }
+class RoughPlasticBSDF: public BSDF {
+using BSDF::k_s;
+public:
+    CPT_CPU_GPU RoughPlasticBSDF(Vec4 _k_d, Vec4 _k_s, float ior, float roughness, int ks_id = -1):
+        BSDF(std::move(_k_d), std::move(_k_s), Vec4(roughness_to_alpha(roughness), ior, 0), -1, ks_id, 
+            BSDFFlag::BSDF_GLOSSY  | 
+            BSDFFlag::BSDF_DIFFUSE | 
+            BSDFFlag::BSDF_REFLECT
+        ) {}
 
-    CPT_GPU static Vec3 snell_refraction(const Vec3& incid, const Vec3& normal, float& cos_r2, float dot_n, float ni, float nr) {
-        /* Refraction vector by Snell's Law, note that an extra flag will be returned */
-        float ratio = ni / nr;
-        cos_r2 = 1.f - (ratio * ratio) * (1. - dot_n * dot_n);        // refraction angle cosine
-        // for ni > nr situation, there will be total reflection
-        // if cos_r2 <= 0.f, then return value will be Vec3(0, 0, 0)
-        return (ratio * incid - ratio * dot_n * normal + sgn(dot_n) * sqrtf(fabsf(cos_r2)) * normal).normalized() * (cos_r2 > 0.f);
-    }
+    CPT_CPU_GPU RoughPlasticBSDF(): BSDF() {}
+    
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override;
 
-    CPT_GPU static float fresnel_equation(float n_in, float n_out, float cos_inc, float cos_ref) {
-        /**
-            Fresnel Equation for calculating specular ratio
-            Since Schlick's Approximation is not clear about n1->n2, n2->n1 (different) effects
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override;
 
-            This Fresnel equation is for dielectric, not for conductor
-        */
-        float n1cos_i = n_in * cos_inc;
-        float n2cos_i = n_out * cos_inc;
-        float n1cos_r = n_in * cos_ref;
-        float n2cos_r = n_out * cos_ref;
-        float rs = (n1cos_i - n2cos_r) / (n1cos_i + n2cos_r);
-        float rp = (n1cos_r - n2cos_i) / (n1cos_r + n2cos_i);
-        return 0.5f * (rs * rs + rp * rp);
-    }
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override;
+};
+
+class MicrofacetGGXBSDF: public BSDF {
+// k_g.x() is the mapped roughness (alpha)
+using BSDF::k_s;
+public:
+    CPT_CPU_GPU MicrofacetGGXBSDF(Vec4 _k_s, float roughness, int ks_id = -1):
+        BSDF(Vec4(0, 0, 0), std::move(_k_s), Vec4(roughness_to_alpha(roughness), 0, 0), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT) {}
+
+    CPT_CPU_GPU MicrofacetGGXBSDF(): BSDF() {}
+    
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override;
+
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override;
+
+    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override;
 };

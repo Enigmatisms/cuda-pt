@@ -83,6 +83,7 @@ int main(int argc, char** argv) {
     bool skip_mouse_event    = false;
     bool frame_capture       = false;
     bool exit_main_loop      = false;
+    bool gamma_correlate     = true;
 
     while (!glfwWindowShouldClose(window.get())) {
         frame_capture = false;
@@ -112,7 +113,7 @@ int main(int argc, char** argv) {
         renderer->render_online(scene.config.max_depth);
         
         if (frame_capture) {
-            auto fbuffer = renderer->get_image_buffer(false);
+            auto fbuffer = renderer->get_image_buffer(gamma_correlate);
             std::string file_name = "render-" + get_current_time() + ".png";
             if (unsigned error = lodepng::encode(file_name, fbuffer, scene.config.width, scene.config.height); error) {
                 std::cerr << "lodepng::encoder error " << error << ": " << lodepng_error_text(error)

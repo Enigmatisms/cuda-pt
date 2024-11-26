@@ -339,8 +339,6 @@ CPT_KERNEL void bsdf_local_shader(
         Ray ray  = payloads.get_ray(px, py);
         Sampler sg = payloads.get_sampler(px, py);
         Interaction it = payloads.interaction(px, py);
-        Vec2 sample = sg.next2D();
-        payloads.set_sampler(px, py, sg);
 
         // this is incorrect, since AABB should be reordered, too
         auto aabb_front = CONST_FLOAT4(aabbs[ray.hit_id()].mini);       // hope to have coalesced access
@@ -361,9 +359,10 @@ CPT_KERNEL void bsdf_local_shader(
         
         ray.o = ray.advance(ray.hit_t);
         ray.d = c_material[material_id]->sample_dir(
-            ray.d, it, thp, pdf, std::move(sample)
+            ray.d, it, thp, pdf, sg
         );
 
+        payloads.set_sampler(px, py, sg);
         payloads.thp(px, py) = thp;
         payloads.set_ray(px, py, ray);
         payloads.interaction(px, py) = it;

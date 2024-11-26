@@ -18,7 +18,7 @@
 		<transform name="toWorld">
 			<!-- <lookat target="0.031568, 0.003045, -0.193984" origin="-0.648214, 0.323867, 0.465538" up="0.265440, 0.914012, -0.306796"/> -->
 			<!-- <lookat target="0.124368, -0.000682, -0.254114" origin="-0.604854, 0.243089, 0.385269" up="0.187101, 0.969817, -0.156361"/> -->
-			<lookat target="0.159210, 2.336197, 15.408566" origin="0.170299, 2.310919, 16.408184" up="0.000326, 0.999680, 0.025276"/>
+			<lookat target="0.188041, 2.270476, 18.007584" origin="0.199130, 2.245198, 19.007202" up="0.000326, 0.999680, 0.025276"/>
 			
 		</transform>
 
@@ -64,14 +64,14 @@
 
 	<emitter type="area" id="area1">
 		<rgb name="emission" value="70.0, 70, 70"/>
-		<rgb name="scaler" value="0.6"/>
+		<rgb name="scaler" value="0.45"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="area2">
 		<rgb name="emission" value="70.0, 70, 70"/>
-		<rgb name="scaler" value="0.2"/>
+		<rgb name="scaler" value="0.15"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>

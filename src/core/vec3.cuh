@@ -21,7 +21,7 @@ public:
         _data(make_float3(_x, _y, _z)) {}
 
     CPT_CPU_GPU
-    Vec3(float _v): 
+    explicit Vec3(float _v): 
         _data(make_float3(_v, _v, _v)) {}
 
     CPT_CPU_GPU_INLINE 
@@ -109,6 +109,16 @@ public:
         _data.y *= b;
         _data.z *= b;
         return *this;
+    }
+
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU_GPU_INLINE
+    Vec3 operator/(VecType&& b) const noexcept {
+        return Vec3(
+            _data.x / b.x(),
+            _data.y / b.y(),
+            _data.z / b.z()
+        );
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)
@@ -248,3 +258,19 @@ Vec3 operator*(float b, VecType&& v) noexcept { return Vec3(v.x() * b, v.y() * b
 CONDITION_TEMPLATE(VecType, Vec3)
 CPT_GPU_INLINE
 Vec3 operator/(float b, VecType&& v) noexcept { return Vec3(b * __frcp_rn(v.x()), b * __frcp_rn(v.y()), b * __frcp_rn(v.z())); }
+
+CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
+CPT_GPU_INLINE
+Vec3 reflection(VType1&& ray, VType2&& normal, float dot_prod) noexcept {
+    return ray - 2.f * dot_prod * normal;
+}
+
+CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
+CPT_GPU_INLINE
+Vec3 reflection(VType1&& ray, VType2&& normal) noexcept {
+    return reflection(
+        std::forward<VType1&&>(ray),
+        std::forward<VType1&&>(normal),
+        ray.dot(normal)
+    );
+}
