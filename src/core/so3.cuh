@@ -231,7 +231,7 @@ CPT_GPU_INLINE SO3 rotation_between(Vec3&& from, const Vec3& to) {
 // if l2w is true, `to` will be dst vector to be transformed to
 // other wise, `to` is actually the `from` vector (from world to local, local is (0, 0, 1))
 template <typename VecType>
-CPT_GPU_INLINE SO3 rotation_fixed_anchor(VecType&& to, bool l2w = true) {
+CPT_GPU_INLINE SO3 rotation_fixed_anchor(VecType&& to, bool l2w) {
     auto axis = Vec3(l2w? -to.y() : to.y(), l2w? to.x() : -to.x(), 0.f);
     SO3 R = SO3::diag(to.z());
     if (abs(to.z()) < 1.f - 1e-5f) {

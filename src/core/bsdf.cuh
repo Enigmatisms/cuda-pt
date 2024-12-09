@@ -8,6 +8,7 @@
 #include "core/vec4.cuh"
 #include "core/sampling.cuh"
 #include "core/interaction.cuh"
+#include "core/metal_params.cuh"
 
 enum BSDFFlag: int {
     BSDF_NONE     = 0x00,
@@ -53,8 +54,11 @@ public:
         return (bsdf_flag & (int)flags) > 0;
     }
 
-    static CPT_CPU_GPU float roughness_to_alpha(float roughness) {
-        return 0.f;
+    static CPT_CPU_GPU_INLINE float roughness_to_alpha(float roughness) {
+        roughness = fmaxf(roughness, 1e-3f);
+        float x = logf(roughness);
+        return 1.62142f + 0.819955f * x + 0.1734f * x * x + 0.0171201f * x * x * x +
+           0.000640711f * x * x * x * x;
     }
 };
 
@@ -121,7 +125,17 @@ public:
 };
 
 class FresnelTerms {
+private:
+    Vec3 eta_t;     // for conductor
+    Vec3 k;         // for conductor
 public:
+    CPT_CPU_GPU FresnelTerms() {}
+
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
+    CPT_GPU FresnelTerms(VType1&& _eta_t, VType2&& _k): 
+        eta_t(std::forward<VType1&&>(_eta_t)),
+        k(std::forward<VType1&&>(_k)) {}
+
     CPT_GPU_INLINE static bool is_total_reflection(float dot_normal, float ni, float nr) {
         return (1.f - (ni * ni) / (nr * nr) * (1.f - dot_normal * dot_normal)) < 0.f;
     }
@@ -151,8 +165,7 @@ public:
         return 0.5f * (rs * rs + rp * rp);
     }
 
-    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
-    CPT_GPU static Vec4 fresnel_conductor(float cos_theta_i, VType1&& eta_t, VType2&& k) {
+    CPT_GPU Vec4 fresnel_conductor(float cos_theta_i) const {
         cos_theta_i = fminf(fmaxf(cos_theta_i, -1), 1);
         Vec3 eta_k = k / eta_t;
 
@@ -256,10 +269,13 @@ class GGXMetalBSDF: public BSDF {
  * k_g is the underlying color (albedo)
  */
 using BSDF::k_s;
+private:
+    const FresnelTerms fresnel;
 public:
-    CPT_CPU_GPU GGXMetalBSDF(Vec4 eta_t, Vec4 k_rough, Vec4 albedo, float roughness, int ks_id = -1):
-        BSDF(std::move(eta_t), Vec4(k_rough.xyz(), roughness_to_alpha(roughness)), 
-            std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT) {}
+    CPT_CPU_GPU GGXMetalBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness, int ks_id = -1):
+        BSDF(Vec4(0), Vec4(roughness_to_alpha(roughness)), 
+            std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
+            fresnel(std::move(eta_t), std::move(k)) {}
 
     CPT_CPU_GPU GGXMetalBSDF(): BSDF() {}
     

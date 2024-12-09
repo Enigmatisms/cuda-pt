@@ -26,6 +26,12 @@
 		</film>
 	</sensor>
 
+	<brdf type="metal-ggx" id="large-box">
+		<string name="metal-type" value="Au"/>
+		<float name="roughness" value="0.001"/>
+		<rgb name="k_g" value="1"/>
+	</brdf>
+
 	<brdf type="lambertian" id="box">
 		<rgb name="k_d" value="#BCBCBC"/>
 		<rgb name="k_g" value="1.0"/>
@@ -89,7 +95,7 @@
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/cbox/tall-box.obj"/>
-		<ref type="material" id="box"/>
+		<ref type="material" id="large-box"/>
 	</shape>
 
 	<shape type="obj">

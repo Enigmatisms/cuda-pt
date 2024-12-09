@@ -7,6 +7,17 @@
 #include <numeric>
 #include "core/scene.cuh"
 
+const std::unordered_map<std::string, MetalType> material_mapping = {
+    {"Au", MetalType::Au},
+    {"Cr", MetalType::Cr},
+    {"Cu", MetalType::Cu},
+    {"Ag", MetalType::Ag},
+    {"Al", MetalType::Al},
+    {"W", MetalType::W},
+    {"TiO2", MetalType::TiO2},
+    {"Ni", MetalType::Ni},
+};
+
 std::string getFolderPath(std::string filePath) {
     size_t pos = filePath.find_last_of("/\\");
     if (pos != std::string::npos) {
@@ -120,6 +131,40 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
         create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT);
     } else if (type == "det-refraction") {
         create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
+    } else if (type == "metal-ggx") {
+        float roughness = 0.1f;
+        MetalType mtype = MetalType::Cu;
+        element = bsdf_elem->FirstChildElement("string");
+        if (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            if (name == "type" || name == "metal" || name == "metal-type" || name == "metal_type") {
+                std::string metal_type = element->Attribute("value");
+                auto it = material_mapping.find(metal_type);
+                if (it == material_mapping.end()) {
+                    std::cout << "BSDF[" << id << "]" << ": Only 8 types of metals are supported: ";
+                    for (const auto [k, v]: material_mapping)
+                        std::cout << k << ", ";
+                    std::cout << std::endl;
+                    std::cout << "Current type '" << metal_type << "' is not supported. Setting to 'Cu'\n";
+                } else {
+                    mtype = it->second;
+                }
+            }
+        }
+        element = bsdf_elem->FirstChildElement("float");
+        if (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            if (name == "roughness" || name == "rough") {
+                tinyxml2::XMLError eResult = element->QueryFloatAttribute("value", &roughness);
+                if (eResult != tinyxml2::XML_SUCCESS) {
+                    throw std::runtime_error("Error parsing 'roughness' attribute");
+                }
+            }
+        }
+        printf("Created metal BSDF: %f, %d\n", roughness, int(mtype));
+        create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], METAL_KS[mtype], k_g, roughness, kd_tex_id, ex_tex_id);
     }
 }
 
@@ -169,9 +214,9 @@ void parseEmitter(
         create_point_source<<<1, 1>>>(emitters[index], emission * scaler, pos);
     } else if (type == "spot") {
         element = emitter_elem->FirstChildElement("point");
+        Vec3 pos(0, 0, 0), dir(0, 0, 1);
         while (element) {
             std::string name = element->Attribute("name");
-            Vec3 pos(0, 0, 0), dir(0, 0, 1);
             if (name == "pos") {
                 pos = parsePoint(element);
             } else if (name == "dir") {
@@ -180,6 +225,7 @@ void parseEmitter(
             element = element->NextSiblingElement("point");
         }
         // create Spot source
+        printf("Spot source created at: [%f, %f, %f], [%f, %f, %f]\n", pos.x(), pos.y(), pos.z(), dir.x(), dir.y(), dir.z());
     } else if (type == "area") {
         element = emitter_elem->FirstChildElement("string");
         std::string attr_name = element->Attribute("name");

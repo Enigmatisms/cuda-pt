@@ -21,6 +21,15 @@ CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex
     }
 }
 
+inline CPT_KERNEL void create_metal_bsdf(BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness, int ks_tex_id = 0, int ex_tex_id = 0) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        *dst = new GGXMetalBSDF(eta_t, k, k_g, roughness, ks_tex_id);
+        (*dst)->set_ex_id(ex_tex_id);
+        (*dst)->set_lobe(BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT);
+    }
+}
+
+
 template <typename Ty>
 CPT_KERNEL void destroy_gpu_alloc(Ty** dst) {
     delete dst[threadIdx.x];
