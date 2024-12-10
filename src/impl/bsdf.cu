@@ -20,21 +20,21 @@ class GGX {
 private:
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_GPU_INLINE static float get_lambda(VecType&& local, float alpha) {
-        float e = GGX::e_func(std::forward<VecType&&>(local), alpha);
+        float e = GGX::e_func(std::forward<VecType&&>(local), alpha) * alpha * alpha;
         return e == 0 ? 0 : (-1.f + sqrtf(1.f + e)) * 0.5f;
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_GPU_INLINE static float e_func(VecType&& local, float alpha) {
         float cos2_theta = local.z() * local.z(), 
-              inv_cos2_theta = cos2_theta == 0 ? 0 : __frcp_rn(cos2_theta), alpha2 = alpha * alpha;
+              inv_cos2_theta = cos2_theta == 0 ? 0 : __frcp_rn(cos2_theta);
         // avoid calculating cos phi and sin phi
-        return (local.x() * local.x() + local.y() * local.y()) * inv_cos2_theta * __frcp_rn(alpha2);
+        return (local.x() * local.x() + local.y() * local.y()) * inv_cos2_theta;
     }
 public:
     // input cos theta and roughness, with random sample uv, output scaled slopes
     CPT_GPU static void ggx_cos_sample(float cos_theta, float alpha, Vec2&& uv, Vec2& slopes) {
-        if (cos_theta > 0.9999f) {
+        if (cos_theta == 1) {
             float r = sqrt(uv.x() / (1 - uv.y()));
             float phi = 2.f * uv.y(), sin_phi = 0, cos_phi = 0;
             
@@ -83,8 +83,8 @@ public:
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_GPU_INLINE static float D(VecType&& local, float alpha) {
         // e can be directly used to calculate G1
-        float e = GGX::e_func(std::forward<VecType&&>(local), alpha),
-              cos2_theta = local.z() * local.z(), alpha2 = alpha * alpha;
+        float alpha2 = alpha * alpha, cos2_theta = local.z() * local.z(), 
+              e = GGX::e_func(std::forward<VecType&&>(local), alpha) * __frcp_rn(alpha2);
         return __frcp_rn(M_Pi * alpha2 * cos2_theta * cos2_theta * (1 + e) * (1 + e));
     }
 
@@ -184,7 +184,7 @@ CPT_GPU float GGXMetalBSDF::pdf(const Interaction& it, const Vec3& out, const Ve
 }
 
 CPT_GPU Vec4 GGXMetalBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
-    return k_g * GGX::eval(it.shading_norm, in, out, fresnel, k_s.w());
+    return k_g * GGX::eval(it.shading_norm, in, out, fresnel, k_s.w()) * fmaxf(0, out.dot(it.shading_norm));
 }
 
 CPT_GPU Vec3 GGXMetalBSDF::sample_dir(    
@@ -201,15 +201,17 @@ CPT_GPU Vec3 GGXMetalBSDF::sample_dir(
     auto D_e = GGX::D(local_whf, k_s.w());
     float dot_indir_m = local_in.dot(local_whf);
     // calculate PDF
-    pdf = D_e * GGX::G1(local_in, k_s.w()) * fabsf(dot_indir_m) / fabsf(local_in.z());
-    pdf = (pdf > 0 && dot_indir_m > 1e-5f) ? (pdf * __frcp_rn(4.f * dot_indir_m)) : 0;
+    pdf = D_e * GGX::G1(local_in, k_s.w()) * fabsf(dot_indir_m / local_in.z());
+    pdf = (pdf > 0 && dot_indir_m > 0) ? (pdf * __frcp_rn(4.f * dot_indir_m)) : 0;
     // calculate reflected ray direction
-    Vec3 local_ref = reflection(local_in, local_whf, dot_indir_m),            // local space reflection vector
-         refdir = R_w2l.transposed_rotate(local_ref);                         // world space reflection vector
+    Vec3 local_ref = reflection(local_in, local_whf, dot_indir_m),      // local space reflection vector
+         refdir    = R_w2l.transposed_rotate(local_ref);                // world space reflection vector
     float cos_i = local_in.z(), cos_o = local_ref.z();
-    bool valid_result = cos_i > 0 && cos_o > 0;
+    Vec4 fres_v = fresnel.fresnel_conductor(fabsf(local_ref.dot(local_whf)));
     // calculate throughput
-    throughput *= valid_result ? (k_g * D_e * GGX::G(local_in, local_ref, k_s.w()) * __frcp_rn(4.f * cos_i * cos_o) *
-        fresnel.fresnel_conductor(fabsf(local_ref.dot(local_whf)))) : Vec4(0, 0, 0, 1);
-    return refdir;
+    if (cos_i > 0 && cos_o > 0 && pdf > 0) {
+        throughput *= (1.f / pdf) * k_g * D_e * GGX::G(local_in, local_ref, k_s.w()) * 
+        __frcp_rn(4.f * cos_i * cos_o) * fres_v * fmaxf(it.shading_norm.dot(refdir), 0);
+    }
+    return refdir;                              
 }

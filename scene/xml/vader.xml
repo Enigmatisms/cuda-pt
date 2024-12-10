@@ -4,7 +4,7 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
-    <renderer type="wfpt"/>
+    <renderer type="pt"/>
 	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
@@ -60,7 +60,7 @@
 	</brdf>
 
 	<brdf type="metal-ggx" id="helmet">
-		<string name="metal-type" value="TiO2"/>
+		<string name="metal-type" value="V"/>
 		<float name="roughness" value="0.005"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>

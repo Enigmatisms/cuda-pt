@@ -10,7 +10,7 @@
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="8"/>
+        <integer name="max_bounce" value="5"/>
 		<integer name="cache_level" value="4"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
@@ -27,8 +27,8 @@
 	</sensor>
 
 	<brdf type="metal-ggx" id="large-box">
-		<string name="metal-type" value="Cu"/>
-		<float name="roughness" value="0.005"/>
+		<string name="metal-type" value="Au"/>
+		<float name="roughness" value="0.001"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 

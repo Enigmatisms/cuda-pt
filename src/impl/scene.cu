@@ -13,9 +13,16 @@ const std::unordered_map<std::string, MetalType> material_mapping = {
     {"Cu", MetalType::Cu},
     {"Ag", MetalType::Ag},
     {"Al", MetalType::Al},
-    {"W", MetalType::W},
+    {"W",   MetalType::W},
     {"TiO2", MetalType::TiO2},
-    {"Ni", MetalType::Ni},
+    {"Ni",  MetalType::Ni},
+    {"MgO", MetalType::MgO},
+    {"Na",  MetalType::Na},
+    {"SiC", MetalType::SiC},
+    {"V",   MetalType::V},
+    {"CuO", MetalType::CuO},
+    {"Hg",  MetalType::Hg},
+    {"Ir",  MetalType::Ir},
 };
 
 std::string getFolderPath(std::string filePath) {
@@ -158,7 +165,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             std::string value = element->Attribute("value");
             if (name == "roughness" || name == "rough") {
                 tinyxml2::XMLError eResult = element->QueryFloatAttribute("value", &roughness);
-                roughness = std::clamp(roughness, 0.005f, 0.5f);
+                // roughness = std::clamp(roughness, 0.005f, 0.5f);
                 if (eResult != tinyxml2::XML_SUCCESS) {
                     throw std::runtime_error("Error parsing 'roughness' attribute");
                 }

@@ -23,8 +23,8 @@
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="960"/>
-			<integer name="height" value="540"/>
+			<integer name="width" value="1920"/>
+			<integer name="height" value="1080"/>
 			<integer name="specular_constraint" value="0"/>
 			<bool name="gamma_correction" value="false"/>
 			<bool name="bidirectional" value="false"/>
@@ -57,8 +57,8 @@
 	</brdf>
 
 	<brdf type="metal-ggx" id="floor">
-		<string name="metal-type" value="Cr"/>
-		<float name="roughness" value="0.005"/>
+		<string name="metal-type" value="Al"/>
+		<float name="roughness" value="0.002"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 

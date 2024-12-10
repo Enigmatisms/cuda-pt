@@ -30,7 +30,7 @@ cd build/Release
 ```
 
 ##### More info
- 
+
 This repo currently **has no plan for OptiX**, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated in the experimental path tracer AdaPT. Check my github homepage for more information.
 
 The scalability of this repo might be worse than that of AdaPT, but it will improve over time, since I plan to migrate from Taichi Lang to a pure-CUDA code base. Currently, this repo supports:
@@ -82,3 +82,18 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 ### Misc
 
 This repo originated from: [w3ntao/smallpt-megakernel](https://github.com/w3ntao/smallpt-megakernel), but now it is very different from it. I answered [his question on stackexchange computer graphics](https://computergraphics.stackexchange.com/questions/14000/why-is-my-ray-tracer-not-accelerated-by-cuda/14003#14003) and tweaked his code, so I thought to myself... why not base on this repo and try to make it better (though, I won't call it small-pt, since it definitely won't be small after I heavily optimize the code).
+
+---
+
+#### Renderings
+
+Microfacet GGX metal BSDF for different conductors (there are 15 different conductors in this renderer):
+
+| Au                                | Al                               | Ag                              |
+| --------------------------------- | -------------------------------- | ------------------------------- |
+| ![Au](assets/microfacet/Au.png)   | ![Au](assets/microfacet/Al.png)  | ![Au](assets/microfacet/Ag.png) |
+| Cr                                | SiC                              | Ir                              |
+| ![Au](assets/microfacet/Cr.png)   | ![Au](assets/microfacet/SiC.png) | ![Au](assets/microfacet/Ir.png) |
+| TiO2                              | V                                | Cu                              |
+| ![Au](assets/microfacet/TiO2.png) | ![Au](assets/microfacet/V.png)   | ![Au](assets/microfacet/Cu.png) |
+
