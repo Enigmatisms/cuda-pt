@@ -22,6 +22,10 @@ public:
         _data(make_float4(_v, _v, _v, _v)) {}
 
     CPT_CPU_GPU
+    explicit Vec4(float _v, float alpha): 
+        _data(make_float4(_v, _v, _v, alpha)) {}
+
+    CPT_CPU_GPU
     Vec4(float _x, float _y, float _z, float _w = 1): 
         _data(make_float4(_x, _y, _z, _w)) {}
 
@@ -117,6 +121,10 @@ public:
     CPT_CPU_GPU_INLINE
     Vec4 operator*(float b) const noexcept { return Vec4(_data.x * b, _data.y * b, _data.z * b, _data.w * b); }
 
+    CONDITION_TEMPLATE(VecType, Vec4)
+    CPT_CPU_GPU_INLINE
+    Vec4 operator/(VecType&& b) const noexcept { return Vec4(_data.x / b.x(), _data.y / b.y(), _data.z / b.z(), _data.w / b.w()); }
+
     CPT_CPU_GPU_INLINE
     Vec4& operator*=(float b) noexcept {
         _data.x *= b;
@@ -160,6 +168,11 @@ public:
     bool numeric_err() const noexcept {
         return isnan(_data.x) || isnan(_data.y) || isnan(_data.z) || isnan(_data.w) || \
                isinf(_data.x) || isinf(_data.y) || isinf(_data.z) || isinf(_data.w);
+    }
+
+    CPT_CPU_GPU_INLINE
+    Vec4 exp_xyz() const noexcept {
+        return Vec4(expf(_data.x), expf(_data.y), expf(_data.z), 1);
     }
 
     CONDITION_TEMPLATE(VecType, Vec4)

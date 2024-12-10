@@ -6,6 +6,7 @@
 #pragma once
 #include "core/vec2.cuh"
 #include "core/vec4.cuh"
+#include "core/fresnel.cuh"
 #include "core/sampling.cuh"
 #include "core/interaction.cuh"
 #include "core/metal_params.cuh"
@@ -124,75 +125,6 @@ public:
     }
 };
 
-class FresnelTerms {
-private:
-    Vec3 eta_t;     // for conductor
-    Vec3 k;         // for conductor
-public:
-    CPT_CPU_GPU FresnelTerms() {}
-
-    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
-    CPT_GPU FresnelTerms(VType1&& _eta_t, VType2&& _k): 
-        eta_t(std::forward<VType1&&>(_eta_t)),
-        k(std::forward<VType1&&>(_k)) {}
-
-    CPT_GPU_INLINE static bool is_total_reflection(float dot_normal, float ni, float nr) {
-        return (1.f - (ni * ni) / (nr * nr) * (1.f - dot_normal * dot_normal)) < 0.f;
-    }
-
-    CPT_GPU static Vec3 snell_refraction(const Vec3& incid, const Vec3& normal, float& cos_r2, float dot_n, float ni, float nr) {
-        /* Refraction vector by Snell's Law, note that an extra flag will be returned */
-        float ratio = ni / nr;
-        cos_r2 = 1.f - (ratio * ratio) * (1. - dot_n * dot_n);        // refraction angle cosine
-        // for ni > nr situation, there will be total reflection
-        // if cos_r2 <= 0.f, then return value will be Vec3(0, 0, 0)
-        return (ratio * incid - ratio * dot_n * normal + sgn(dot_n) * sqrtf(fabsf(cos_r2)) * normal).normalized() * (cos_r2 > 0.f);
-    }
-
-    CPT_GPU static float fresnel_dielectric(float n_in, float n_out, float cos_inc, float cos_ref) {
-        /**
-            Fresnel Equation for calculating specular ratio
-            Since Schlick's Approximation is not clear about n1->n2, n2->n1 (different) effects
-
-            This Fresnel equation is for dielectric, not for conductor
-        */
-        float n1cos_i = n_in * cos_inc;
-        float n2cos_i = n_out * cos_inc;
-        float n1cos_r = n_in * cos_ref;
-        float n2cos_r = n_out * cos_ref;
-        float rs = (n1cos_i - n2cos_r) / (n1cos_i + n2cos_r);
-        float rp = (n1cos_r - n2cos_i) / (n1cos_r + n2cos_i);
-        return 0.5f * (rs * rs + rp * rp);
-    }
-
-    CPT_GPU Vec4 fresnel_conductor(float cos_theta_i) const {
-        cos_theta_i = fminf(fmaxf(cos_theta_i, -1), 1);
-
-        float cos2_theta_i = cos_theta_i * cos_theta_i;
-        float sin2_theta_i = 1. - cos2_theta_i;
-        Vec3 eta2  = eta_t * eta_t;
-        Vec3 etak2 = k * k;
-
-        Vec3 t0 = eta2 - etak2 - sin2_theta_i;
-        Vec3 a2plusb2 = t0 * t0 + 4 * eta2 * etak2;
-        a2plusb2 = Vec3(sqrtf(a2plusb2.x()), sqrtf(a2plusb2.y()), sqrtf(a2plusb2.z()));
-        Vec3 t1 = a2plusb2 + cos2_theta_i;
-        Vec3 a = 0.5f * (a2plusb2 + t0);
-        a = Vec3(sqrtf(a.x()), sqrtf(a.y()), sqrtf(a.z()));
-
-        Vec3 t2 = 2.f * cos_theta_i * a;
-        Vec3 Rs = (t1 - t2) / (t1 + t2);
-
-        Vec3 t3 = cos2_theta_i * a2plusb2 + sin2_theta_i * sin2_theta_i;
-        Vec3 t4 = t2 * sin2_theta_i;
-        Vec3 Rp = Rs * (t3 - t4) / (t3 + t4);
-
-        Rp = 0.5f * (Rp + Rs);
-        return Vec4(Rp.x(), Rp.y(), Rp.z(), 1);
-    }
-};
-
-
 class TranslucentBSDF: public BSDF {
 using BSDF::k_s;        // specular reflection
 using BSDF::k_d;        // ior
@@ -241,17 +173,25 @@ public:
     }
 };
 
-class RoughPlasticBSDF: public BSDF {
+class PlasticBSDF: public BSDF {
 using BSDF::k_s;
+private:
+    float trans_scaler;
+    float thickness;
+    float eta;
+    float precomp_diff_f;       // precomputed diffuse Fresnel
 public:
-    CPT_CPU_GPU RoughPlasticBSDF(Vec4 _k_d, Vec4 _k_s, float ior, float roughness, int ks_id = -1):
-        BSDF(std::move(_k_d), std::move(_k_s), Vec4(roughness_to_alpha(roughness), ior, 0), -1, ks_id, 
-            BSDFFlag::BSDF_GLOSSY  | 
-            BSDFFlag::BSDF_DIFFUSE | 
+    CPT_CPU_GPU PlasticBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
+        float trans_scaler = 1.f, float thickness = 0, int kd_id = -1, int ks_id = -1
+    ): BSDF(std::move(_k_d), std::move(_k_s), std::move(sigma_a), kd_id, ks_id, 
+            BSDFFlag::BSDF_SPECULAR | 
+            BSDFFlag::BSDF_DIFFUSE  | 
             BSDFFlag::BSDF_REFLECT
-        ) {}
+        ), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {
+            precomp_diff_f = FresnelTerms::diffuse_fresnel(ior);
+        }
 
-    CPT_CPU_GPU RoughPlasticBSDF(): BSDF() {}
+    CPT_CPU_GPU PlasticBSDF(): BSDF() {}
     
     CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override;
 

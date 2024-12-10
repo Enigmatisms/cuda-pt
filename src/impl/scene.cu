@@ -112,7 +112,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             k_d = color;
         } else if (name == "k_s") {
             k_s = color;
-        } else if (name == "k_g") {
+        } else if (name == "k_g" || name == "sigma_a") {
             k_g = color;
         }
         element = element->NextSiblingElement("rgb");
@@ -165,13 +165,32 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             std::string value = element->Attribute("value");
             if (name == "roughness" || name == "rough") {
                 tinyxml2::XMLError eResult = element->QueryFloatAttribute("value", &roughness);
-                // roughness = std::clamp(roughness, 0.005f, 0.5f);
+                roughness = std::clamp(roughness, 0.001f, 1.f);
                 if (eResult != tinyxml2::XML_SUCCESS) {
                     throw std::runtime_error("Error parsing 'roughness' attribute");
                 }
             }
         }
         create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], METAL_KS[mtype], k_g, roughness, kd_tex_id, ex_tex_id);
+    } else if (type == "plastic") {
+        element = bsdf_elem->FirstChildElement("float");
+        float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
+        while (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            tinyxml2::XMLError eResult;
+            if (name == "trans_scaler") {
+                eResult = element->QueryFloatAttribute("value", &trans_scaler);
+            } else if (name == "thickness") {
+                eResult = element->QueryFloatAttribute("thickness", &trans_scaler);
+            } else if (name == "ior") {
+                eResult = element->QueryFloatAttribute("ior", &trans_scaler);
+            }
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
+            element = element->NextSiblingElement("float");
+        }
+        create_plastic_bsdf<<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
     }
 }
 
