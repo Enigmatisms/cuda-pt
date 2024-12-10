@@ -167,12 +167,11 @@ public:
 
     CPT_GPU Vec4 fresnel_conductor(float cos_theta_i) const {
         cos_theta_i = fminf(fmaxf(cos_theta_i, -1), 1);
-        Vec3 eta_k = k / eta_t;
 
         float cos2_theta_i = cos_theta_i * cos_theta_i;
         float sin2_theta_i = 1. - cos2_theta_i;
         Vec3 eta2  = eta_t * eta_t;
-        Vec3 etak2 = eta_k * eta_k;
+        Vec3 etak2 = k * k;
 
         Vec3 t0 = eta2 - etak2 - sin2_theta_i;
         Vec3 a2plusb2 = t0 * t0 + 4 * eta2 * etak2;
@@ -188,7 +187,7 @@ public:
         Vec3 t4 = t2 * sin2_theta_i;
         Vec3 Rp = Rs * (t3 - t4) / (t3 + t4);
 
-        Rp = 0.5 * (Rp + Rs);
+        Rp = 0.5f * (Rp + Rs);
         return Vec4(Rp.x(), Rp.y(), Rp.z(), 1);
     }
 };

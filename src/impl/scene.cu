@@ -158,12 +158,12 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             std::string value = element->Attribute("value");
             if (name == "roughness" || name == "rough") {
                 tinyxml2::XMLError eResult = element->QueryFloatAttribute("value", &roughness);
+                roughness = std::clamp(roughness, 0.005f, 0.5f);
                 if (eResult != tinyxml2::XML_SUCCESS) {
                     throw std::runtime_error("Error parsing 'roughness' attribute");
                 }
             }
         }
-        printf("Created metal BSDF: %f, %d\n", roughness, int(mtype));
         create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], METAL_KS[mtype], k_g, roughness, kd_tex_id, ex_tex_id);
     }
 }

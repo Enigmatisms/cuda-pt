@@ -27,8 +27,8 @@
 	</sensor>
 
 	<brdf type="metal-ggx" id="large-box">
-		<string name="metal-type" value="Au"/>
-		<float name="roughness" value="0.001"/>
+		<string name="metal-type" value="Cu"/>
+		<float name="roughness" value="0.005"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 
