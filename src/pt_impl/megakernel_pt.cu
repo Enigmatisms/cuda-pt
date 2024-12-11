@@ -219,7 +219,8 @@ CPT_KERNEL void render_pt_kernel(
     int max_depth,
     int node_num,
     int accum_cnt,
-    int cache_num
+    int cache_num,
+    bool gamma_corr
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
 
@@ -353,6 +354,7 @@ CPT_KERNEL void render_pt_kernel(
         auto local_v = image(px, py) + radiance;
         image(px, py) = local_v;
         local_v *= 1.f / float(accum_cnt);
+        local_v = gamma_corr ? local_v.gamma_corr() : local_v;
         FLOAT4(output_buffer[(px + py * image.w()) << 2]) = float4(local_v); 
     } else {
         image(px, py) += radiance;
@@ -379,7 +381,8 @@ template CPT_KERNEL void render_pt_kernel<true>(
     int max_depth,
     int node_num,
     int accum_cnt,
-    int cache_num
+    int cache_num,
+    bool gamma_corr
 );
 
 template CPT_KERNEL void render_pt_kernel<false>(
@@ -402,5 +405,6 @@ template CPT_KERNEL void render_pt_kernel<false>(
     int max_depth,
     int node_num,
     int accum_cnt,
-    int cache_num
+    int cache_num,
+    bool gamma_corr
 );

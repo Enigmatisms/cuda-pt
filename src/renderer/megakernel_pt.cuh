@@ -89,6 +89,8 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * @param max_depth     maximum allowed bounce
  * @param node_num      number of nodes on a BVH tree
  * @param accum_cnt     Counter of iterations
+ * @param cache_num     Number of cached BVH nodes
+ * @param gamma_corr    For online rendering, whether to enable gamma correction on visualization
 */
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
@@ -111,7 +113,8 @@ CPT_KERNEL void render_pt_kernel(
     int max_depth = 1,
     int node_num  = -1,
     int accum_cnt = 1,
-    int cache_num = 0
+    int cache_num = 0,
+    bool gamma_corr = false
 );
 
 /**
@@ -145,5 +148,6 @@ CPT_KERNEL void render_lt_kernel(
     int accum_cnt = 1,
     int cache_num = 0,
     int specular_constraints = 0,
-    float caustic_scale = 1.f
+    float caustic_scale = 1.f,
+    bool gamma_corr = false
 );

@@ -63,6 +63,13 @@ bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap, b
 bool mouse_camera_update(DeviceCamera& cam, float sensitivity = 1);
 
 // settings UI
-bool render_settings_interface(DeviceCamera& cam, bool& show_window, bool& show_fps, bool& render_settings_interface, bool& capture);
+bool render_settings_interface(
+    DeviceCamera& cam, 
+    bool& show_window, 
+    bool& show_fps, 
+    bool& render_settings_interface, 
+    bool& capture,
+    bool& gamma_corr
+);
 
 }   // namespace gui

@@ -91,9 +91,13 @@ Microfacet GGX metal BSDF for different conductors (there are 15 different condu
 
 | Au                                | Al                               | Ag                              |
 | --------------------------------- | -------------------------------- | ------------------------------- |
-| ![Au](assets/microfacet/Au.png)   | ![Au](assets/microfacet/Al.png)  | ![Au](assets/microfacet/Ag.png) |
+| ![Au](assets/microfacet/Au.png)   | ![Al](assets/microfacet/Al.png)  | ![Ag](assets/microfacet/Ag.png) |
 | Cr                                | SiC                              | Ir                              |
-| ![Au](assets/microfacet/Cr.png)   | ![Au](assets/microfacet/SiC.png) | ![Au](assets/microfacet/Ir.png) |
+| ![Cr](assets/microfacet/Cr.png)   | ![SiC](assets/microfacet/SiC.png) | ![Ir](assets/microfacet/Ir.png) |
 | TiO2                              | V                                | Cu                              |
-| ![Au](assets/microfacet/TiO2.png) | ![Au](assets/microfacet/V.png)   | ![Au](assets/microfacet/Cu.png) |
+| ![TiO2](assets/microfacet/TiO2.png) | ![V](assets/microfacet/V.png)   | ![Cu](assets/microfacet/Cu.png) |
+| Ni                                | MgO                              | Na                              |
+| ![Ni](assets/microfacet/Ni.png)   | ![MgO](assets/microfacet/MgO.png) | ![Na](assets/microfacet/Na.png) |
+| CuO                               | Hg                               | W                               |
+| ![CuO](assets/microfacet/CuO.png)  | ![Hg](assets/microfacet/Hg.png)  | ![W](assets/microfacet/W.png)  |
 

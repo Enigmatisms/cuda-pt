@@ -175,6 +175,15 @@ public:
         return Vec4(expf(_data.x), expf(_data.y), expf(_data.z), 1);
     }
 
+    CPT_CPU_GPU_INLINE
+    Vec4 gamma_corr(float factor = 1.f / 2.2f) const noexcept {
+        return Vec4(
+            powf(fmaxf(0.f, _data.x), factor), 
+            powf(fmaxf(0.f, _data.y), factor), 
+            powf(fmaxf(0.f, _data.z), factor)
+        );
+    }
+
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
     Vec4 maximize(VecType&& b) const noexcept { return Vec4(max(_data.x, b.x()), max(_data.y, b.y()), max(_data.z, b.z()), max(_data.w, b.w())); }

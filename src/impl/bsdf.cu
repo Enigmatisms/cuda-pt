@@ -19,21 +19,22 @@
 class GGX {
 private:
     CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_GPU_INLINE static float get_lambda(VecType&& local, float alpha) {
-        float e = GGX::e_func(std::forward<VecType&&>(local), alpha) * alpha * alpha;
+    CPT_GPU_INLINE static float get_lambda(VecType&& local, float alphax, float alphay) {
+        float e = GGX::e_func(std::forward<VecType&&>(local), alphax, alphay);
         return e == 0 ? 0 : (-1.f + sqrtf(1.f + e)) * 0.5f;
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_GPU_INLINE static float e_func(VecType&& local, float alpha) {
+    CPT_GPU_INLINE static float e_func(VecType&& local, float alphax, float alphay) {
         float cos2_theta = local.z() * local.z(), 
               inv_cos2_theta = cos2_theta == 0 ? 0 : __frcp_rn(cos2_theta);
         // avoid calculating cos phi and sin phi
-        return (local.x() * local.x() + local.y() * local.y()) * inv_cos2_theta;
+        return (local.x() * local.x() * alphax * alphax + 
+                local.y() * local.y() * alphay * alphay) * inv_cos2_theta;
     }
 public:
     // input cos theta and roughness, with random sample uv, output scaled slopes
-    CPT_GPU static void ggx_cos_sample(float cos_theta, float alpha, Vec2&& uv, Vec2& slopes) {
+    CPT_GPU static void ggx_cos_sample(float cos_theta, Vec2&& uv, Vec2& slopes) {
         if (cos_theta == 1) {
             float r = sqrt(uv.x() / (1 - uv.y()));
             float phi = 2.f * uv.y(), sin_phi = 0, cos_phi = 0;
@@ -81,11 +82,15 @@ public:
     
     // return Vec2: (D value, e value for reuse)
     CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_GPU_INLINE static float D(VecType&& local, float alpha) {
+    CPT_GPU_INLINE static float D(VecType&& local, float alphax, float alphay) {
         // e can be directly used to calculate G1
-        float alpha2 = alpha * alpha, cos2_theta = local.z() * local.z(), 
-              e = GGX::e_func(std::forward<VecType&&>(local), alpha) * __frcp_rn(alpha2);
-        return __frcp_rn(M_Pi * alpha2 * cos2_theta * cos2_theta * (1 + e) * (1 + e));
+        float cos2_theta = local.z() * local.z(), 
+              inv_cos2_theta = cos2_theta == 0 ? 0 : __frcp_rn(cos2_theta);
+        // avoid calculating cos phi and sin phi
+        float e = (local.x() * local.x() / (alphax * alphax) + 
+                local.y() * local.y() / (alphay * alphay)) * inv_cos2_theta;
+
+        return __frcp_rn(M_Pi * alphax * alphay * cos2_theta * cos2_theta * (1 + e) * (1 + e));
     }
 
     CPT_GPU_INLINE static float G1_with_e(float e) {
@@ -94,8 +99,8 @@ public:
     }
 
     CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
-    CPT_GPU_INLINE static float G(VType1&& local_in, VType2&& local_out, float alpha) {
-        return 1.f / (1.f + get_lambda(local_in, alpha) + get_lambda(local_out, alpha));
+    CPT_GPU_INLINE static float G(VType1&& local_in, VType2&& local_out, float alphax, float alphay) {
+        return 1.f / (1.f + get_lambda(local_in, alphax, alphay) + get_lambda(local_out, alphax, alphay));
     }
 public:
     /**
@@ -103,40 +108,36 @@ public:
      * the inputs should be in the local frame
      */
     CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_GPU_INLINE static Vec3 sample_wh(VecType&& local_indir, float alpha, Vec2&& uv) {
-        Vec3 wi_stretched = Vec3(local_indir.x() * alpha, local_indir.y() * alpha, local_indir.z()).normalized();
+    CPT_GPU_INLINE static Vec3 sample_wh(VecType&& local_indir, float alphax, float alphay, Vec2&& uv) {
+        Vec3 wi_stretched = Vec3(local_indir.x() * alphax, local_indir.y() * alphay, local_indir.z()).normalized();
         Vec2 slope;
 
-        ggx_cos_sample(wi_stretched.z(), alpha, std::move(uv), slope);
+        ggx_cos_sample(wi_stretched.z(), std::move(uv), slope);
         Vec2 cos_sin_phi = get_sincos_phi(wi_stretched);
 
         float tmp = cos_sin_phi.x() * slope.x() - cos_sin_phi.y() * slope.y();
-        slope.y() = (cos_sin_phi.y() * slope.x() + cos_sin_phi.x() * slope.y()) * alpha;
-        slope.x() = tmp * alpha;
+        slope.y() = (cos_sin_phi.y() * slope.x() + cos_sin_phi.x() * slope.y()) * alphay;
+        slope.x() = tmp * alphax;
 
         return Vec3(-slope.x(), -slope.y(), 1.).normalized();
     }
 
     CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
-    CPT_GPU_INLINE static float pdf(VType1&& local_wh, VType2&& local_in, float alpha) {
-        auto D_e = D(local_wh, alpha);
+    CPT_GPU_INLINE static float pdf(VType1&& local_wh, VType2&& local_in, float alphax, float alphay) {
+        auto D_e = D(local_wh, alphax, alphay);
         // can be 0 for the denominator
         float cos_ratio = fabsf(local_in.dot(local_wh)) / fabsf(local_in.z());
-        return D_e * G1(std::forward<VType2&&>(local_in), alpha) * cos_ratio;
+        return D_e * G1(std::forward<VType2&&>(local_in), alphax, alphay) * cos_ratio;
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_GPU_INLINE static float G1(VecType&& local, float alpha) {
-        float cos2_theta = local.z() * local.z(), 
-              inv_cos2_theta = cos2_theta == 0 ? 0 : __frcp_rn(cos2_theta), alpha2 = alpha * alpha;
-        // avoid calculating cos phi and sin phi
-        float e = (local.x() * local.x() + local.y() * local.y()) * inv_cos2_theta * alpha2;
-        return G1_with_e(e);
+    CPT_GPU_INLINE static float G1(VecType&& local, float alphax, float alphay) {
+        return 1.f / (1.f + get_lambda(local, alphax, alphay));
     }
 
     // indir points towards the incident point, outdir points away from it
     CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec3, Vec3, Vec3)
-    CPT_GPU static Vec4 eval(VType1&& n_s, VType2&& indir, VType3&& outdir, const FresnelTerms& fres, float alpha) {
+    CPT_GPU static Vec4 eval(VType1&& n_s, VType2&& indir, VType3&& outdir, const FresnelTerms& fres, float alphax, float alphay) {
         auto R_w2l = rotation_fixed_anchor(std::forward<VType1&&>(n_s), false);
         Vec3 local_in  = -R_w2l.rotate(std::forward<VType2&&>(indir)),
              local_out = R_w2l.rotate(std::forward<VType3&&>(outdir));
@@ -148,9 +149,9 @@ public:
         bool not_same_hemisphere = (cos_i > 0) ^ (cos_o > 0);
         // return D * F * G / (geo-term)
         return not_same_hemisphere ? Vec4(0) : 
-                (GGX::D(std::move(wh), alpha) * 
+                (GGX::D(std::move(wh), alphax, alphay) * 
                 fres_f * __frcp_rn(4.f * cos_i * cos_o) *
-                GGX::G(std::move(local_in), std::move(local_out), alpha));
+                GGX::G(std::move(local_in), std::move(local_out), alphax, alphay));
     }
 };
 
@@ -227,19 +228,24 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
     return outdir;
 }
 
+ CPT_CPU_GPU GGXMetalBSDF::GGXMetalBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id):
+    BSDF(Vec4(0), Vec4(roughness_to_alpha(roughness_x), roughness_to_alpha(roughness_y), 1), 
+        std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
+        fresnel(std::move(eta_t), std::move(k)) {}
+
 CPT_GPU float GGXMetalBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
     auto R_w2l = rotation_fixed_anchor(it.shading_norm, false);
     const Vec3 local_in  = -R_w2l.rotate(in),
                local_out = R_w2l.rotate(out),
                local_wh  = (local_out + local_in).normalized();
     // since outdir points outward, indir points inwards, therefore the prod should be negative
-    float pdf_v = GGX::pdf(local_wh, local_in, k_s.w());
+    float pdf_v = GGX::pdf(local_wh, local_in, k_s.x(), k_s.y());
     bool not_same_hemisphere = (local_in.z() > 0) ^ (local_out.z() > 0);
     return not_same_hemisphere ? 0 : pdf_v * __frcp_rn(4.f * local_wh.dot(local_in));
 }
 
 CPT_GPU Vec4 GGXMetalBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
-    return k_g * GGX::eval(it.shading_norm, in, out, fresnel, k_s.w()) * fmaxf(0, out.dot(it.shading_norm));
+    return k_g * GGX::eval(it.shading_norm, in, out, fresnel, k_s.x(), k_s.y()) * fmaxf(0, out.dot(it.shading_norm));
 }
 
 CPT_GPU Vec3 GGXMetalBSDF::sample_dir(    
@@ -252,12 +258,12 @@ CPT_GPU Vec3 GGXMetalBSDF::sample_dir(
 ) const {
     auto R_w2l     = rotation_fixed_anchor(it.shading_norm, false);         // transpose will be l2w
     const Vec3 local_in = -R_w2l.rotate(indir),                             // from world to local
-          local_whf     = GGX::sample_wh(local_in, k_s.w(), sp.next2D());
+          local_whf     = GGX::sample_wh(local_in, k_s.x(), k_s.y(), sp.next2D());
 
-    auto D_e = GGX::D(local_whf, k_s.w());
+    auto D_e = GGX::D(local_whf, k_s.x(), k_s.y());
     float dot_indir_m = local_in.dot(local_whf);
     // calculate PDF
-    pdf = D_e * GGX::G1(local_in, k_s.w()) * fabsf(dot_indir_m / local_in.z());
+    pdf = D_e * GGX::G1(local_in, k_s.x(), k_s.y()) * fabsf(dot_indir_m / local_in.z());
     pdf = (pdf > 0 && dot_indir_m > 0) ? (pdf * __frcp_rn(4.f * dot_indir_m)) : 0;
     // calculate reflected ray direction
     Vec3 local_ref = reflection(local_in, local_whf, dot_indir_m),      // local space reflection vector
@@ -266,7 +272,7 @@ CPT_GPU Vec3 GGXMetalBSDF::sample_dir(
     Vec4 fres_v = fresnel.fresnel_conductor(fabsf(local_ref.dot(local_whf)));
     // calculate throughput
     if (cos_i > 0 && cos_o > 0 && pdf > 0) {
-        throughput *= (1.f / pdf) * k_g * D_e * GGX::G(local_in, local_ref, k_s.w()) * 
+        throughput *= (1.f / pdf) * k_g * D_e * GGX::G(local_in, local_ref, k_s.x(), k_s.y()) * 
         __frcp_rn(4.f * cos_i * cos_o) * fres_v * fmaxf(it.shading_norm.dot(refdir), 0);
     }
     samp_lobe = static_cast<BSDFFlag>(bsdf_flag);

@@ -58,7 +58,8 @@
 
 	<brdf type="metal-ggx" id="floor">
 		<string name="metal-type" value="Al"/>
-		<float name="roughness" value="0.002"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 

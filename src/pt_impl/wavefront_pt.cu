@@ -420,7 +420,7 @@ template <bool render_once>
 CPT_KERNEL void radiance_splat(
     PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch, 
-    int accum_cnt, float* output_buffer
+    int accum_cnt, float* output_buffer, bool gamma_corr
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -433,6 +433,7 @@ CPT_KERNEL void radiance_splat(
         auto local_v = image(img_x, img_y) + L;
         image(img_x, img_y) = local_v;
         local_v *= 1.f / float(accum_cnt);
+        local_v = gamma_corr ? local_v.gamma_corr() : local_v;
         FLOAT4(output_buffer[(img_x + img_y * image.w()) << 2]) = float4(local_v); 
     } else {
         image(px + x_patch * PATCH_X, py + y_patch * PATCH_Y) += L;
@@ -442,11 +443,11 @@ CPT_KERNEL void radiance_splat(
 template CPT_KERNEL void radiance_splat<true>(
     PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch,
-    int accum_cnt, float* output_buffer
+    int accum_cnt, float* output_buffer, bool gamma_corr
 );
 
 template CPT_KERNEL void radiance_splat<false>(
     PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch, 
-    int accum_cnt, float* output_buffer
+    int accum_cnt, float* output_bufferr, bool gamma_corr
 );

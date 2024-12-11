@@ -75,6 +75,5 @@ struct Ray {
     CPT_CPU_GPU_INLINE void reset() {
         clr_hit();
         set_hit_index(0);
-        set_delta(false);
     }
 };

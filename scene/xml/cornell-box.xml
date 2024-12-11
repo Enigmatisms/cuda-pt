@@ -28,7 +28,8 @@
 
 	<brdf type="metal-ggx" id="large-box">
 		<string name="metal-type" value="Au"/>
-		<float name="roughness" value="0.001"/>
+		<float name="roughness_x" value="0.001"/>
+		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 

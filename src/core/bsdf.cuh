@@ -228,10 +228,7 @@ using BSDF::k_s;
 private:
     const FresnelTerms fresnel;
 public:
-    CPT_CPU_GPU GGXMetalBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness, int ks_id = -1):
-        BSDF(Vec4(0), Vec4(roughness_to_alpha(roughness)), 
-            std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
-            fresnel(std::move(eta_t), std::move(k)) {}
+    CPT_CPU_GPU GGXMetalBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id = -1);
 
     CPT_CPU_GPU GGXMetalBSDF(): BSDF() {}
     

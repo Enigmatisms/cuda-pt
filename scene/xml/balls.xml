@@ -26,12 +26,6 @@
 		</film>
 	</sensor>
 
-	<brdf type="metal-ggx" id="large-box">
-		<string name="metal-type" value="Au"/>
-		<float name="roughness" value="0.001"/>
-		<rgb name="k_g" value="1"/>
-	</brdf>
-
 	<brdf type="lambertian" id="box">
 		<rgb name="k_d" value="#BCBCBC"/>
 		<rgb name="k_g" value="1.0"/>
@@ -88,13 +82,15 @@
 
 	<brdf type="metal-ggx" id="gold">
 		<string name="metal-type" value="Au"/>
-		<float name="roughness" value="0.005"/>
+		<float name="roughness_x" value="0.005"/>
+		<float name="roughness_y" value="0.005"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 
 	<brdf type="metal-ggx" id="ir">
 		<string name="metal-type" value="Ir"/>
-		<float name="roughness" value="0.01"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 

@@ -139,7 +139,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
     } else if (type == "det-refraction") {
         create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
     } else if (type == "metal-ggx") {
-        float roughness = 0.1f;
+        float roughness_x = 0.1f, roughness_y = 0.1f;
         MetalType mtype = MetalType::Cu;
         element = bsdf_elem->FirstChildElement("string");
         if (element) {
@@ -160,18 +160,23 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             }
         }
         element = bsdf_elem->FirstChildElement("float");
-        if (element) {
+        tinyxml2::XMLError eResult;
+        while (element) {
             std::string name = element->Attribute("name");
             std::string value = element->Attribute("value");
-            if (name == "roughness" || name == "rough") {
-                tinyxml2::XMLError eResult = element->QueryFloatAttribute("value", &roughness);
-                roughness = std::clamp(roughness, 0.001f, 1.f);
-                if (eResult != tinyxml2::XML_SUCCESS) {
-                    throw std::runtime_error("Error parsing 'roughness' attribute");
-                }
+            if (name == "roughness_x" || name == "rough_x") {
+                eResult = element->QueryFloatAttribute("value", &roughness_x);
+                roughness_x = std::clamp(roughness_x, 0.001f, 1.f);
+            } else if (name == "roughness_y" || name == "rough_y") {
+                eResult = element->QueryFloatAttribute("value", &roughness_y);
+                roughness_y = std::clamp(roughness_y, 0.001f, 1.f);
             }
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'roughness' attribute");
+            element = element->NextSiblingElement("float");
         }
-        create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], METAL_KS[mtype], k_g, roughness, kd_tex_id, ex_tex_id);
+        create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], 
+                    METAL_KS[mtype], k_g, roughness_x, roughness_y, kd_tex_id, ex_tex_id);
     } else if (type == "plastic") {
         k_g = Vec4(0, 1);
         element = bsdf_elem->FirstChildElement("float");
@@ -603,9 +608,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         std::vector<Shape> reorder_shapes(num_prims);
         for (int i = 0; i < num_prims; i++) {
             int index = prim_idxs[i], obj_idx = obj_idxs[i];
-            int old_idx = obj_idx;
             obj_idx = obj_idx < 0 ? -obj_idx - 1 : obj_idx;
-            printf("Object idx: %d -> %d\n", old_idx, obj_idx);
             const auto& object = objects[obj_idx];
             reorder_sph_flags[i] = sphere_flags[index];
             reorder_shapes[i] = shapes[index];
