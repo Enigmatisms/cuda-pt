@@ -44,7 +44,8 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
 }
 
 CPT_CPU void LightTracer::render_online(
-    int max_depth
+    int max_depth,
+    bool gamma_corr
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
     size_t _num_bytes = 0, cached_size = 2 * num_cache * sizeof(float4);
@@ -56,7 +57,7 @@ CPT_CPU void LightTracer::render_online(
             *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
             bvh_leaves, nodes, _cached_nodes, image, 
             output_buffer, num_prims, num_objs, num_emitter, 
-            accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache
+            accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache, false
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
@@ -65,7 +66,7 @@ CPT_CPU void LightTracer::render_online(
         bvh_leaves, nodes, _cached_nodes, image, 
         output_buffer, num_prims, num_objs, num_emitter, 
         accum_cnt * SEED_SCALER, max_depth, num_nodes, 
-        accum_cnt, num_cache, spec_constraint, caustic_scaling
+        accum_cnt, num_cache, spec_constraint, caustic_scaling, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }

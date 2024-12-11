@@ -59,6 +59,22 @@
 		<rgb name="k_g" value="0"/>
 	</brdf>
 
+	<brdf type="metal-ggx" id="helmet">
+		<string name="metal-type" value="CuO"/>
+		<float name="roughness_x" value="0.005"/>
+		<float name="roughness_y" value="0.005"/>
+		<rgb name="k_g" value="1"/>
+	</brdf>
+
+	<brdf type="plastic" id="blue-plastic">
+		<rgb name="k_d" value="#18455c"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.2, 0.2, 0.2"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.9"/>
+	</brdf>
+
 	<emitter type="area" id="area1">
 		<rgb name="emission" value="50.0, 50.0, 50.0"/>
 		<rgb name="scaler" value="1.2"/>
@@ -85,7 +101,7 @@
 
     <shape type="obj">
 		<string name="filename" value="../meshes/vader/vader.obj"/>
-		<ref type="material" id="mirror"/>
+		<ref type="material" id="helmet"/>
 	</shape>
 
 	<shape type="obj">

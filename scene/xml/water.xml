@@ -18,7 +18,7 @@
 		<transform name="toWorld">
 			<!-- <lookat target="0.031568, 0.003045, -0.193984" origin="-0.648214, 0.323867, 0.465538" up="0.265440, 0.914012, -0.306796"/> -->
 			<!-- <lookat target="0.124368, -0.000682, -0.254114" origin="-0.604854, 0.243089, 0.385269" up="0.187101, 0.969817, -0.156361"/> -->
-			<lookat target="0.159210, 2.336197, 15.408566" origin="0.170299, 2.310919, 16.408184" up="0.000326, 0.999680, 0.025276"/>
+			<lookat target="0.188041, 2.270476, 18.007584" origin="0.199130, 2.245198, 19.007202" up="0.000326, 0.999680, 0.025276"/>
 			
 		</transform>
 
@@ -32,7 +32,7 @@
 		</film>
 	</sensor>
 
-	<brdf type="lambertian" id="floor">
+	<brdf type="lambertian" id="wall">
 		<rgb name="k_d" value="#BCBCCC"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
@@ -56,22 +56,23 @@
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
-	<brdf type="specular" id="mirror">
-		<rgb name="k_d" value="0"/>
-		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
-		<rgb name="k_g" value="0"/>
+	<brdf type="metal-ggx" id="floor">
+		<string name="metal-type" value="Al"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+		<rgb name="k_g" value="1"/>
 	</brdf>
 
 	<emitter type="area" id="area1">
 		<rgb name="emission" value="70.0, 70, 70"/>
-		<rgb name="scaler" value="0.6"/>
+		<rgb name="scaler" value="0.45"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="area2">
 		<rgb name="emission" value="70.0, 70, 70"/>
-		<rgb name="scaler" value="0.2"/>
+		<rgb name="scaler" value="0.15"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
@@ -95,12 +96,12 @@
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/water/Mesh007.obj"/>
-		<ref type="material" id="floor"/>
+		<ref type="material" id="wall"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/water/Mesh011.obj"/>
-		<ref type="material" id="mirror"/>
+		<ref type="material" id="floor"/>
 	</shape>
 
 	<shape type="obj">

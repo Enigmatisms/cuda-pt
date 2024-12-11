@@ -212,7 +212,12 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
 }
 
 bool render_settings_interface(
-    DeviceCamera& cam, bool& show_window, bool& show_fps, bool& sub_window_process, bool& capture
+    DeviceCamera& cam, 
+    bool& show_window, 
+    bool& show_fps, 
+    bool& sub_window_process, 
+    bool& capture,
+    bool& gamma_corr
 ) {
     // Begin the main menu bar at the top of the window
     if (ImGui::BeginMainMenuBar()) {
@@ -245,8 +250,7 @@ bool render_settings_interface(
                 update |= ImGui::InputFloat("##input", &value, 1.0f, 150.0f, "%.2f");
                 cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
 
-                bool temp = false;
-                ImGui::Checkbox("temp placeholder", &temp);
+                ImGui::Checkbox("Gamma Correction", &gamma_corr);
             }
 
             if (ImGui::CollapsingHeader("Scene Settings", ImGuiWindowFlags_AlwaysAutoResize)) {

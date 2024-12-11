@@ -11,15 +11,19 @@
 #include "core/cuda_utils.cuh"
 #include "core/constants.cuh"
 
-class Vec4 {
+class  Vec4 {
 private:
     float4 _data;
 public:
     CPT_CPU_GPU Vec4() {}
 
     CPT_CPU_GPU
-    Vec4(float _v): 
+    explicit Vec4(float _v): 
         _data(make_float4(_v, _v, _v, _v)) {}
+
+    CPT_CPU_GPU
+    explicit Vec4(float _v, float alpha): 
+        _data(make_float4(_v, _v, _v, alpha)) {}
 
     CPT_CPU_GPU
     Vec4(float _x, float _y, float _z, float _w = 1): 
@@ -27,6 +31,9 @@ public:
 
     CPT_CPU_GPU
     Vec4(float4&& v): _data(std::move(v)) {}
+
+    CPT_CPU_GPU
+    Vec4(float3&& v, float w): _data(make_float4(v.x, v.y, v.z, w)) {}
 
     CPT_CPU_GPU_INLINE 
     float& operator[](int index) {
@@ -47,6 +54,7 @@ public:
     CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
     CPT_CPU_GPU_INLINE const float& z() const { return _data.z; }
     CPT_CPU_GPU_INLINE const float& w() const { return _data.w; }
+    CPT_CPU_GPU_INLINE float3 xyz() const { return make_float3(_data.x, _data.y, _data.z); }
 
     CPT_CPU_GPU_INLINE
     Vec4 abs() const noexcept {
@@ -113,6 +121,10 @@ public:
     CPT_CPU_GPU_INLINE
     Vec4 operator*(float b) const noexcept { return Vec4(_data.x * b, _data.y * b, _data.z * b, _data.w * b); }
 
+    CONDITION_TEMPLATE(VecType, Vec4)
+    CPT_CPU_GPU_INLINE
+    Vec4 operator/(VecType&& b) const noexcept { return Vec4(_data.x / b.x(), _data.y / b.y(), _data.z / b.z(), _data.w / b.w()); }
+
     CPT_CPU_GPU_INLINE
     Vec4& operator*=(float b) noexcept {
         _data.x *= b;
@@ -156,6 +168,20 @@ public:
     bool numeric_err() const noexcept {
         return isnan(_data.x) || isnan(_data.y) || isnan(_data.z) || isnan(_data.w) || \
                isinf(_data.x) || isinf(_data.y) || isinf(_data.z) || isinf(_data.w);
+    }
+
+    CPT_CPU_GPU_INLINE
+    Vec4 exp_xyz() const noexcept {
+        return Vec4(expf(_data.x), expf(_data.y), expf(_data.z), 1);
+    }
+
+    CPT_CPU_GPU_INLINE
+    Vec4 gamma_corr(float factor = 1.f / 2.2f) const noexcept {
+        return Vec4(
+            powf(fmaxf(0.f, _data.x), factor), 
+            powf(fmaxf(0.f, _data.y), factor), 
+            powf(fmaxf(0.f, _data.z), factor)
+        );
     }
 
     CONDITION_TEMPLATE(VecType, Vec4)

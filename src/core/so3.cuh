@@ -193,7 +193,9 @@ public:
     }
 
     friend CPT_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
-    friend CPT_GPU SO3 rotation_local_to_world(const Vec3& to);
+
+    template <typename VecType>
+    friend CPT_GPU SO3 rotation_fixed_anchor(VecType&& to, bool l2w = true);
 };
 
 CPT_CPU_GPU_INLINE SO3 skew_symmetry(const Vec3& v) {
@@ -225,8 +227,12 @@ CPT_GPU_INLINE SO3 rotation_between(Vec3&& from, const Vec3& to) {
     return R;
 }
 
-CPT_GPU_INLINE SO3 rotation_local_to_world(const Vec3& to) {
-    auto axis = Vec3(-to.y(), to.x(), 0);
+// @param l2w: local to world? true by default
+// if l2w is true, `to` will be dst vector to be transformed to
+// other wise, `to` is actually the `from` vector (from world to local, local is (0, 0, 1))
+template <typename VecType>
+CPT_GPU_INLINE SO3 rotation_fixed_anchor(VecType&& to, bool l2w) {
+    auto axis = Vec3(l2w? -to.y() : to.y(), l2w? to.x() : -to.x(), 0.f);
     SO3 R = SO3::diag(to.z());
     if (abs(to.z()) < 1.f - 1e-5f) {
         auto skew = skew_symmetry(axis);
@@ -243,6 +249,8 @@ CPT_GPU_INLINE Vec3 delocalize_rotate(VecType&& anchor, const Vec3& to, const Ve
 }   
 
 // Specialized, when the anchor is (0, 0, 1)
-CPT_GPU_INLINE Vec3 delocalize_rotate(const Vec3& to, const Vec3& input) {
-    return rotation_local_to_world(to).rotate(input);
+CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
+CPT_GPU_INLINE Vec3 delocalize_rotate(VType1&& to, VType2&& input) {
+    return rotation_fixed_anchor(std::forward<VType1&&>(to))
+          .rotate(std::forward<VType1&&>(input));
 }   

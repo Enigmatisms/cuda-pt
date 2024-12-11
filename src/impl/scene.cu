@@ -7,6 +7,24 @@
 #include <numeric>
 #include "core/scene.cuh"
 
+const std::unordered_map<std::string, MetalType> material_mapping = {
+    {"Au", MetalType::Au},
+    {"Cr", MetalType::Cr},
+    {"Cu", MetalType::Cu},
+    {"Ag", MetalType::Ag},
+    {"Al", MetalType::Al},
+    {"W",   MetalType::W},
+    {"TiO2", MetalType::TiO2},
+    {"Ni",  MetalType::Ni},
+    {"MgO", MetalType::MgO},
+    {"Na",  MetalType::Na},
+    {"SiC", MetalType::SiC},
+    {"V",   MetalType::V},
+    {"CuO", MetalType::CuO},
+    {"Hg",  MetalType::Hg},
+    {"Ir",  MetalType::Ir},
+};
+
 std::string getFolderPath(std::string filePath) {
     size_t pos = filePath.find_last_of("/\\");
     if (pos != std::string::npos) {
@@ -94,7 +112,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             k_d = color;
         } else if (name == "k_s") {
             k_s = color;
-        } else if (name == "k_g") {
+        } else if (name == "k_g" || name == "sigma_a") {
             k_g = color;
         }
         element = element->NextSiblingElement("rgb");
@@ -120,7 +138,67 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
         create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT);
     } else if (type == "det-refraction") {
         create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
+    } else if (type == "metal-ggx") {
+        float roughness_x = 0.1f, roughness_y = 0.1f;
+        MetalType mtype = MetalType::Cu;
+        element = bsdf_elem->FirstChildElement("string");
+        if (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            if (name == "type" || name == "metal" || name == "metal-type" || name == "metal_type") {
+                std::string metal_type = element->Attribute("value");
+                auto it = material_mapping.find(metal_type);
+                if (it == material_mapping.end()) {
+                    std::cout << "BSDF[" << id << "]" << ": Only 8 types of metals are supported: ";
+                    for (const auto [k, v]: material_mapping)
+                        std::cout << k << ", ";
+                    std::cout << std::endl;
+                    std::cout << "Current type '" << metal_type << "' is not supported. Setting to 'Cu'\n";
+                } else {
+                    mtype = it->second;
+                }
+            }
+        }
+        element = bsdf_elem->FirstChildElement("float");
+        tinyxml2::XMLError eResult;
+        while (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            if (name == "roughness_x" || name == "rough_x") {
+                eResult = element->QueryFloatAttribute("value", &roughness_x);
+                roughness_x = std::clamp(roughness_x, 0.001f, 1.f);
+            } else if (name == "roughness_y" || name == "rough_y") {
+                eResult = element->QueryFloatAttribute("value", &roughness_y);
+                roughness_y = std::clamp(roughness_y, 0.001f, 1.f);
+            }
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'roughness' attribute");
+            element = element->NextSiblingElement("float");
+        }
+        create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], 
+                    METAL_KS[mtype], k_g, roughness_x, roughness_y, kd_tex_id, ex_tex_id);
+    } else if (type == "plastic") {
+        k_g = Vec4(0, 1);
+        element = bsdf_elem->FirstChildElement("float");
+        float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
+        while (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            tinyxml2::XMLError eResult;
+            if (name == "trans_scaler") {
+                eResult = element->QueryFloatAttribute("value", &trans_scaler);
+            } else if (name == "thickness") {
+                eResult = element->QueryFloatAttribute("value", &thickness);
+            } else if (name == "ior") {
+                eResult = element->QueryFloatAttribute("value", &ior);
+            }
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
+            element = element->NextSiblingElement("float");
+        }
+        create_plastic_bsdf<<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
     }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
 void parseEmitterNames(
@@ -169,9 +247,9 @@ void parseEmitter(
         create_point_source<<<1, 1>>>(emitters[index], emission * scaler, pos);
     } else if (type == "spot") {
         element = emitter_elem->FirstChildElement("point");
+        Vec3 pos(0, 0, 0), dir(0, 0, 1);
         while (element) {
             std::string name = element->Attribute("name");
-            Vec3 pos(0, 0, 0), dir(0, 0, 1);
             if (name == "pos") {
                 pos = parsePoint(element);
             } else if (name == "dir") {
@@ -180,6 +258,7 @@ void parseEmitter(
             element = element->NextSiblingElement("point");
         }
         // create Spot source
+        printf("Spot source created at: [%f, %f, %f], [%f, %f, %f]\n", pos.x(), pos.y(), pos.z(), dir.x(), dir.y(), dir.z());
     } else if (type == "area") {
         element = emitter_elem->FirstChildElement("string");
         std::string attr_name = element->Attribute("name");
@@ -502,6 +581,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
         std::array<Vec2Arr, 3> reorder_uvs;
         std::vector<bool> reorder_sph_flags(num_prims);
+
         for (int i = 0; i < 3; i++) {
             Vec3Arr &reorder_vs = reorder_verts[i],
                     &reorder_ns = reorder_norms[i];
@@ -528,6 +608,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         std::vector<Shape> reorder_shapes(num_prims);
         for (int i = 0; i < num_prims; i++) {
             int index = prim_idxs[i], obj_idx = obj_idxs[i];
+            obj_idx = obj_idx < 0 ? -obj_idx - 1 : obj_idx;
             const auto& object = objects[obj_idx];
             reorder_sph_flags[i] = sphere_flags[index];
             reorder_shapes[i] = shapes[index];
@@ -536,7 +617,6 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
                 eprim_idxs[emitter_idx].push_back(i);
             }
         }
-
         // The following code does the following job:
         // BVH op will 'shuffle' the primitive order (sort of)
         // So, the emitter object might not have continuous

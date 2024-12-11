@@ -63,7 +63,8 @@ public:
     }
 
     CPT_CPU virtual void render_online(
-        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+        int max_depth = 1, /* max depth, useless for depth renderer, 1 anyway */
+        bool gamma_corr = false     /* whether to enable gamma correction*/
     ) {
         throw std::runtime_error("Not implemented.\n");
     }

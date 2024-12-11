@@ -66,6 +66,7 @@ public:
     ) override;
 
     CPT_CPU void render_online(
-        int max_depth = 4
+        int max_depth = 4,
+        bool gamma_corr = false
     ) override;
 };
