@@ -91,6 +91,8 @@ CPT_CPU void PathTracer::render_online(
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
     size_t _num_bytes = 0, cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
+    // if we have an illegal memory access here: check whether you have a valid emitter in the xml scene description file.
+    // it might be possible that having no valid emitter triggers an illegal memory access
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
     accum_cnt ++;

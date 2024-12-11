@@ -58,9 +58,8 @@ public:
 
             float Rs = (eta * cos_theta_i - cos_theta_t) / (eta * cos_theta_i + cos_theta_t);
             float Rp = (eta * cos_theta_t - cos_theta_i) / (eta * cos_theta_t + cos_theta_i);
-            result = (Rs*Rs + Rp*Rp)*0.5f;
+            result = (Rs*Rs + Rp*Rp) * 0.5f;
         }
-
         return result;
     }
 

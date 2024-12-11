@@ -49,7 +49,10 @@ public:
 
     CPT_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const = 0;
 
-    CPT_GPU virtual Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float&, Sampler& sp, bool is_radiance = true) const = 0;
+    CPT_GPU virtual Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, bool is_radiance = true
+    ) const = 0;
 
     CPT_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {
         return (bsdf_flag & (int)flags) > 0;
@@ -88,13 +91,17 @@ public:
         return k_d * max(0.f, cos_term) * M_1_Pi * same_side;
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override {
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, bool is_radiance = true
+    ) const override {
         auto local_ray = sample_cosine_hemisphere(sp.next2D(), pdf);
         auto out_ray = delocalize_rotate(it.shading_norm, local_ray);
         // throughput *= f / pdf --> k_d * cos / pi / (pdf = cos / pi) == k_d
         float dot_in  = it.shading_norm.dot(indir);
         float dot_out = it.shading_norm.dot(out_ray);
         throughput *= k_d * ((dot_in > 0) ^ (dot_out > 0));
+        samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
         return out_ray;
     }
 };
@@ -116,8 +123,12 @@ public:
         return k_s * (out.dot(ref_dir) > 0.99999f);
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override {
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, bool is_radiance = true
+    ) const override {
         // throughput *= f / pdf
+        samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
         float in_dot_n = indir.dot(it.shading_norm);
         pdf = 1.f;
         throughput *= k_s * (in_dot_n < 0);
@@ -154,7 +165,10 @@ public:
         return k_s * (reflc_dot | refra_dot) * (refra_dot && is_radiance ? eta2 : 1.f);
     }
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override {
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, bool is_radiance = true
+    ) const override {
         float dot_normal = indir.dot(it.shading_norm);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
@@ -168,6 +182,10 @@ public:
         bool reflect = total_ref || sp.next1D() < nr;
         ret_dir = select(ret_dir, refra_vec, reflect);
         pdf     = total_ref ? 1.f : (reflect ? nr : 1.f - nr);
+        samp_lobe = static_cast<BSDFFlag>(
+            BSDFFlag::BSDF_SPECULAR | (total_ref || reflect ? BSDFFlag::BSDF_REFLECT : BSDFFlag::BSDF_TRANSMIT)
+        );
+
         throughput *= k_s * (is_radiance && !reflect ? eta2 : 1.f);
         return ret_dir;
     }
@@ -175,6 +193,8 @@ public:
 
 class PlasticBSDF: public BSDF {
 using BSDF::k_s;
+using BSDF::k_d;
+using BSDF::k_g;
 private:
     float trans_scaler;
     float thickness;
@@ -183,13 +203,7 @@ private:
 public:
     CPT_CPU_GPU PlasticBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
         float trans_scaler = 1.f, float thickness = 0, int kd_id = -1, int ks_id = -1
-    ): BSDF(std::move(_k_d), std::move(_k_s), std::move(sigma_a), kd_id, ks_id, 
-            BSDFFlag::BSDF_SPECULAR | 
-            BSDFFlag::BSDF_DIFFUSE  | 
-            BSDFFlag::BSDF_REFLECT
-        ), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {
-            precomp_diff_f = FresnelTerms::diffuse_fresnel(ior);
-        }
+    );
 
     CPT_CPU_GPU PlasticBSDF(): BSDF() {}
     
@@ -197,7 +211,10 @@ public:
 
     CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override;
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override;
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, bool is_radiance = true
+    ) const override;
 };
 
 class GGXMetalBSDF: public BSDF {
@@ -222,5 +239,8 @@ public:
 
     CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override;
 
-    CPT_GPU Vec3 sample_dir(const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, Sampler& sp, bool is_radiance = true) const override;
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, bool is_radiance = true
+    ) const override;
 };

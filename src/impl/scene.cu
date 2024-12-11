@@ -173,6 +173,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
         }
         create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], METAL_KS[mtype], k_g, roughness, kd_tex_id, ex_tex_id);
     } else if (type == "plastic") {
+        k_g = Vec4(0, 1);
         element = bsdf_elem->FirstChildElement("float");
         float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
         while (element) {
@@ -182,9 +183,9 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             if (name == "trans_scaler") {
                 eResult = element->QueryFloatAttribute("value", &trans_scaler);
             } else if (name == "thickness") {
-                eResult = element->QueryFloatAttribute("thickness", &trans_scaler);
+                eResult = element->QueryFloatAttribute("value", &thickness);
             } else if (name == "ior") {
-                eResult = element->QueryFloatAttribute("ior", &trans_scaler);
+                eResult = element->QueryFloatAttribute("value", &ior);
             }
             if (eResult != tinyxml2::XML_SUCCESS)
                 throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
@@ -192,6 +193,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
         }
         create_plastic_bsdf<<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
     }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
 void parseEmitterNames(
@@ -574,6 +576,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
         std::array<Vec2Arr, 3> reorder_uvs;
         std::vector<bool> reorder_sph_flags(num_prims);
+
         for (int i = 0; i < 3; i++) {
             Vec3Arr &reorder_vs = reorder_verts[i],
                     &reorder_ns = reorder_norms[i];
@@ -600,6 +603,9 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         std::vector<Shape> reorder_shapes(num_prims);
         for (int i = 0; i < num_prims; i++) {
             int index = prim_idxs[i], obj_idx = obj_idxs[i];
+            int old_idx = obj_idx;
+            obj_idx = obj_idx < 0 ? -obj_idx - 1 : obj_idx;
+            printf("Object idx: %d -> %d\n", old_idx, obj_idx);
             const auto& object = objects[obj_idx];
             reorder_sph_flags[i] = sphere_flags[index];
             reorder_shapes[i] = shapes[index];
@@ -608,7 +614,6 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
                 eprim_idxs[emitter_idx].push_back(i);
             }
         }
-
         // The following code does the following job:
         // BVH op will 'shuffle' the primitive order (sort of)
         // So, the emitter object might not have continuous

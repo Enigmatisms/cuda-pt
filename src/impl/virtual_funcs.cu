@@ -40,5 +40,8 @@ CPT_KERNEL void create_plastic_bsdf(
 ) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         *dst = new PlasticBSDF(k_d, k_s, sigma_a, ior, trans_scaler, thickness, kd_tex_id, ks_tex_id);
+        (*dst)->set_kd(std::move(k_d));
+        (*dst)->set_ks(std::move(k_s));
+        (*dst)->set_kg(std::move(sigma_a));
     }
 }

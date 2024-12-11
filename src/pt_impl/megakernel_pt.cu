@@ -248,6 +248,7 @@ CPT_KERNEL void render_pt_kernel(
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
     bool hit_emitter = false;
+    
     for (int b = 0; b < max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
@@ -291,7 +292,8 @@ CPT_KERNEL void render_pt_kernel(
 
             // emitter MIS
             emission_weight = emission_weight / (emission_weight + 
-                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * hit_emitter * (b > 0));
+                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * 
+                    hit_emitter * (b > 0) * ray.non_delta());
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
@@ -328,8 +330,10 @@ CPT_KERNEL void render_pt_kernel(
             }
 
             // step 4: sample a new ray direction, bounce the 
+            BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe);
+            ray.set_delta((BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0);
 
             if (radiance.numeric_err())
                 radiance.fill(0);

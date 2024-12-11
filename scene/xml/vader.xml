@@ -91,7 +91,7 @@
 
     <shape type="obj">
 		<string name="filename" value="../meshes/vader/vader.obj"/>
-		<ref type="material" id="helmet"/>
+		<ref type="material" id="surface"/>
 	</shape>
 
 	<shape type="obj">
