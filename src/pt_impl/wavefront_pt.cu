@@ -351,16 +351,19 @@ CPT_KERNEL void bsdf_local_shader(
 
         // emitter MIS
         float pdf = payloads.pdf(px, py), emission_weight = pdf / (pdf + 
-                objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, ray.hit_t) * hit_emitter * secondary_bounce);
+                objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, ray.hit_t) * 
+                hit_emitter * secondary_bounce * ray.non_delta());
         // (2) check if the ray hits an emitter
         Vec4 direct_comp = thp *\
                     c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
         payloads.L(px, py) += direct_comp * emission_weight;
         
         ray.o = ray.advance(ray.hit_t);
+        BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;                            
         ray.d = c_material[material_id]->sample_dir(
-            ray.d, it, thp, pdf, sg
+            ray.d, it, thp, pdf, sg, sampled_lobe
         );
+        ray.set_delta((sampled_lobe | BSDFFlag::BSDF_SPECULAR) > 0);
 
         payloads.set_sampler(px, py, sg);
         payloads.thp(px, py) = thp;
@@ -417,7 +420,7 @@ template <bool render_once>
 CPT_KERNEL void radiance_splat(
     PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch, 
-    int accum_cnt, float* output_buffer
+    int accum_cnt, float* output_buffer, bool gamma_corr
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -430,6 +433,7 @@ CPT_KERNEL void radiance_splat(
         auto local_v = image(img_x, img_y) + L;
         image(img_x, img_y) = local_v;
         local_v *= 1.f / float(accum_cnt);
+        local_v = gamma_corr ? local_v.gamma_corr() : local_v;
         FLOAT4(output_buffer[(img_x + img_y * image.w()) << 2]) = float4(local_v); 
     } else {
         image(px + x_patch * PATCH_X, py + y_patch * PATCH_Y) += L;
@@ -439,11 +443,11 @@ CPT_KERNEL void radiance_splat(
 template CPT_KERNEL void radiance_splat<true>(
     PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch,
-    int accum_cnt, float* output_buffer
+    int accum_cnt, float* output_buffer, bool gamma_corr
 );
 
 template CPT_KERNEL void radiance_splat<false>(
     PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch, 
-    int accum_cnt, float* output_buffer
+    int accum_cnt, float* output_bufferr, bool gamma_corr
 );

@@ -19,7 +19,10 @@ struct Ray {
     CPT_CPU_GPU Ray() {}
 
     // ray_tag: the highest 4 bits:
-    // 31, 30, 29: hit, if 0: not hit (potentially inactive), 1 hit, 28: active, if 0: inactive, if 1: active
+    // 28: active, if 0: inactive, if 1: active
+    // 29: hit, if 0: not hit (potentially inactive), 1 hit
+    // 30: the last hit is delta? 1: is delta (for MIS use), 0: non-delta
+    // 31: reserved, not used
     // the ray is marked active since construction
     CONDITION_TEMPLATE_2(T1, T2, Vec3)
     CPT_CPU_GPU
@@ -58,6 +61,15 @@ struct Ray {
 
     CPT_CPU_GPU_INLINE void set_hit() noexcept {
         ray_tag |= 1 << 29;         // set bit 29
+    }
+
+    CPT_CPU_GPU_INLINE bool non_delta() const noexcept {
+        return (ray_tag & 0x40000000) == 0;      // check bit 30
+    }
+
+    CPT_CPU_GPU_INLINE void set_delta(bool v) noexcept {
+        ray_tag &= 0xbfffffff;      // clear bit 30
+        ray_tag |= uint32_t(v) << 30;
     }
 
     CPT_CPU_GPU_INLINE void reset() {

@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     bool skip_mouse_event    = false;
     bool frame_capture       = false;
     bool exit_main_loop      = false;
-    bool gamma_correlate     = true;
+    bool gamma_correct       = true;
 
     while (!glfwWindowShouldClose(window.get())) {
         frame_capture = false;
@@ -103,17 +103,17 @@ int main(int argc, char** argv) {
             break;
         }
         cam_updated     |= gui::render_settings_interface(*scene.cam, show_main_settings, 
-                            show_frame_rate_bar, skip_mouse_event, frame_capture);
+                            show_frame_rate_bar, skip_mouse_event, frame_capture, gamma_correct);
         if (!skip_mouse_event) {        // no sub window (setting window or main menu) is focused
             cam_updated |= gui::mouse_camera_update(*scene.cam, 0.5);
         }
         if (cam_updated) {
             renderer->update_camera(scene.cam);
         }
-        renderer->render_online(scene.config.max_depth);
+        renderer->render_online(scene.config.max_depth, gamma_correct);
         
         if (frame_capture) {
-            auto fbuffer = renderer->get_image_buffer(gamma_correlate);
+            auto fbuffer = renderer->get_image_buffer(gamma_correct);
             std::string file_name = "render-" + get_current_time() + ".png";
             if (unsigned error = lodepng::encode(file_name, fbuffer, scene.config.width, scene.config.height); error) {
                 std::cerr << "lodepng::encoder error " << error << ": " << lodepng_error_text(error)

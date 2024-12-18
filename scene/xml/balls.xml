@@ -11,7 +11,7 @@
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
         <integer name="max_bounce" value="5"/>
-		<integer name="cache_level" value="4"/>
+		<integer name="cache_level" value="3"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
@@ -20,18 +20,11 @@
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="1024"/>
-			<integer name="height" value="1024"/>
+			<integer name="width" value="900"/>
+			<integer name="height" value="900"/>
 			<bool name="gamma_correction" value="false"/>
 		</film>
 	</sensor>
-
-	<brdf type="metal-ggx" id="large-box">
-		<string name="metal-type" value="Au"/>
-		<float name="roughness_x" value="0.001"/>
-		<float name="roughness_y" value="0.001"/>
-		<rgb name="k_g" value="1"/>
-	</brdf>
 
 	<brdf type="lambertian" id="box">
 		<rgb name="k_d" value="#BCBCBC"/>
@@ -61,6 +54,44 @@
 		<rgb name="k_d" value="#555555"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="plastic" id="blue-plastic">
+		<rgb name="k_d" value="#18455c"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.2, 0.2, 0.2"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.9"/>
+	</brdf>
+
+	<brdf type="plastic" id="red-plastic">
+		<rgb name="k_d" value="0.9, 0, 0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="det-refraction" id="glass">
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+	<brdf type="metal-ggx" id="gold">
+		<string name="metal-type" value="Au"/>
+		<float name="roughness_x" value="0.005"/>
+		<float name="roughness_y" value="0.005"/>
+		<rgb name="k_g" value="1"/>
+	</brdf>
+
+	<brdf type="metal-ggx" id="ir">
+		<string name="metal-type" value="Ir"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.001"/>
+		<rgb name="k_g" value="1"/>
 	</brdf>
 
 	<emitter type="area" id="area">
@@ -95,18 +126,44 @@
 	</shape>
 
 	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/tall-box.obj"/>
-		<ref type="material" id="large-box"/>
-	</shape>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/short-box.obj"/>
-		<ref type="material" id="box"/>
-	</shape>
-
-	<shape type="obj">
 		<string name="filename" value="../meshes/cbox/light.obj"/>
 		<ref type="material" id="light"/>
 		<ref type="emitter" id="area"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="4.5" y="0.6" z="1.1"/>
+		<float name="radius" value="0.6"/>
+		<ref type="material" id="gold"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="4.2" y="0.5" z="4.1"/>
+		<float name="radius" value="0.5"/>
+		<ref type="material" id="blue-plastic"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="3.2" y="0.4" z="0.8"/>
+		<float name="radius" value="0.4"/>
+		<ref type="material" id="glass"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="2.7" y="0.4" z="3.8"/>
+		<float name="radius" value="0.4"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="0.9" y="0.5" z="0.6"/>
+		<float name="radius" value="0.5"/>
+		<ref type="material" id="red-plastic"/>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="1.7" y="1.1" z="1.9"/>
+		<float name="radius" value="1.1"/>
+		<ref type="material" id="ir"/>
 	</shape>
 </scene>

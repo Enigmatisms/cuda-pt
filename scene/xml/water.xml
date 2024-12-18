@@ -32,7 +32,7 @@
 		</film>
 	</sensor>
 
-	<brdf type="lambertian" id="floor">
+	<brdf type="lambertian" id="wall">
 		<rgb name="k_d" value="#BCBCCC"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
@@ -56,10 +56,11 @@
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
-	<brdf type="specular" id="mirror">
-		<rgb name="k_d" value="0"/>
-		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
-		<rgb name="k_g" value="0"/>
+	<brdf type="metal-ggx" id="floor">
+		<string name="metal-type" value="Al"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+		<rgb name="k_g" value="1"/>
 	</brdf>
 
 	<emitter type="area" id="area1">
@@ -95,12 +96,12 @@
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/water/Mesh007.obj"/>
-		<ref type="material" id="floor"/>
+		<ref type="material" id="wall"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/water/Mesh011.obj"/>
-		<ref type="material" id="mirror"/>
+		<ref type="material" id="floor"/>
 	</shape>
 
 	<shape type="obj">

@@ -21,6 +21,24 @@ CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex
     }
 }
 
+CPT_KERNEL void create_metal_bsdf(
+    BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y, int ks_tex_id = 0, int ex_tex_id = 0
+);
+
+template <typename PlasticType>
+CPT_KERNEL void create_plastic_bsdf(
+    BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 
+    float ior, float trans_scaler = 1.f, 
+    float thickness = 0, int kd_tex_id = 0, int ks_tex_id = 0
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        *dst = new PlasticType(k_d, k_s, sigma_a, ior, trans_scaler, thickness, kd_tex_id, ks_tex_id);
+        (*dst)->set_kd(std::move(k_d));
+        (*dst)->set_ks(std::move(k_s));
+        (*dst)->set_kg(std::move(sigma_a));
+    }
+}
+
 template <typename Ty>
 CPT_KERNEL void destroy_gpu_alloc(Ty** dst) {
     delete dst[threadIdx.x];

@@ -53,7 +53,8 @@ CPT_KERNEL void render_lt_kernel(
     int accum_cnt,
     int cache_num,
     int specular_constraints,
-    float caustic_scale
+    float caustic_scale,
+    bool gamma_corr
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     int constraint_cnt = 0;
@@ -159,7 +160,8 @@ CPT_KERNEL void render_lt_kernel(
 
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, false);
+            BSDFFlag dummy_flag;
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, dummy_flag, false);
             constraint_cnt += c_material[material_id]->require_lobe(BSDFFlag::BSDF_SPECULAR);
 
             if (throughput.numeric_err() || throughput < EPSILON) {
@@ -179,6 +181,7 @@ CPT_KERNEL void render_lt_kernel(
         // image will be the output buffer, there will be double buffering
         Vec4 radiance = image(px, py);
         radiance *= 1.f / float(accum_cnt);
+        radiance = gamma_corr ? radiance.gamma_corr() : radiance;
         FLOAT4(output_buffer[(px + py * image.w()) << 2]) = float4(radiance); 
     }
 }
@@ -205,7 +208,8 @@ template CPT_KERNEL void render_lt_kernel<true>(
     int accum_cnt,
     int cache_num,
     int specular_constraints,
-    float caustic_scale
+    float caustic_scale,
+    bool gamma_corr
 );
 
 template CPT_KERNEL void render_lt_kernel<false>(
@@ -230,5 +234,6 @@ template CPT_KERNEL void render_lt_kernel<false>(
     int accum_cnt,
     int cache_num,
     int specular_constraints,
-    float caustic_scale
+    float caustic_scale,
+    bool gamma_corr
 );

@@ -25,3 +25,10 @@ CPT_KERNEL void create_abstract_source(Emitter* &dst) {
         dst = new Emitter(Vec4(0, 0, 0));
     }
 }
+
+CPT_KERNEL void create_metal_bsdf(BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y, int ks_tex_id, int ex_tex_id) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        *dst = new GGXMetalBSDF(eta_t, k, k_g, roughness_x, roughness_y, ks_tex_id);
+        (*dst)->set_ex_id(ex_tex_id);
+    }
+}

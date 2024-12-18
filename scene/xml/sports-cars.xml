@@ -1,0 +1,411 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
+<scene version="1.1">
+	<renderer type="pt"/>
+	<bool name="use_bvh" value="true"/>
+
+	<sensor type="perspective">
+		<!-- Normal red front blue back -->
+		<float name="fov" value="50"/>			
+		<!-- New red back blue front -->
+		<!-- <float name="fov" value="42.5"/>		 -->
+        <integer name="sample_count" value="128"/>
+        <integer name="max_bounce" value="6"/>
+		<integer name="cache_level" value="4"/>
+        <bool name="vflip" value="true"/>
+        <bool name="hflip" value="true"/>
+        <bool name="" value="true"/>
+		
+		<transform name="toWorld">
+			<!-- Normal red front blue back -->
+			<lookat target="1.200387, 10.882613, 17.502499" origin="1.410909, 11.424319, 18.316277" up="-0.176330, 0.839822, -0.513427"/>
+			<!-- New red back blue front -->
+			<!-- <lookat target="-8.583218, 13.913410, -15.904566" origin="-8.814958, 14.519581, -16.665390" up="0.178721, 0.795333, 0.579228"/> -->
+		</transform>
+
+		<film type="film">
+			<integer name="width" value="1920"/>
+			<integer name="height" value="1080"/>
+			<bool name="gamma_correction" value="false"/>
+		</film>
+	</sensor>
+
+	<brdf type="lambertian" id="light">
+		<rgb name="k_d" value="#555555"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="white">
+		<rgb name="k_d" value="#CDCDC8"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<emitter type="area" id="area">
+		<rgb name="emission" value="4, 4, 4"/>
+		<rgb name="scaler" value="5.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+    <shape type="obj">
+		<string name="filename" value="../meshes/cars/light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area"/>
+	</shape>
+
+    <shape type="obj">
+		<string name="filename" value="../meshes/cars/floor.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<!-- Starting here is the Red Lamborghini -->
+
+	<brdf type="plastic" id="red-shell">
+		<rgb name="k_d" value="#A80101"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.0, 0.0"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="5"/>
+		<float name="ior" value="2.5"/>
+	</brdf>
+
+	<brdf type="plastic" id="back-engine">
+		<rgb name="k_d" value="#FFFFFF"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="2.0"/>
+	</brdf>
+
+	<brdf type="plastic" id="lambo-seat">
+		<rgb name="k_d" value="#FF4500"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="5"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="plastic-forward" id="forward">
+		<rgb name="k_d" value="#888888"/>
+		<rgb name="k_s" value="0.5, 0.5, 0.5"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="metal-ggx" id="gold">
+		<string name="metal-type" value="Au"/>
+		<float name="roughness_x" value="0.003"/>
+		<float name="roughness_y" value="0.003"/>
+		<rgb name="k_g" value="#FFFFFF"/>
+	</brdf>
+
+	<brdf type="plastic-forward" id="front-glass">
+		<rgb name="k_d" value="#FAFAFA"/>
+		<rgb name="k_s" value="0.5, 0.5, 0.5"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<emitter type="area" id="lambo-front1">
+		<rgb name="emission" value="4, 4, 4"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="lambo-front2">
+		<rgb name="emission" value="4, 4, 3"/>
+		<rgb name="scaler" value="0.3"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="lambo-inner">
+		<rgb name="emission" value="4, 3, 2"/>
+		<rgb name="scaler" value="10.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="lambo-tail">
+		<rgb name="emission" value="4, 0, 0"/>
+		<rgb name="scaler" value="20.0"/>
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="yellow-tail">
+		<rgb name="emission" value="4, 3, 0"/>
+		<rgb name="scaler" value="1.0"/>
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/back-engine.obj"/>
+		<ref type="material" id="back-engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/blocking-panel.obj"/>
+		<ref type="material" id="red-shell"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/bright-steel.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/dark-steel-out-wheels.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/dark-steel.obj"/>
+		<ref type="material" id="base"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/feather-seat.obj"/>
+		<ref type="material" id="lambo-seat"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/front-lamp.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="lambo-front1"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/front-lamp-shell.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/in-car-area-light.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="lambo-inner"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/front-lamp2.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="lambo-front2"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/glass.obj"/>
+		<ref type="material" id="forward"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/gold-breaks.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/gold-engine-steel.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/light-steel-inner-wheels.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/logo.obj"/>
+		<ref type="material" id="gold"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/panels-wheels.obj"/>
+		<ref type="material" id="base"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/red-plastic-shell.obj"/>
+		<ref type="material" id="red-shell"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/red-tail.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="lambo-tail"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/side-panels.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/steel-nets.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/tires.obj"/>
+		<ref type="material" id="tire-plastic"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/red-plastic-lambo/yellow-tail.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="yellow-tail"/>
+	</shape>
+
+	<!-- Starting here is the Blue Sports Car -->
+
+	<brdf type="metal-ggx" id="shell">
+		<string name="metal-type" value="Cr"/>
+		<float name="roughness_x" value="0.003"/>
+		<float name="roughness_y" value="0.003"/>
+		<rgb name="k_g" value="#0022EE"/>
+	</brdf>
+
+	<brdf type="metal-ggx" id="engine">
+		<string name="metal-type" value="Ir"/>
+		<float name="roughness_x" value="0.001"/>
+		<float name="roughness_y" value="0.001"/>
+		<rgb name="k_g" value="#EAEAEA"/>
+	</brdf>
+
+	<brdf type="metal-ggx" id="wheel">
+		<string name="metal-type" value="Na"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#FAFAFA"/>
+	</brdf>
+
+	<brdf type="metal-ggx" id="base">
+		<string name="metal-type" value="TiO2"/>
+		<float name="roughness_x" value="0.005"/>
+		<float name="roughness_y" value="0.005"/>
+		<rgb name="k_g" value="#444444"/>
+	</brdf>
+
+	<brdf type="plastic" id="tire-plastic">
+		<rgb name="k_d" value="#030303"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.2"/>
+	</brdf>
+
+	<brdf type="plastic" id="shield">
+		<rgb name="k_d" value="#010101"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="2.0"/>
+	</brdf>
+
+	<emitter type="area" id="blue-front-lamp">
+		<rgb name="emission" value="4, 4, 4"/>
+		<rgb name="scaler" value="5.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="tail">
+		<rgb name="emission" value="4, 0, 0"/>
+		<rgb name="scaler" value="10.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="red-shell"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/black-base.obj"/>
+		<ref type="material" id="base"/>
+	</shape>
+
+    <shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/black-seat-belts.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+    <shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/black-tires.obj"/>
+		<ref type="material" id="tire-plastic"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/brakes.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/inner-panels.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/light-steel-engine-frame.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/light-steel-panels.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/mirror-frame.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/misc-steel.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/out-shell-small.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/red-feather-seats.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/steel-logos.obj"/>
+		<ref type="material" id="engine"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/steel-wheels.obj"/>
+		<ref type="material" id="wheel"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/wind-shield.obj"/>
+		<ref type="material" id="shield"/>
+	</shape>
+
+
+    <shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/out-shell.obj"/>
+		<ref type="material" id="shell"/>
+	</shape>
+
+    <shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/red-tail.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="tail"/>
+	</shape>
+	
+	<shape type="obj">
+		<string name="filename" value="../meshes/cars/blue/front-lamp.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="blue-front-lamp"/>
+	</shape>
+</scene>

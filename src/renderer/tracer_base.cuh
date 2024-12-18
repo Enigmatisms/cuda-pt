@@ -35,6 +35,7 @@ public:
        w(scene.config.width), 
        h(scene.config.height)
     {
+        // TODO: shapes is so fucking useless
         scene.export_prims(verts, norms, uvs);
         CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
         ShapeAABBVisitor aabb_visitor(verts, aabbs);
@@ -63,7 +64,8 @@ public:
     }
 
     CPT_CPU virtual void render_online(
-        int max_depth = 1/* max depth, useless for depth renderer, 1 anyway */
+        int max_depth = 1, /* max depth, useless for depth renderer, 1 anyway */
+        bool gamma_corr = false     /* whether to enable gamma correction*/
     ) {
         throw std::runtime_error("Not implemented.\n");
     }

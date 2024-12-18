@@ -23,7 +23,8 @@ WavefrontPathTracer::WavefrontPathTracer(const Scene& scene):
 }
 
 CPT_CPU void WavefrontPathTracer::render_online(
-    int max_depth
+    int max_depth,
+    bool gamma_corr
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
     size_t _num_bytes = 0, cached_size = 2 * num_cache * sizeof(float4);
@@ -102,7 +103,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
         // step8: accumulating radiance to the rgb buffer
         radiance_splat<true><<<GRID, BLOCK, 0, cur_stream>>>(
-            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer
+            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer, gamma_corr
         );
     }
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
@@ -200,7 +201,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
 
             // step8: accumulating radiance to the rgb buffer
             radiance_splat<false><<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, image, stream_id, patch_x, patch_y
+                payload_buffer, image, stream_id, patch_x, patch_y, false
             );
         }
 

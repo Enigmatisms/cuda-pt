@@ -219,7 +219,8 @@ CPT_KERNEL void render_pt_kernel(
     int max_depth,
     int node_num,
     int accum_cnt,
-    int cache_num
+    int cache_num,
+    bool gamma_corr
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
 
@@ -248,6 +249,7 @@ CPT_KERNEL void render_pt_kernel(
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
     bool hit_emitter = false;
+    
     for (int b = 0; b < max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
@@ -291,7 +293,8 @@ CPT_KERNEL void render_pt_kernel(
 
             // emitter MIS
             emission_weight = emission_weight / (emission_weight + 
-                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * hit_emitter * (b > 0));
+                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * 
+                    hit_emitter * (b > 0) * ray.non_delta());
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
@@ -328,8 +331,10 @@ CPT_KERNEL void render_pt_kernel(
             }
 
             // step 4: sample a new ray direction, bounce the 
+            BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe);
+            ray.set_delta((BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0);
 
             if (radiance.numeric_err())
                 radiance.fill(0);
@@ -349,6 +354,7 @@ CPT_KERNEL void render_pt_kernel(
         auto local_v = image(px, py) + radiance;
         image(px, py) = local_v;
         local_v *= 1.f / float(accum_cnt);
+        local_v = gamma_corr ? local_v.gamma_corr() : local_v;
         FLOAT4(output_buffer[(px + py * image.w()) << 2]) = float4(local_v); 
     } else {
         image(px, py) += radiance;
@@ -375,7 +381,8 @@ template CPT_KERNEL void render_pt_kernel<true>(
     int max_depth,
     int node_num,
     int accum_cnt,
-    int cache_num
+    int cache_num,
+    bool gamma_corr
 );
 
 template CPT_KERNEL void render_pt_kernel<false>(
@@ -398,5 +405,6 @@ template CPT_KERNEL void render_pt_kernel<false>(
     int max_depth,
     int node_num,
     int accum_cnt,
-    int cache_num
+    int cache_num,
+    bool gamma_corr
 );

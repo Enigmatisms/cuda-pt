@@ -5,7 +5,10 @@ Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 trait
 
 This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).
 
-![render-2024-11-06-12-46-41](https://github.com/user-attachments/assets/6606b7fc-72a2-4933-b46f-b2741ab6c6d9)
+
+![sports-cars](./assets/cars.jpg)
+
+![splashing-water](https://github.com/user-attachments/assets/6606b7fc-72a2-4933-b46f-b2741ab6c6d9)
 
 
 ##### Compile & Run
@@ -30,7 +33,7 @@ cd build/Release
 ```
 
 ##### More info
- 
+
 This repo currently **has no plan for OptiX**, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated in the experimental path tracer AdaPT. Check my github homepage for more information.
 
 The scalability of this repo might be worse than that of AdaPT, but it will improve over time, since I plan to migrate from Taichi Lang to a pure-CUDA code base. Currently, this repo supports:
@@ -82,3 +85,22 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 ### Misc
 
 This repo originated from: [w3ntao/smallpt-megakernel](https://github.com/w3ntao/smallpt-megakernel), but now it is very different from it. I answered [his question on stackexchange computer graphics](https://computergraphics.stackexchange.com/questions/14000/why-is-my-ray-tracer-not-accelerated-by-cuda/14003#14003) and tweaked his code, so I thought to myself... why not base on this repo and try to make it better (though, I won't call it small-pt, since it definitely won't be small after I heavily optimize the code).
+
+---
+
+#### Renderings
+
+Microfacet GGX metal BSDF for different conductors (there are 15 different conductors in this renderer):
+
+| Au                                | Al                               | Ag                              |
+| --------------------------------- | -------------------------------- | ------------------------------- |
+| ![Au](assets/microfacet/Au.png)   | ![Al](assets/microfacet/Al.png)  | ![Ag](assets/microfacet/Ag.png) |
+| Cr                                | SiC                              | Ir                              |
+| ![Cr](assets/microfacet/Cr.png)   | ![SiC](assets/microfacet/SiC.png) | ![Ir](assets/microfacet/Ir.png) |
+| TiO2                              | V                                | Cu                              |
+| ![TiO2](assets/microfacet/TiO2.png) | ![V](assets/microfacet/V.png)   | ![Cu](assets/microfacet/Cu.png) |
+| Ni                                | MgO                              | Na                              |
+| ![Ni](assets/microfacet/Ni.png)   | ![MgO](assets/microfacet/MgO.png) | ![Na](assets/microfacet/Na.png) |
+| CuO                               | Hg                               | W                               |
+| ![CuO](assets/microfacet/CuO.png)  | ![Hg](assets/microfacet/Hg.png)  | ![W](assets/microfacet/W.png)  |
+
