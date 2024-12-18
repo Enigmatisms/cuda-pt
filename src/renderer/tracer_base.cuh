@@ -35,6 +35,7 @@ public:
        w(scene.config.width), 
        h(scene.config.height)
     {
+        // TODO: shapes is so fucking useless
         scene.export_prims(verts, norms, uvs);
         CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
         ShapeAABBVisitor aabb_visitor(verts, aabbs);

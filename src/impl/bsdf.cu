@@ -155,79 +155,6 @@ public:
     }
 };
 
-CPT_CPU_GPU PlasticBSDF::PlasticBSDF(
-    Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
-    float trans_scaler, float thickness, int kd_id, int ks_id
-): BSDF(_k_d, std::move(_k_s), std::move(sigma_a), kd_id, ks_id, 
-    BSDFFlag::BSDF_SPECULAR | 
-    BSDFFlag::BSDF_DIFFUSE  | 
-    BSDFFlag::BSDF_REFLECT
-), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {
-    precomp_diff_f = FresnelTerms::diffuse_fresnel(ior);
-}
-
-CPT_GPU float PlasticBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
-    float dot_wo = out.dot(it.shading_norm), dot_wi = in.dot(it.shading_norm),
-          Fi = FresnelTerms::fresnel_simple(eta, -dot_wi),
-          specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
-    Vec3 refdir = -reflection(in, it.shading_norm);
-    // 'refdir.dot(out) >= 1.f - THP_EPS' means reflected incident ray is very close to 'out'
-    float pdf = refdir.dot(out) < 1.f - THP_EPS ? M_1_Pi * dot_wo * (1.f - specular_prob) : specular_prob;
-    return dot_wo > 0 && dot_wi < 0 ? pdf : 0;
-}
-
-CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
-    float dot_wo = out.dot(it.shading_norm), dot_wi = in.dot(it.shading_norm),
-          Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_wi)),
-          Fo = FresnelTerms::fresnel_simple(eta, dot_wo);
-    Vec3 refdir = -reflection(in, it.shading_norm);
-
-    Vec4 brdf = (M_1_Pi * (1.0f - Fi) * (1.0f - Fo) * eta * eta) * dot_wo *
-            (k_d / (- k_d * precomp_diff_f + 1.f)) * 
-            (k_g * thickness * (-1.0f / dot_wo + 1.0f / dot_wi)).exp_xyz();
-    brdf += refdir.dot(out) < 1.f - THP_EPS ? brdf : Vec4(Fi, 1);
-
-    return dot_wo > 0 && dot_wi < 0 ? brdf : Vec4(0, 1);
-}
-
-CPT_GPU Vec3 PlasticBSDF::sample_dir(
-    const Vec3& indir, 
-    const Interaction& it, 
-    Vec4& throughput, 
-    float& pdf, Sampler& sp, 
-    BSDFFlag& samp_lobe, 
-    bool is_radiance
-) const {
-    float dot_indir = it.shading_norm.dot(indir);
-    throughput = dot_indir < 0 ? throughput : Vec4(0, 1);
-
-    float Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_indir)),
-          specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
-
-    Vec3 outdir;
-
-    if (sp.next1D() < specular_prob) {      // coating specular reflection
-        outdir = -reflection(indir, it.shading_norm, dot_indir);
-        pdf = specular_prob;
-        throughput *= Vec4(Fi / specular_prob, 1) * k_s;
-        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_SPECULAR);
-    } else {                                // substrate diffuse reflection
-        float dummy_v = 1;
-        Vec3 local_dir = sample_cosine_hemisphere(sp.next2D(), dummy_v);
-        float Fo = FresnelTerms::fresnel_simple(eta, local_dir.z());
-       
-        // use fmaxf instead of (1-Fi) * (1-Fo), to make the result looks brighter
-        Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fo) * eta * eta) * (k_d / (-k_d * precomp_diff_f + 1.f)) * 
-            (k_g * thickness * (-1.0f / local_dir.z() + 1.0f / dot_indir)).exp_xyz();
-
-        pdf = M_1_Pi * local_dir.z() * (1.0f - specular_prob);
-        throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;
-        outdir = delocalize_rotate(it.shading_norm, local_dir);
-        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_DIFFUSE);
-    }
-    return outdir;
-}
-
  CPT_CPU_GPU GGXMetalBSDF::GGXMetalBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id):
     BSDF(Vec4(0), Vec4(roughness_to_alpha(roughness_x), roughness_to_alpha(roughness_y), 1), 
         std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
@@ -277,4 +204,145 @@ CPT_GPU Vec3 GGXMetalBSDF::sample_dir(
     }
     samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
     return refdir;                              
+}
+
+
+// ======================= plastic =============================
+
+CPT_CPU_GPU PlasticBSDF::PlasticBSDF(
+    Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
+    float trans_scaler, float thickness, int kd_id, int ks_id
+): BSDF(_k_d, std::move(_k_s), std::move(sigma_a), kd_id, ks_id, 
+    BSDFFlag::BSDF_SPECULAR | 
+    BSDFFlag::BSDF_DIFFUSE  | 
+    BSDFFlag::BSDF_REFLECT
+), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {
+    precomp_diff_f = FresnelTerms::diffuse_fresnel(ior);
+}
+
+CPT_GPU float PlasticBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
+    float dot_wo = out.dot(it.shading_norm), dot_wi = in.dot(it.shading_norm),
+          Fi = FresnelTerms::fresnel_simple(eta, -dot_wi),
+          specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
+    Vec3 refdir = -reflection(in, it.shading_norm);
+    // 'refdir.dot(out) >= 1.f - THP_EPS' means reflected incident ray is very close to 'out'
+    float pdf = refdir.dot(out) < 1.f - THP_EPS ? M_1_Pi * dot_wo * (1.f - specular_prob) : specular_prob;
+    return dot_wo > 0 && dot_wi < 0 ? pdf : 0;
+}
+
+CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
+    float dot_wo = out.dot(it.shading_norm), dot_wi = in.dot(it.shading_norm),
+          Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_wi)),
+          Fo = FresnelTerms::fresnel_simple(eta, dot_wo);
+    Vec3 refdir = -reflection(in, it.shading_norm);
+
+    Vec4 brdf = (M_1_Pi * (1.0f - Fi) * (1.0f - Fo) * eta * eta) * dot_wo *
+            (k_d / (- k_d * precomp_diff_f + 1.f)) * 
+            (k_g * thickness * (-1.0f / dot_wo + 1.0f / dot_wi)).exp_xyz();
+    brdf += refdir.dot(out) < 1.f - THP_EPS ? Vec4(0) : Vec4(Fi, 1);
+
+    return dot_wo > 0 && dot_wi < 0 ? brdf : Vec4(0, 1);
+}
+
+CPT_GPU Vec3 PlasticBSDF::sample_dir(
+    const Vec3& indir, 
+    const Interaction& it, 
+    Vec4& throughput, 
+    float& pdf, Sampler& sp, 
+    BSDFFlag& samp_lobe, 
+    bool is_radiance
+) const {
+    float dot_indir = it.shading_norm.dot(indir);
+    throughput = dot_indir < 0 ? throughput : Vec4(0, 1);
+
+    float Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_indir)),
+          specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
+
+    Vec3 outdir;
+
+    if (sp.next1D() < specular_prob) {      // coating specular reflection
+        outdir = -reflection(indir, it.shading_norm, dot_indir);
+        pdf = specular_prob;
+        throughput *= Vec4(Fi / specular_prob, 1) * k_s;
+        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_SPECULAR);
+    } else {                                // substrate diffuse reflection
+        float dummy_v = 1;
+        Vec3 local_dir = sample_cosine_hemisphere(sp.next2D(), dummy_v);
+        float Fo = FresnelTerms::fresnel_simple(eta, local_dir.z());
+       
+        // use fmaxf instead of (1-Fi) * (1-Fo), to make the result looks brighter
+        Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fo) * eta * eta) * (k_d / (-k_d * precomp_diff_f + 1.f)) * 
+            (k_g * thickness * (-1.0f / local_dir.z() + 1.0f / dot_indir)).exp_xyz();
+
+        pdf = M_1_Pi * local_dir.z() * (1.0f - specular_prob);
+        throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;
+        outdir = delocalize_rotate(it.shading_norm, local_dir);
+        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_DIFFUSE);
+    }
+    return outdir;
+}
+
+// ===================== plastic forward =======================
+
+CPT_CPU_GPU PlasticForwardBSDF::PlasticForwardBSDF(
+    Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
+    float trans_scaler, float thickness, int kd_id, int ks_id
+): BSDF(_k_d, std::move(_k_s), std::move(sigma_a), kd_id, ks_id, 
+    BSDFFlag::BSDF_SPECULAR | 
+    BSDFFlag::BSDF_TRANSMIT | 
+    BSDFFlag::BSDF_REFLECT
+), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {}
+
+CPT_GPU float PlasticForwardBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
+    float dot_wi = in.dot(it.shading_norm),
+          Fi = FresnelTerms::fresnel_simple(eta, -dot_wi),
+          specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
+    Vec3 refdir = -reflection(in, it.shading_norm);
+    // 'refdir.dot(out) >= 1.f - THP_EPS' means reflected incident ray is very close to 'out'
+    float pdf = 0; 
+    pdf = refdir.dot(out) < 1.f - THP_EPS ? pdf : specular_prob;
+    pdf = in.dot(out) < 1.f - THP_EPS ? pdf : 1.f - specular_prob;
+    return pdf;
+}
+
+CPT_GPU Vec4 PlasticForwardBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
+    float dot_wi = in.dot(it.shading_norm),
+          Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_wi));
+    Vec3 refdir = -reflection(in, it.shading_norm);
+    Vec4 brdf = in.dot(out) < 1.f - THP_EPS ? Vec4(0, 1) : (1.0f - Fi) * (1.0f - Fi) * k_d *
+            eta * eta * (k_g * thickness * (-2.f / fabsf(dot_wi))).exp_xyz();     // transmit?
+    brdf += refdir.dot(out) < 1.f - THP_EPS ? brdf : Vec4(Fi, 1);
+    return brdf;
+}
+
+CPT_GPU Vec3 PlasticForwardBSDF::sample_dir(
+    const Vec3& indir, 
+    const Interaction& it, 
+    Vec4& throughput, 
+    float& pdf, Sampler& sp, 
+    BSDFFlag& samp_lobe, 
+    bool is_radiance
+) const {
+    float dot_indir = it.shading_norm.dot(indir),
+          Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_indir)),
+          specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
+
+    Vec3 outdir;
+
+    if (sp.next1D() < specular_prob) {      // coating specular reflection
+        outdir = -reflection(indir, it.shading_norm, dot_indir);
+        pdf = specular_prob;
+        throughput *= Vec4(Fi / specular_prob, 1) * k_s;
+        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_SPECULAR);
+    } else {                                // substrate diffuse reflection
+        Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fi) * eta * eta) * k_d *
+            (k_g * thickness * (-2.0f / fabsf(dot_indir))).exp_xyz();
+
+        pdf = 1.0f - specular_prob;
+        throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;
+
+        outdir = indir;
+        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_TRANSMIT | BSDFFlag::BSDF_SPECULAR);
+    }
+    return outdir;
 }

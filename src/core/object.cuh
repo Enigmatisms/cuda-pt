@@ -37,7 +37,7 @@ public:
 
     CPT_CPU_GPU_INLINE bool is_emitter() const noexcept { return this->emitter_id > 0; }
     CPT_CPU_GPU ObjInfo(int bsdf_id, int prim_off, int prim_num, uint8_t emitter_id = 0):
-        _aabb(1e5, 1e-5, -1, -1), bsdf_id(bsdf_id), 
+        _aabb(1e5, -1e5, -1, -1), bsdf_id(bsdf_id), 
         prim_offset(prim_off), prim_num(prim_num), emitter_id(emitter_id)
     {}
 

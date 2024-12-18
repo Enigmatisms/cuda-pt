@@ -32,16 +32,3 @@ CPT_KERNEL void create_metal_bsdf(BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, floa
         (*dst)->set_ex_id(ex_tex_id);
     }
 }
-
-CPT_KERNEL void create_plastic_bsdf(
-    BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 
-    float ior, float trans_scaler, 
-    float thickness, int kd_tex_id, int ks_tex_id
-) {
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *dst = new PlasticBSDF(k_d, k_s, sigma_a, ior, trans_scaler, thickness, kd_tex_id, ks_tex_id);
-        (*dst)->set_kd(std::move(k_d));
-        (*dst)->set_ks(std::move(k_s));
-        (*dst)->set_kg(std::move(sigma_a));
-    }
-}

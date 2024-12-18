@@ -177,7 +177,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
         }
         create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], 
                     METAL_KS[mtype], k_g, roughness_x, roughness_y, kd_tex_id, ex_tex_id);
-    } else if (type == "plastic") {
+    } else if (type == "plastic" || type == "plastic-forward") {
         k_g = Vec4(0, 1);
         element = bsdf_elem->FirstChildElement("float");
         float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
@@ -196,7 +196,13 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
                 throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
             element = element->NextSiblingElement("float");
         }
-        create_plastic_bsdf<<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
+        if (type == "plastic") {
+            create_plastic_bsdf<PlasticBSDF><<<1, 1>>>(bsdfs + index, 
+                k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
+        } else {
+            create_plastic_bsdf<PlasticForwardBSDF><<<1, 1>>>(bsdfs + index, 
+                k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
+        }
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
@@ -390,9 +396,9 @@ void parseObjShape(
         norms_list[i].reserve(norms_list.size() + num_new_primitive);
         uvs_list[i].reserve(uvs_list.size() + num_new_primitive);
     }
+    ObjInfo object(bsdf_id, prim_offset, num_new_primitive, emitter_id);
     for (const auto& shape : shapes) {
         size_t num_primitives = shape.mesh.indices.size() / 3;
-        ObjInfo object(bsdf_id, prim_offset, num_primitives, emitter_id);
         prim_offset += num_primitives;
 
         for (size_t i = 0; i < num_primitives; ++i) {
@@ -409,7 +415,7 @@ void parseObjShape(
                     norms_list[j].emplace_back(attrib.normals[index], attrib.normals[index + 1], attrib.normals[index + 2]);
                 }
                 if (idx.texcoord_index >= 0) {
-                    index = 2 * idx.normal_index;
+                    index = 2 * idx.texcoord_index;
                     uvs_list[j].emplace_back(attrib.texcoords[index], attrib.texcoords[index + 1]);
                 } else {
                     uvs_list[j].emplace_back(0, 0);
@@ -425,9 +431,9 @@ void parseObjShape(
             }
         }
 
-        object.setup(verts_list);
-        objects.push_back(object);
     }
+    object.setup(verts_list);
+    objects.push_back(object);
 }
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "Voxel-SDF-PT"};

@@ -20,8 +20,8 @@
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="1024"/>
-			<integer name="height" value="1024"/>
+			<integer name="width" value="900"/>
+			<integer name="height" value="900"/>
 			<bool name="gamma_correction" value="false"/>
 		</film>
 	</sensor>

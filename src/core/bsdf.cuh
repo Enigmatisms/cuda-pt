@@ -217,6 +217,34 @@ public:
     ) const override;
 };
 
+/**
+ * @brief specular reflection and delta forward
+ */
+class PlasticForwardBSDF: public BSDF {
+using BSDF::k_s;
+using BSDF::k_d;
+using BSDF::k_g;
+private:
+    float trans_scaler;
+    float thickness;
+    float eta;
+public:
+    CPT_CPU_GPU PlasticForwardBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
+        float trans_scaler = 1.f, float thickness = 0, int kd_id = -1, int ks_id = -1
+    );
+
+    CPT_CPU_GPU PlasticForwardBSDF(): BSDF() {}
+    
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override;
+
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi = false, bool is_radiance = true) const override;
+
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, bool is_radiance = true
+    ) const override;
+};
+
 class GGXMetalBSDF: public BSDF {
 /**
  * @brief GGX microfacet normal distribution based BSDF
