@@ -30,6 +30,7 @@ std::string get_current_time() {
 }
 
 int main(int argc, char** argv) {
+    CUDA_CHECK_RETURN( cudaFree( 0 ) );         // initialize CUDA
     std::cerr << "[MAIN] Path tracing IMGUI viewer.\n";
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";

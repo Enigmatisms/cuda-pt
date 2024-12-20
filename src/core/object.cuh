@@ -43,3 +43,5 @@ public:
 
     CPT_CPU void export_bound(Vec3& mini, Vec3& maxi) const noexcept;
 };
+
+using ConstObjPtr   = const ObjInfo* const __restrict__;

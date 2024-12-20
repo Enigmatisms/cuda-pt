@@ -7,6 +7,7 @@ __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
 int main(int argc, char** argv) {
+    CUDA_CHECK_RETURN( cudaFree( 0 ) );         // initialize CUDA
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
         exit(1);

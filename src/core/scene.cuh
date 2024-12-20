@@ -26,7 +26,8 @@ enum RendererType {
     MegaKernelPT = 0,            // megakernel path tracing
     WavefrontPT  = 1,            // wavefront  path tracing
     MegeKernelLT = 2,            // megakernel light tracing
-    VoxelSDFPT   = 3,            // not supported currently
+    OptiXMegaPT  = 3,            // megakernel path tracing (OptiX based)
+    VoxelSDFPT   = 4,            // not supported currently
     NumRendererType
 };
 
@@ -63,6 +64,7 @@ public:
     const bool use_bvh;
 
     RendererType rdr_type;
+    std::string optix_ptx_path;         // path to the OptiX PTX code (TODO)
 public:
     Scene(std::string path);
     ~Scene();

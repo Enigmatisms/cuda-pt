@@ -11,6 +11,7 @@ namespace {
     using ConstPayLoadBuffer = const PayLoadBuffer;
 }
 
+static constexpr int SEED_SCALER = 11451;       //-4!
 static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
 
@@ -282,7 +283,7 @@ CPT_KERNEL void nee_shader(
 
         float direct_pdf = 1;
 
-        Emitter* emitter = sample_emitter(sg, direct_pdf, num_emitter, emitter_id);
+        const Emitter* emitter = sample_emitter(sg, c_emitter, direct_pdf, num_emitter, emitter_id);
         emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sg.discrete1D(), direct_pdf);
         emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));

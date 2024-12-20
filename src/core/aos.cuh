@@ -114,6 +114,7 @@ public:
 #define INDEX_Y(index, size) TRI_IDX(index) + 1
 #define INDEX_Z(index, size) TRI_IDX(index) + 2
 // SOA (this is actually slower)
+// Note: do not attempt to use SOA, when OptiX is employed, only AOS is allowed
 // #define INDEX_X(index, size) index
 // #define INDEX_Y(index, size) index + size
 // #define INDEX_Z(index, size) index + (size << 1)

@@ -18,6 +18,14 @@ protected:
     int num_prims;
     int w;
     int h;
+
+    DeviceCamera* camera;
+    float* output_buffer;                // output buffer for images
+    
+    // IMGUI related 
+    int accum_cnt;
+    uint32_t cuda_texture_id, pbo_id;
+    cudaGraphicsResource_t pbo_resc;
 public:
     /**
      * @param shapes    shape information (for AABB generation)
@@ -26,33 +34,45 @@ public:
      * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
      * @param camera    GPU camera model (constant memory)
      * @param image     GPU image buffer
+     * @param skip_vertex_loading For OptiX renderer, if true, verts will be destroyed
     */
     TracerBase(
-        const Scene& scene
+        const Scene& scene,
+        bool skip_vertex_loading = false
     ): verts(scene.num_prims), norms(scene.num_prims), uvs(scene.num_prims),
        image(scene.config.width, scene.config.height), 
        num_prims(scene.num_prims), 
        w(scene.config.width), 
-       h(scene.config.height)
+       h(scene.config.height),
+       output_buffer(nullptr),
+       accum_cnt(0),
+       cuda_texture_id(0), pbo_id(0)
     {
         // TODO: shapes is so fucking useless
         scene.export_prims(verts, norms, uvs);
-        CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
-        ShapeAABBVisitor aabb_visitor(verts, aabbs);
-        // calculate AABB for each primitive
-        for (int i = 0; i < num_prims; i++) {
-            aabb_visitor.set_index(i);
-            std::visit(aabb_visitor, scene.shapes[i]);
+        if (skip_vertex_loading) {
+            aabbs = nullptr;
+        } else {
+            CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
+            ShapeAABBVisitor aabb_visitor(verts, aabbs);
+            // calculate AABB for each primitive
+            for (int i = 0; i < num_prims; i++) {
+                aabb_visitor.set_index(i);
+                std::visit(aabb_visitor, scene.shapes[i]);
+            }
         }
     }
 
     ~TracerBase() {
-        CUDA_CHECK_RETURN(cudaFree(aabbs));
+        CUDA_CHECK_RETURN(cudaFree(aabbs));     // free nullptr is legal
         image.destroy();
         verts.destroy();
         norms.destroy();
         uvs.destroy();
     }
+
+    CPT_CPU uint32_t& get_texture_id() noexcept { return this->cuda_texture_id; }
+    CPT_CPU uint32_t& get_pbo_id()     noexcept { return this->pbo_id; }
 
     CPT_CPU virtual std::vector<uint8_t> render(
         int num_iter  = 64,
@@ -68,5 +88,50 @@ public:
         bool gamma_corr = false     /* whether to enable gamma correction*/
     ) {
         throw std::runtime_error("Not implemented.\n");
+    }
+
+    /**
+     * @brief initialize graphics resources
+     * @param executor the callback function pointer
+     */
+    void graphics_resc_init(
+        void (*executor) (float*, cudaGraphicsResource_t&, uint32_t&, uint32_t&, int, int)
+    ) {
+        executor(output_buffer, pbo_resc, pbo_id, cuda_texture_id, w, h);
+    }
+
+    CPT_CPU void update_camera(const DeviceCamera* const cam) {
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemset(image.data(), 0, w * h * sizeof(float4)));    // reset image buffer
+        accum_cnt = 0;                                                                  // reset accumulation counter
+    }
+
+    CPT_CPU int get_num_sample() const noexcept {
+        return accum_cnt;
+    }
+
+    CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        return image.export_cpu(1.f / accum_cnt, gamma_cor);
+    }
+
+    template <typename TexType>
+    static void createTexture1D(const TexType* tex_src, size_t size, TexType* tex_dst, cudaTextureObject_t& tex_obj) {
+        cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
+        CUDA_CHECK_RETURN(cudaMemcpy(tex_dst, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
+        cudaResourceDesc res_desc;
+        memset(&res_desc, 0, sizeof(res_desc));
+        res_desc.resType = cudaResourceTypeLinear;
+        res_desc.res.linear.devPtr = tex_dst;
+        res_desc.res.linear.desc   = channel_desc;
+        res_desc.res.linear.sizeInBytes = size * sizeof(TexType);
+
+        cudaTextureDesc tex_desc;
+        memset(&tex_desc, 0, sizeof(tex_desc));
+        tex_desc.addressMode[0] = cudaAddressModeClamp;
+        tex_desc.filterMode = cudaFilterModePoint;
+        tex_desc.readMode = cudaReadModeElementType;
+
+        CUDA_CHECK_RETURN(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
     }
 };

@@ -24,8 +24,8 @@
                 "${workspaceFolder}\\src\\",
                 "${workspaceFolder}\\src\\ext\\**",
                 "${workspaceFolder}\\src\\ext\\imgui",
-                "${workspaceFolder}\\src\\ext\\glew\\include",
-                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\include\\**"
+                "E:\\optix\\include",
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.1\\include\\**"
             ],
             "defines": ["USE_SOA"],
             "intelliSenseMode": "windows-msvc-x64",

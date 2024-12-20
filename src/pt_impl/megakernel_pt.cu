@@ -183,21 +183,6 @@ CPT_GPU float ray_intersect_bvh(
     return min_dist;
 }
 
-CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sample) {
-    // logic: if no_sample and num > 1, means that there is one emitter that can not be sampled
-    // so we can only choose from num - 1 emitters, the following computation does this (branchless)
-    // if (emit_id >= no_sample && no_sample >= 0) -> we should skip one index (the no_sample), therefore + 1
-    // if invalid (there is only one emitter, and we cannot sample it), return c_emitter[8]
-    // if no_sample is 0x08, then the ray hits no emitter
-    num -= no_sample > 0 && num > 1;
-    uint32_t emit_id = (sampler.discrete1D() % uint32_t(num)) + 1;
-    emit_id += emit_id >= no_sample && no_sample > 0;
-    pdf = 1.f / float(num);
-    // when no_sample == 0 (means, we do not intersect any emitter) or num > 1 (there are more than 1 emitters)
-    // the sample will be valid
-    return c_emitter[emit_id * uint32_t(no_sample == 0 || num > 1)];
-}
-
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
@@ -302,7 +287,7 @@ CPT_KERNEL void render_pt_kernel(
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
             radiance += direct_comp * emission_weight;
 
-            Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
+            const Emitter* emitter = sample_emitter(sampler, c_emitter, direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
             emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering

@@ -127,4 +127,21 @@ public:
         }
 #endif
     }
+
+    CPT_GPU_INLINE static Interaction get_interaction_optix(
+        const ArrayType<Vec3>& norms, 
+        const ConstBuffer<PackedHalf2>& uvs, 
+        Vec3&& hit_pos,
+        float u,
+        float v,
+        int index,
+        bool is_mesh = true
+    ) {
+        return Interaction((
+            norms.x(index) * (1.f - u - v) + \
+            norms.y(index) * u + \
+            norms.z(index) * v).normalized(),
+            uvs[index].lerp(u, v)
+        );
+    }
 };

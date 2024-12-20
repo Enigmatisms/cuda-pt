@@ -8,14 +8,14 @@
 
 #include "renderer/path_tracer.cuh"
 
+static constexpr int SEED_SCALER = 11451;       //-4!
 static constexpr int SHFL_THREAD_X = 4;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 3;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
 PathTracer::PathTracer(
     const Scene& scene
 ): TracerBase(scene), 
-    num_objs(scene.objects.size()), num_nodes(-1), num_emitter(scene.num_emitters), 
-    cuda_texture_id(0), pbo_id(0), output_buffer(nullptr), accum_cnt(0)
+    num_objs(scene.objects.size()), num_nodes(-1), num_emitter(scene.num_emitters)
 {
 #ifdef RENDERER_USE_BVH
     if (scene.bvh_available()) {
@@ -28,8 +28,8 @@ PathTracer::PathTracer(
         CUDA_CHECK_RETURN(cudaMalloc(&_nodes, 2 * num_nodes * sizeof(float4)));
         CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, 2 * num_cache * sizeof(float4)));
         // note that BVH leaf node only stores the primitive to object mapping
-        PathTracer::createTexture1D<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs, bvh_leaves);
-        PathTracer::createTexture1D<float4>(scene.nodes.data(), 2 * num_nodes, _nodes, nodes);
+        createTexture1D<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs, bvh_leaves);
+        createTexture1D<float4>(scene.nodes.data(), 2 * num_nodes, _nodes, nodes);
         CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, scene.cache_fronts.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
         CUDA_CHECK_RETURN(cudaMemcpy(&_cached_nodes[num_cache], scene.cache_backs.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
     } else {

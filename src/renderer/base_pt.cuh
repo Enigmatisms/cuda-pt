@@ -7,6 +7,8 @@
 #include "core/primitives.cuh"
 #include "core/aabb.cuh"
 
+using ConstIndexPtr = const int* const __restrict__;
+
 // #define CP_BASE_6
 #ifdef CP_BASE_6
 constexpr int BASE_SHFL = 6;

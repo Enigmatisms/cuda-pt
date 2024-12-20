@@ -8,6 +8,7 @@
 
 #include "renderer/light_tracer.cuh"
 
+static constexpr int SEED_SCALER = 11451;       //-4!
 static constexpr int SHFL_THREAD_X = 4;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 3;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 

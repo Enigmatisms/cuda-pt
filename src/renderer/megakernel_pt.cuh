@@ -17,9 +17,7 @@ extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy e
 extern __constant__ BSDF*    c_material[32];
 
 using ConstNodePtr  = const LinearNode* const __restrict__;
-using ConstObjPtr   = const ObjInfo* const __restrict__;
 using ConstBSDFPtr  = const BSDF* const __restrict__;
-using ConstIndexPtr = const int* const __restrict__;
 
 /**
  * Occlusion test, computation is done on global memory
@@ -63,8 +61,6 @@ CPT_GPU float ray_intersect_bvh(
     const int cache_num,
     float min_dist = MAX_DIST
 );
-
-CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sample);
 
 /**
  * @brief this version does not employ object-level culling

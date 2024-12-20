@@ -436,7 +436,7 @@ void parseObjShape(
     objects.push_back(object);
 }
 
-const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "Voxel-SDF-PT"};
+const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "OptiX-MegaPT", "Voxel-SDF-PT"};
 
 Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), use_bvh(false) {
     tinyxml2::XMLDocument doc;
@@ -462,11 +462,12 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
 
     // ------------------------- (0) parse the renderer -------------------------
     std::string render_type = render_elem != nullptr ? render_elem->Attribute("type") : "pt";
-    if      (render_type == "pt")   rdr_type = RendererType::MegaKernelPT;
-    else if (render_type == "wfpt") rdr_type = RendererType::WavefrontPT;
-    else if (render_type == "lt")   rdr_type = RendererType::MegeKernelLT;
-    else if (render_type == "sdf")  rdr_type = RendererType::VoxelSDFPT;
-    else                            rdr_type = RendererType::MegaKernelPT;
+    if      (render_type == "pt")    rdr_type = RendererType::MegaKernelPT;
+    else if (render_type == "wfpt")  rdr_type = RendererType::WavefrontPT;
+    else if (render_type == "lt")    rdr_type = RendererType::MegeKernelLT;
+    else if (render_type == "sdf")   rdr_type = RendererType::VoxelSDFPT;
+    else if (render_type == "optix") rdr_type = RendererType::OptiXMegaPT;
+    else                             rdr_type = RendererType::MegaKernelPT;
     
     {       // local field starts
     auto& use_bvh_ref = const_cast<bool&>(use_bvh);
@@ -559,6 +560,10 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
                 sphere_flags[i] = true;
             }
         }
+    }
+    if (use_bvh && rdr_type != RendererType::OptiXMegaPT) {
+        printf("[BVH] OptiX auto disables software BVH. Therefore, software BVH is not built.\n");
+        const_cast<bool&>(use_bvh) = false;
     }
 
     if (use_bvh) {
@@ -656,13 +661,22 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     } else {
         // To be consistent with the BVH branch, we store the primitive indices 
         prim_offset = 0;
-        for (ObjInfo& obj: objects) {
-            if (!obj.is_emitter()) continue;
-            for (int cnt = 0; cnt < obj.prim_num; cnt++) {
-                emitter_prims.push_back(obj.prim_offset + cnt);
+        obj_idxs.clear();
+        obj_idxs.reserve(num_prims);
+        for (size_t i = 0; i < objects.size(); i++) {
+            ObjInfo& obj = objects[i];
+            if (obj.is_emitter()) {
+                for (int cnt = 0; cnt < obj.prim_num; cnt++) {
+                    obj_idxs.push_back(i);
+                    emitter_prims.push_back(obj.prim_offset + cnt);
+                }
+                obj.prim_offset = prim_offset;
+                prim_offset += obj.prim_num;
+            } else {
+                // if is not an emitter: just fill in the obj_idxs
+                for (int cnt = 0; cnt < obj.prim_num; cnt++)
+                    obj_idxs.push_back(i);
             }
-            obj.prim_offset = prim_offset;
-            prim_offset += obj.prim_num;
         }
     }
 }
@@ -701,7 +715,7 @@ void Scene::print() const noexcept {
     std::cout << " Scene:\n";
     std::cout << "\tRenderer type:\t\t" << RENDER_TYPE_STR[rdr_type] << std::endl;
     std::cout << "\tUse SAH-BVH:\t\t" << use_bvh << std::endl;
-    std::cout << "\tSAH-BVH Cache Level: \t" << config.cache_level << std::endl;
+    if (use_bvh) std::cout << "\tSAH-BVH Cache Level: \t" << config.cache_level << std::endl;
     std::cout << "\tNumber of objects: \t" << num_objects << std::endl;
     std::cout << "\tNumber of primitives: \t" << num_prims << std::endl;
     std::cout << "\tNumber of emitters: \t" << num_emitters << std::endl;
