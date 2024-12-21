@@ -63,7 +63,7 @@ public:
         }
     }
 
-    ~TracerBase() {
+    virtual ~TracerBase() {
         CUDA_CHECK_RETURN(cudaFree(aabbs));     // free nullptr is legal
         image.destroy();
         verts.destroy();

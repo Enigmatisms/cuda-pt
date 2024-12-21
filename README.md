@@ -1,6 +1,17 @@
 # CUDA-PT
 ---
 
+### Important Note
+Refactoring the current code to support OptiX is not an easy task. At first I thought it was possible to embed the OptiX calls in the CUBIN but actually it's not possible. We must define shaders and compile them into the PTX code, then load them dynamically. So, the actual coding work of this branch might be delayed and even abandoned, since my focus will shift towards AI infra.
+
+The current progress: OptiX compilation error:
+
+```shell
+Call to '_optix_trace_typed_32' requires call prototype
+```
+
+---
+
 Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 traits** and is **templated** whenever possible.
 
 This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).

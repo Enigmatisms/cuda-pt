@@ -3,13 +3,59 @@
  * @date: 9.15.2024
  * @author: Qianyue He
 */
-#include "renderer/optix_pt_kernel.cuh"
 #include "optix/sbt.cuh"
+#include "core/primitives.cuh"
+#include "renderer/optix_pt_kernel.cuh"
 
 static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
 
+extern "C" {
 __constant__ LaunchParams params;
+}
+
+static CPT_GPU_INLINE float trace_closest_hit(const Ray& ray, int& min_index, float& prim_u, float& prim_v) {
+    unsigned int p0 = 0, p1 = 0, p2 = 0, p3 = 0;        // payloads
+    optixTrace(
+        params.handle,                  // Traversable Handle
+        ray.o,                          // Ray Origin
+        ray.d,                          // Ray Direction
+        EPSILON,                        // tmin
+        MAX_DIST,                       // tmax
+        0.0f,                           // Ray Time
+        0,                              // Visibility Mask
+        OPTIX_RAY_FLAG_NONE,            // Ray Flags
+        0,                              // SBT Offset (closest hit)
+        sizeof(HitGroupRecord),         // SBT Stride
+        0,                              // Miss SBT Index
+        p0, p1, p2, p3                  // Payloads
+    );
+    float min_dist = __uint_as_float(p0);
+    min_index = min_dist > EPSILON ? p1 : -1;   // miss shader will return for p0, if miss
+    prim_u    = __uint_as_float(p2);
+    prim_v    = __uint_as_float(p3);
+    return min_dist;
+}
+
+// returns true if not occluded
+static CPT_GPU_INLINE bool trace_any_hit(const Ray& ray, float max_dist) {
+    unsigned int p0 = 0;        // payloads
+    optixTrace(
+        params.handle,                  // Traversable Handle
+        ray.o,                   // Ray Origin
+        ray.d,                   // Ray Direction
+        EPSILON,                        // tmin
+        max_dist - EPSILON,         // tmax
+        0.0f,                           // Ray Time
+        0,                              // Visibility Mask
+        OPTIX_RAY_FLAG_ENFORCE_ANYHIT,  // Ray Flags
+        sizeof(HitGroupRecord),         // SBT Offset (any hit)
+        sizeof(HitGroupRecord),         // SBT Stride
+        0,                              // Miss SBT Index
+        p0
+    );
+    return p0 == 0;
+}
 
 template <bool render_once>
 CPT_KERNEL void render_optix_kernel(
@@ -45,27 +91,7 @@ CPT_KERNEL void render_optix_kernel(
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
-        {
-            unsigned int p0 = 0, p1 = 0, p2 = 0, p3 = 0;        // payloads
-            optixTrace(
-                params.handle,                  // Traversable Handle
-                ray.o,                          // Ray Origin
-                ray.d,                          // Ray Direction
-                EPSILON,                        // tmin
-                MAX_DIST,                       // tmax
-                0.0f,                           // Ray Time
-                0,                              // Visibility Mask
-                OPTIX_RAY_FLAG_NONE,            // Ray Flags
-                0,                              // SBT Offset (closest hit)
-                sizeof(HitGroupRecord),         // SBT Stride
-                0,                              // Miss SBT Index
-                p0, p1, p2, p3                  // Payloads
-            );
-            min_dist  = __uint_as_float(p0);
-            min_index = min_dist > EPSILON ? p1 : -1;   // miss shader will return for p0, if miss
-            prim_u    = __uint_as_float(p2);
-            prim_v    = __uint_as_float(p3);
-        }
+        min_dist = trace_closest_hit(ray, min_index, prim_u, prim_v);
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
             auto it = Primitive::get_interaction_optix(norms, uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
@@ -89,7 +115,7 @@ CPT_KERNEL void render_optix_kernel(
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
             radiance += direct_comp * emission_weight;
 
-            const Emitter* emitter = sample_emitter(sampler, c_emitter, direct_pdf, num_emitter, emitter_id);
+            const Emitter* emitter = sample_emitter(sampler, &c_emitter[0], direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
             emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
@@ -101,34 +127,13 @@ CPT_KERNEL void render_optix_kernel(
             shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
 
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
-            if (emitter != c_emitter[0]) {
-                bool is_occluded = false;
-                {
-                    unsigned int p0 = 0;        // payloads
-                    optixTrace(
-                        params.handle,                  // Traversable Handle
-                        shadow_ray.o,                   // Ray Origin
-                        shadow_ray.d,                   // Ray Direction
-                        EPSILON,                        // tmin
-                        emit_len_mis - EPSILON,         // tmax
-                        0.0f,                           // Ray Time
-                        0,                              // Visibility Mask
-                        OPTIX_RAY_FLAG_ENFORCE_ANYHIT,  // Ray Flags
-                        sizeof(HitGroupRecord),         // SBT Offset (any hit)
-                        sizeof(HitGroupRecord),         // SBT Stride
-                        0,                              // Miss SBT Index
-                        p0
-                    );
-                    is_occluded = p0 > 0;
-                }
-                if (!is_occluded) {
-                    // MIS for BSDF / light sampling, to achieve better rendering
-                    // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
-                    emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
-                    radiance += throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
-                        (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
-                    // numerical guard, in case emit_len_mis is 0
-                }
+            if (emitter != c_emitter[0] && trace_any_hit(shadow_ray, emit_len_mis)) {
+                // MIS for BSDF / light sampling, to achieve better rendering
+                // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
+                emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
+                radiance += throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
+                    (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
+                // numerical guard, in case emit_len_mis is 0
             }
 
             // step 4: sample a new ray direction, bounce the 

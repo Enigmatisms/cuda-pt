@@ -283,7 +283,7 @@ CPT_KERNEL void nee_shader(
 
         float direct_pdf = 1;
 
-        const Emitter* emitter = sample_emitter(sg, c_emitter, direct_pdf, num_emitter, emitter_id);
+        const Emitter* emitter = sample_emitter(sg, &c_emitter[0], direct_pdf, num_emitter, emitter_id);
         emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sg.discrete1D(), direct_pdf);
         emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));

@@ -57,10 +57,13 @@ ENDIF()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -rdc true")
+set(OPTIX_INCLUDE_DIRS "E:/optix/include")
 
 include_directories(
+	${OPTIX_INCLUDE_DIRS}
 	${CMAKE_CURRENT_LIST_DIR}/src 
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/glfw/include
@@ -72,6 +75,7 @@ add_subdirectory(src/ext/imgui)
 add_subdirectory(src/ext/glfw)
 
 find_package(OpenGL REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 if (MSVC)
 	list(APPEND CMAKE_PREFIX_PATH "E:\\glew-2.2.0\\glew")
 	set(GLEW_USE_STATIC_LIBS false)
@@ -120,6 +124,8 @@ add_executable(${EXEC2_NAME}
 target_link_libraries(
 	${EXEC2_NAME} PRIVATE
 	tinyxml2 tinyobjloader
+	CUDA::cudart
+    CUDA::cuda_driver
 )
 
 set_target_properties(
@@ -151,6 +157,8 @@ target_link_libraries(
 	glfw
 	imgui
 	${OPENGL_gl_LIBRARY}
+	CUDA::cudart
+    CUDA::cuda_driver
 )
 
 set_target_properties(

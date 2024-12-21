@@ -1,5 +1,6 @@
 #include "core/scene.cuh"
 #include "renderer/light_tracer.cuh"
+#include "renderer/megapt_optix.cuh"
 #include "renderer/wf_path_tracer.cuh"
 #include <ext/lodepng/lodepng.h>
 
@@ -20,7 +21,7 @@ int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
-    std::unique_ptr<PathTracer> renderer = nullptr;
+    std::unique_ptr<TracerBase> renderer = nullptr;
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {
@@ -42,6 +43,11 @@ int main(int argc, char** argv) {
                 std::cout << "\tMegakernel Light Tracing.\n";
             break;
         } 
+        case RendererType::OptiXMegaPT: {
+            renderer = std::make_unique<PathTracerOptiX>(scene);
+            std::cout << "\tPath Tracing with OptiX Hit Shaders..\n";
+            break;
+        }
         case RendererType::VoxelSDFPT: {
             std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             return 0;

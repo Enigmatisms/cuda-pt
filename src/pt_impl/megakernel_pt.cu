@@ -287,7 +287,7 @@ CPT_KERNEL void render_pt_kernel(
                         c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
             radiance += direct_comp * emission_weight;
 
-            const Emitter* emitter = sample_emitter(sampler, c_emitter, direct_pdf, num_emitter, emitter_id);
+            const Emitter* emitter = sample_emitter(sampler, &c_emitter[0], direct_pdf, num_emitter, emitter_id);
             // (3) sample a point on the emitter (we avoid sampling the hit emitter)
             emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
             emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
