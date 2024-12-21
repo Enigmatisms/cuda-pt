@@ -4,6 +4,7 @@
  * @author: Qianyue He
 */
 #pragma once
+#include <array>
 #include "core/vec2.cuh"
 #include "core/vec4.cuh"
 #include "core/fresnel.cuh"
@@ -21,6 +22,18 @@ enum BSDFFlag: int {
     BSDF_REFLECT  = 0x10,
     BSDF_TRANSMIT = 0x20
 };
+
+enum BSDFType: uint8_t {
+    Lambertian     = 0x00,
+    Specular       = 0x01,
+    Translucent    = 0x02,
+    Plastic        = 0x03,
+    PlasticForward = 0x04,
+    GGXConductor   = 0x05,
+    NumSupportedBSDF = 0x06
+};
+
+extern const std::array<const char*, NumSupportedBSDF> BSDF_NAMES;
 
 class BSDF {
 public:
@@ -68,9 +81,9 @@ public:
 
 
 class LambertianBSDF: public BSDF {
-using BSDF::k_d;
-using BSDF::bsdf_flag;
 public:
+    using BSDF::k_d;
+    using BSDF::bsdf_flag;
     CPT_CPU_GPU LambertianBSDF(Vec4 _k_d, int kd_id = -1):
         BSDF(std::move(_k_d), Vec4(0, 0, 0), Vec4(0, 0, 0), kd_id, -1, BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT) {}
 
@@ -107,8 +120,8 @@ public:
 };
 
 class SpecularBSDF: public BSDF {
-using BSDF::k_s;
 public:
+    using BSDF::k_s;
     CPT_CPU_GPU SpecularBSDF(Vec4 _k_s, int ks_id = -1):
         BSDF(Vec4(0, 0, 0), std::move(_k_s), Vec4(0, 0, 0), -1, ks_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT) {}
 
@@ -137,9 +150,10 @@ public:
 };
 
 class TranslucentBSDF: public BSDF {
-using BSDF::k_s;        // specular reflection
-using BSDF::k_d;        // ior
 public:
+    using BSDF::k_s;        // specular reflection
+    using BSDF::k_d;        // ior
+    
     CPT_CPU_GPU TranslucentBSDF(Vec4 k_s, Vec4 ior, int ex_id):
         BSDF(std::move(ior), std::move(k_s), Vec4(0, 0, 0), -1, ex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT) {}
 
@@ -192,14 +206,15 @@ public:
 };
 
 class PlasticBSDF: public BSDF {
-using BSDF::k_s;
-using BSDF::k_d;
-using BSDF::k_g;
-private:
+public:
     float trans_scaler;
     float thickness;
     float eta;
     float precomp_diff_f;       // precomputed diffuse Fresnel
+
+    using BSDF::k_s;
+    using BSDF::k_d;
+    using BSDF::k_g;
 public:
     CPT_CPU_GPU PlasticBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
         float trans_scaler = 1.f, float thickness = 0, int kd_id = -1, int ks_id = -1
@@ -221,13 +236,14 @@ public:
  * @brief specular reflection and delta forward
  */
 class PlasticForwardBSDF: public BSDF {
-using BSDF::k_s;
-using BSDF::k_d;
-using BSDF::k_g;
-private:
+public:
     float trans_scaler;
     float thickness;
     float eta;
+
+    using BSDF::k_s;
+    using BSDF::k_d;
+    using BSDF::k_g;
 public:
     CPT_CPU_GPU PlasticForwardBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
         float trans_scaler = 1.f, float thickness = 0, int kd_id = -1, int ks_id = -1
@@ -245,7 +261,7 @@ public:
     ) const override;
 };
 
-class GGXMetalBSDF: public BSDF {
+class GGXConductorBSDF: public BSDF {
 /**
  * @brief GGX microfacet normal distribution based BSDF
  * k_d is the eta_t of the metal
@@ -253,12 +269,12 @@ class GGXMetalBSDF: public BSDF {
  * k_g is the underlying color (albedo)
  */
 using BSDF::k_s;
-private:
+public:
     const FresnelTerms fresnel;
 public:
-    CPT_CPU_GPU GGXMetalBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id = -1);
+    CPT_CPU_GPU GGXConductorBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id = -1);
 
-    CPT_CPU_GPU GGXMetalBSDF(): BSDF() {}
+    CPT_CPU_GPU GGXConductorBSDF(): BSDF() {}
     
     CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */) const override;
 

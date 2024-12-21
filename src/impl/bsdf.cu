@@ -12,6 +12,14 @@
 #include <cuda_runtime.h>
 #include "core/bsdf.cuh"
 
+const std::array<const char*, NumSupportedBSDF> BSDF_NAMES = {
+    "Lambertian",     
+    "Specular",       
+    "Translucent",    
+    "Plastic",        
+    "PlasticForward", 
+    "GGXConductor"
+};
 
 /**
  * GGX microfacet model
@@ -155,12 +163,12 @@ public:
     }
 };
 
- CPT_CPU_GPU GGXMetalBSDF::GGXMetalBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id):
+CPT_CPU_GPU GGXConductorBSDF::GGXConductorBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id):
     BSDF(Vec4(0), Vec4(roughness_to_alpha(roughness_x), roughness_to_alpha(roughness_y), 1), 
         std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
         fresnel(std::move(eta_t), std::move(k)) {}
 
-CPT_GPU float GGXMetalBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
+CPT_GPU float GGXConductorBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
     auto R_w2l = rotation_fixed_anchor(it.shading_norm, false);
     const Vec3 local_in  = -R_w2l.rotate(in),
                local_out = R_w2l.rotate(out),
@@ -171,11 +179,11 @@ CPT_GPU float GGXMetalBSDF::pdf(const Interaction& it, const Vec3& out, const Ve
     return not_same_hemisphere ? 0 : pdf_v * __frcp_rn(4.f * local_wh.dot(local_in));
 }
 
-CPT_GPU Vec4 GGXMetalBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
+CPT_GPU Vec4 GGXConductorBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
     return k_g * GGX::eval(it.shading_norm, in, out, fresnel, k_s.x(), k_s.y()) * fmaxf(0, out.dot(it.shading_norm));
 }
 
-CPT_GPU Vec3 GGXMetalBSDF::sample_dir(    
+CPT_GPU Vec3 GGXConductorBSDF::sample_dir(    
     const Vec3& indir, 
     const Interaction& it, 
     Vec4& throughput, 
