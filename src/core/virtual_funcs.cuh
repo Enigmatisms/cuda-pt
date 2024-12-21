@@ -47,3 +47,4 @@ CPT_KERNEL void destroy_gpu_alloc(Ty** dst) {
 CPT_KERNEL void create_point_source(Emitter* &dst, Vec4 le, Vec3 pos);
 CPT_KERNEL void create_area_source(Emitter* &dst, Vec4 le, int obj_ref, bool is_sphere);
 CPT_KERNEL void create_abstract_source(Emitter* &dst);
+CPT_KERNEL void set_emission(Emitter* &dst, Vec3 color, float scaler = 1.f);

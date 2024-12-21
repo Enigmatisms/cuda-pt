@@ -27,8 +27,8 @@
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="1920"/>
-			<integer name="height" value="1080"/>
+			<integer name="width" value="960"/>
+			<integer name="height" value="540"/>
 			<bool name="gamma_correction" value="false"/>
 		</film>
 	</sensor>

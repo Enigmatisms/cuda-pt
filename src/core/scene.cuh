@@ -52,6 +52,9 @@ public:
     std::array<Vec3Arr, 3> norms_list;
     std::array<Vec2Arr, 3> uvs_list;
     std::vector<int> emitter_prims;
+    // used in Scene property online update, now we can
+    // modify the emitter emission on-the-fly
+    std::vector<std::pair<std::string, Vec4>> emitter_props;
 
     RenderingConfig config;
 
@@ -72,6 +75,8 @@ public:
     bool bvh_available() const noexcept {
         return !nodes.empty();
     }
+
+    void update_emitters();
 
     void print() const noexcept;
 };

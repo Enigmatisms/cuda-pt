@@ -221,7 +221,8 @@ void parseEmitterNames(
 
 void parseEmitter(
     const tinyxml2::XMLElement* emitter_elem, 
-    std::unordered_map<std::string, int>& emitter_obj_map,      // key emitter name, value object_id
+    std::unordered_map<std::string, int>& emitter_obj_map,      // key emitter name, value object_id,
+    std::vector<std::pair<std::string, Vec4>>& e_props,
     std::vector<std::string> obj_ref_names,
     Emitter** emitters, int index
 ) {
@@ -229,7 +230,7 @@ void parseEmitter(
     std::string id = emitter_elem->Attribute("id");
 
     obj_ref_names.push_back(id);
-    Vec4 emission(0, 0, 0), scaler(0, 0, 0);
+    Vec4 emission(0, 0, 0), scaler(1, 1, 1);
 
     const tinyxml2::XMLElement* element = emitter_elem->FirstChildElement("rgb");
     while (element) {
@@ -243,6 +244,7 @@ void parseEmitter(
         }
         element = element->NextSiblingElement("rgb");
     }
+    e_props.emplace_back(id, Vec4(emission.xyz(), scaler.x()));
 
     if (type == "point") {
         element = emitter_elem->FirstChildElement("point");
@@ -534,7 +536,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     CUDA_CHECK_RETURN(cudaMalloc(&emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(emitters[0]);
     for (int i = 1; i <= num_emitters; i++) {
-        parseEmitter(emitter_elem, emitter_obj_map, emitter_names, emitters, i);
+        parseEmitter(emitter_elem, emitter_obj_map, emitter_props, emitter_names, emitters, i);
         emitter_elem = emitter_elem->NextSiblingElement("emitter");
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -581,7 +583,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
         // The nodes.size is actually twice the number of nodes
         // since Each BVH node will be separated to two float4, nodes will store two float4 for each node
-        printf("[BVH] Total nodes: %lu, leaves: %lu\n", nodes.size() >> 1, prim_idxs.size());
+        printf("[BVH] Total nodes: %llu, leaves: %llu\n", nodes.size() >> 1, prim_idxs.size());
 
         tp = std::chrono::system_clock::now();
         std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
@@ -656,13 +658,22 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     } else {
         // To be consistent with the BVH branch, we store the primitive indices 
         prim_offset = 0;
-        for (ObjInfo& obj: objects) {
-            if (!obj.is_emitter()) continue;
-            for (int cnt = 0; cnt < obj.prim_num; cnt++) {
-                emitter_prims.push_back(obj.prim_offset + cnt);
+        obj_idxs.clear();
+        obj_idxs.reserve(num_prims);
+        for (size_t i = 0; i < objects.size(); i++) {
+            ObjInfo& obj = objects[i];
+            if (obj.is_emitter()) {
+                for (int cnt = 0; cnt < obj.prim_num; cnt++) {
+                    obj_idxs.push_back(i);
+                    emitter_prims.push_back(obj.prim_offset + cnt);
+                }
+                obj.prim_offset = prim_offset;
+                prim_offset += obj.prim_num;
+            } else {
+                // if is not an emitter: just fill in the obj_idxs
+                for (int cnt = 0; cnt < obj.prim_num; cnt++)
+                    obj_idxs.push_back(i);
             }
-            obj.prim_offset = prim_offset;
-            prim_offset += obj.prim_num;
         }
     }
 }
@@ -682,6 +693,14 @@ CPT_KERNEL static void vec2_to_packed_half_kernel(const Vec2* src1, const Vec2* 
     for (int i = idx; i < count; i += blockDim.x * gridDim.x) {
         dst[i] = PackedHalf2(src1[i], src2[i], src3[i]);
     }
+}
+
+void Scene::update_emitters() {
+    for (int index = 1; index <= num_emitters; index++) {
+        Vec4 color = emitter_props[index - 1].second;
+        set_emission<<<1, 1>>>(emitters[index], color.xyz(), color.w());
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
 void Scene::export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ConstBuffer<PackedHalf2>& uvs) const {

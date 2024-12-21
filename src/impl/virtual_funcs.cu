@@ -20,6 +20,12 @@ CPT_KERNEL void create_area_source(Emitter* &dst, Vec4 le, int obj_ref, bool is_
     }
 }
 
+CPT_KERNEL void set_emission(Emitter* &dst, Vec3 color, float scaler) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        dst->set_le(std::move(color), scaler);
+    }
+}
+
 CPT_KERNEL void create_abstract_source(Emitter* &dst) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         dst = new Emitter(Vec4(0, 0, 0));

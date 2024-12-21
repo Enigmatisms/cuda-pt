@@ -30,6 +30,7 @@ std::string get_current_time() {
 }
 
 int main(int argc, char** argv) {
+    CUDA_CHECK_RETURN(cudaFree(nullptr));       // initialize CUDA
     std::cerr << "[MAIN] Path tracing IMGUI viewer.\n";
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
@@ -43,7 +44,7 @@ int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
-    std::unique_ptr<PathTracer> renderer = nullptr;
+    std::unique_ptr<TracerBase> renderer = nullptr;
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {
@@ -98,18 +99,28 @@ int main(int argc, char** argv) {
             skip_mouse_event,
             show_frame_rate_bar
         );
-        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1, frame_capture, exit_main_loop);
+        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1, frame_capture, exit_main_loop),
+             scene_updated = false, renderer_update = false;
         if (exit_main_loop) {
             break;
         }
-        cam_updated     |= gui::render_settings_interface(*scene.cam, show_main_settings, 
-                            show_frame_rate_bar, skip_mouse_event, frame_capture, gamma_correct);
+        gui::render_settings_interface(
+            *scene.cam, scene.emitter_props, scene.config.max_depth, show_main_settings, 
+            show_frame_rate_bar, skip_mouse_event, frame_capture, 
+            gamma_correct, cam_updated, scene_updated, renderer_update
+        );
         if (!skip_mouse_event) {        // no sub window (setting window or main menu) is focused
             cam_updated |= gui::mouse_camera_update(*scene.cam, 0.5);
+        }
+        if (scene_updated) {
+            scene.update_emitters();
+            CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
         }
         if (cam_updated) {
             renderer->update_camera(scene.cam);
         }
+        if (cam_updated || scene_updated || renderer_update)
+            renderer->reset_out_buffer();
         renderer->render_online(scene.config.max_depth, gamma_correct);
         
         if (frame_capture) {

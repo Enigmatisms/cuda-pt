@@ -5,6 +5,7 @@
 #include <ext/lodepng/lodepng.h>
 
 int main(int argc, char** argv) {
+    CUDA_CHECK_RETURN(cudaFree(nullptr));       // initialize CUDA
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
         exit(1);

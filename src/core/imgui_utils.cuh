@@ -63,13 +63,18 @@ bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap, b
 bool mouse_camera_update(DeviceCamera& cam, float sensitivity = 1);
 
 // settings UI
-bool render_settings_interface(
+void render_settings_interface(
     DeviceCamera& cam, 
+    std::vector<std::pair<std::string, Vec4>>& emitters,
+    int& max_depth,
     bool& show_window, 
     bool& show_fps, 
     bool& render_settings_interface, 
     bool& capture,
-    bool& gamma_corr
+    bool& gamma_corr,
+    bool& camera_update,
+    bool& scene_update,
+    bool& renderer_update
 );
 
 }   // namespace gui

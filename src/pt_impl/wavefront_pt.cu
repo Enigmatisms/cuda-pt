@@ -11,6 +11,7 @@ namespace {
     using ConstPayLoadBuffer = const PayLoadBuffer;
 }
 
+static constexpr int SEED_SCALER = 11451;       //-4!
 static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
 

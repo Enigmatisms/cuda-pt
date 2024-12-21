@@ -60,6 +60,11 @@ public:
         return Le;
     }
 
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_GPU_INLINE void set_le(VecType&& color, float scaler) noexcept {
+        Le = Vec4(color * scaler, 1.f);
+    }
+
     CPT_CPU_GPU int get_obj_ref() const noexcept {
         return obj_ref_id * (obj_ref_id >= 0);
     }

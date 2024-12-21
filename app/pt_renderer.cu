@@ -7,6 +7,7 @@ __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
 
 int main(int argc, char** argv) {
+    CUDA_CHECK_RETURN(cudaFree(nullptr));       // initialize CUDA
     if (argc < 2) {
         std::cerr << "Input file not specified. Usage: ./pt <path to xml>\n";
         exit(1);
@@ -19,7 +20,7 @@ int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
-    std::unique_ptr<PathTracer> renderer = nullptr;
+    std::unique_ptr<TracerBase> renderer = nullptr;
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {

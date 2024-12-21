@@ -211,13 +211,50 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
     return false;
 }
 
-bool render_settings_interface(
+bool draw_rgb_ui(std::string description, float& r, float& g, float& b, float& scaler, bool add_rule = true)
+{
+    bool updated = false;
+    if (add_rule)
+        ImGui::Separator();
+
+    ImGui::Text("Emission for '%s'", description.c_str());
+    
+    ImGui::Text("RGB");
+    ImGui::SameLine();
+
+    ImGui::PushItemWidth(100.0f); // width of the input item
+    std::string label = "R##RGB-" + description;
+    updated |= ImGui::InputFloat(label.c_str(), &r, 0.01f, 1.0f, "%.2f"); ImGui::SameLine();
+    label = "G##RGB-" + description;
+    updated |= ImGui::InputFloat(label.c_str(), &g, 0.01f, 1.0f, "%.2f"); ImGui::SameLine();
+    label = "B##RGB-" + description;
+    updated |= ImGui::InputFloat(label.c_str(), &b, 0.01f, 1.0f, "%.2f");
+    ImGui::PopItemWidth();
+    ImGui::Text("Scaler");
+    ImGui::SameLine();
+
+    ImGui::PushItemWidth(120.0f);
+    label = "##ScalerSlider-" + description;
+    updated |= ImGui::SliderFloat(label.c_str(), &scaler, 0.0f, 100.0f, "%.2f"); ImGui::SameLine();
+    label = "##ScalerInput-" + description;
+    updated |= ImGui::InputFloat(label.c_str(), &scaler, 0.0f, 100.0f, "%.2f");
+    ImGui::PopItemWidth();
+    return updated;
+}
+
+void render_settings_interface(
     DeviceCamera& cam, 
+    std::vector<std::pair<std::string, Vec4>>& emitters,
+    int& max_depth,
     bool& show_window, 
     bool& show_fps, 
     bool& sub_window_process, 
     bool& capture,
-    bool& gamma_corr
+    bool& gamma_corr,
+
+    bool& camera_update,
+    bool& scene_update,
+    bool& renderer_update
 ) {
     // Begin the main menu bar at the top of the window
     if (ImGui::BeginMainMenuBar()) {
@@ -235,19 +272,23 @@ bool render_settings_interface(
     }
 
     // Check if the collapsible window should be shown
-    bool update = false;
+    camera_update   = false;
+    scene_update    = false;
+    renderer_update = false;
     if (show_window) {
         // Begin the collapsible window
         if (ImGui::Begin("Settings", &show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
             // Collapsible group for Camera Settings
             if (ImGui::CollapsingHeader("Camera Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
+                camera_update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
 
                 float value = focal2fov(cam.inv_focal, cam._hw);
                 ImGui::Text("camera FoV");
-                update |= ImGui::SliderFloat("##slider", &value, 1.0f, 150.0f, "%.2f", ImGuiSliderFlags_None);
+                camera_update |= ImGui::SliderFloat("##slider", &value, 1.0f, 150.0f, "%.2f", ImGuiSliderFlags_None);
                 ImGui::SameLine();
-                update |= ImGui::InputFloat("##input", &value, 1.0f, 150.0f, "%.2f");
+                ImGui::PushItemWidth(100.0f);
+                camera_update |= ImGui::InputFloat("##input", &value, 1.0f, 150.0f, "%.2f");
+                ImGui::PopItemWidth();
                 cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
 
                 ImGui::Checkbox("Gamma Correction", &gamma_corr);
@@ -255,12 +296,20 @@ bool render_settings_interface(
 
             if (ImGui::CollapsingHeader("Scene Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
                 // Empty placeholder for future Scene Settings
-                ImGui::Text("Scene settings go here...");
+                ImGui::Text("Scene emitter settings");
+                for (auto& [name, e_val]: emitters) {
+                    scene_update |= draw_rgb_ui(name, e_val.x(), e_val.y(), e_val.z(), e_val.w());
+                }
             }
 
             if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
                 // Empty placeholder for future Renderer Settings
-                ImGui::Text("Renderer settings go here...");
+                ImGui::Text("Max bounces");
+                ImGui::SameLine();
+                ImGui::PushItemWidth(100.0f);
+                renderer_update |= ImGui::InputInt("##max_depth", &max_depth, 1, 128); ImGui::SameLine();
+                ImGui::PopItemWidth();
+                ImGui::Separator();
             }
             if (ImGui::CollapsingHeader("Screen Capture", ImGuiWindowFlags_AlwaysAutoResize)) {
                 capture = ImGui::Button("Capture Frame");
@@ -271,7 +320,6 @@ bool render_settings_interface(
             ImGui::End();
         }
     }
-    return update;
 }
 
 }   // namespace gui
