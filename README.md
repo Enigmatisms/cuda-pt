@@ -42,6 +42,7 @@ The scalability of this repo might be worse than that of AdaPT, but it will impr
 - [x] Megakernel unidirectional path tracing. Two major ray-scene intersection schemes are employed: shared-memory based AABB culling, and GPU BVH (see below).
 - [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is not as fast as megakernel PT due to the simplicity of the test scenes (and maybe, coalesced GMEM access problems, being working on this).
 - [x] GPU BVH: A stackless GPU surface area heuristic BVH. The current implementation is not optimal (since the ordering of left-child and right child is left unaccounted for, and there is no 'look-back' op), but fast enough. Profiling for this part is not every complete. 1D CUDA texture is used to store the BVH nodes, for better cache performance.
+- [x] Online modification of the scene. Check out the video down below.
 
 |Unidirectional PT|Unidirectional PT|
 |:--:|:--:|
@@ -51,15 +52,14 @@ The scalability of this repo might be worse than that of AdaPT, but it will impr
 
 
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/2b3121b9-d3d6-4c07-b0e5-65803de78078"/>
+  <video src="https://github.com/user-attachments/assets/d805af5b-179a-4730-bebe-9307d0afd262"/>
 </div>
 
 
 ##### TODO
 
 - [x] (Recent) An `imgui` based interactive UI.
-- [ ] (Around 2024.11, stay tuned) Benchmarking with AdaPT (Taichi lang based renderer) and OptiX (optional). More profiling, and finally, I think I will write several blog posts on "How to implement an efficient software path tracing renderer with CUDA". The blog posts will be more focused on the soft(and hard)-ware related analysis-driven-optimization, so they will actually be posts that summarize (and teach) some best practices for programming the tasks with extremely imbalanced workloads.
-- [ ] CUDA texture for texture mapping. I have UV, but I didn't write texture loading currently. What a sad state of affairs.
+- [ ] (Around 2025.01, stay tuned) Benchmarking with AdaPT (Taichi lang based renderer) and OptiX (optional). More profiling, and finally, I think I will write several blog posts on "How to implement an efficient software path tracing renderer with CUDA". The blog posts will be more focused on the soft(and hard)-ware related analysis-driven-optimization, so they will actually be posts that summarize (and teach) some best practices for programming the tasks with extremely imbalanced workloads.
 
 ##### Tricks (that will be covered in my incoming blog posts)
 
