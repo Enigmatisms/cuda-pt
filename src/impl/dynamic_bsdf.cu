@@ -51,9 +51,17 @@ void BSDFInfo::copy_to_gpu(BSDF*& to_store) const {
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
-void BSDFInfo::create_on_gpu(BSDF*& to_store) const {
+void BSDFInfo::bsdf_value_clamping() {
+    bsdf.k_d = bsdf.k_d.maximize(Vec4(0, 1)).minimize(Vec4(1));
+    bsdf.k_s = bsdf.k_s.maximize(Vec4(0, 1)).minimize(Vec4(1));
+    bsdf.k_g = bsdf.k_g.maximize(Vec4(0, 1)).minimize(Vec4(1));
+}
+
+void BSDFInfo::create_on_gpu(BSDF*& to_store) {
     // destroy the previous BSDF
+    bsdf_changed = false;
     destroy_gpu_alloc<<<1, 1>>>(&to_store);
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     // create on GPU (ensure vptr and vtables are created on GPU)
     if (type == BSDFType::Lambertian) {
         general_bsdf_filler<LambertianBSDF>(&to_store, bsdf, 
@@ -64,6 +72,7 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) const {
             static_cast<BSDFFlag>(BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT)
         );
     } else if (type == BSDFType::Translucent) {
+        bsdf.k_d = Vec4(1.5f, 1);                   // override IoR
         general_bsdf_filler<TranslucentBSDF>(&to_store, bsdf, 
             static_cast<BSDFFlag>(BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT)
         );
@@ -72,9 +81,9 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) const {
             bsdf.k_d, 
             bsdf.k_s, 
             bsdf.k_g, 
-            bsdf.ior(), 
-            bsdf.trans_scaler(), 
-            bsdf.thickness(), 
+            1.5, 
+            1.f, 
+            0.5f, 
             bsdf.kd_tex_id, 
             bsdf.ex_tex_id
         );
@@ -83,9 +92,9 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) const {
             bsdf.k_d, 
             bsdf.k_s, 
             bsdf.k_g, 
-            bsdf.ior(), 
-            bsdf.trans_scaler(), 
-            bsdf.thickness(), 
+            1.5, 
+            1.f, 
+            0.5f,
             bsdf.kd_tex_id, 
             bsdf.ex_tex_id
         );
@@ -94,8 +103,8 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) const {
             METAL_ETA_TS[bsdf.mtype], 
             METAL_KS[bsdf.mtype], 
             bsdf.k_g, 
-            bsdf.roughness_x(), 
-            bsdf.roughness_y(), 
+            0.003f,
+            0.003f,
             bsdf.kd_tex_id, bsdf.ex_tex_id
         );
     }

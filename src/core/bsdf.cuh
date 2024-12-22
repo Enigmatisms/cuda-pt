@@ -143,8 +143,8 @@ public:
         samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
         float in_dot_n = indir.dot(it.shading_norm);
         pdf = 1.f;
-        throughput *= k_s * (in_dot_n < 0);
-        return reflection(indir, it.shading_norm, in_dot_n);
+        throughput *= k_s;
+        return -reflection(indir, it.shading_norm, in_dot_n);
     }
 };
 

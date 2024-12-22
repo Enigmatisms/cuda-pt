@@ -32,6 +32,12 @@
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
 
+	<brdf type="specular" id="mirror">
+		<rgb name="k_d" value="0"/>
+		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
+		<rgb name="k_g" value="0"/>
+	</brdf>
+
 	<brdf type="lambertian" id="white">
 		<rgb name="k_d" value="#BDBDBD"/>
 		<rgb name="k_g" value="1.0"/>
@@ -164,6 +170,6 @@
 	<shape type="sphere">
 		<point name="center" x="1.7" y="1.1" z="1.9"/>
 		<float name="radius" value="1.1"/>
-		<ref type="material" id="ir"/>
+		<ref type="material" id="mirror"/>
 	</shape>
 </scene>

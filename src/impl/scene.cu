@@ -310,6 +310,7 @@ void parseSphereShape(
     const tinyxml2::XMLElement* shapeElement, 
     const std::unordered_map<std::string, int>& bsdf_map,
     const std::unordered_map<std::string, int>& emitter_map,
+    std::vector<BSDFInfo>& bsdf_infos,
     std::unordered_map<std::string, int>& emitter_obj_map,
     std::vector<ObjInfo>& objects, std::array<Vec3Arr, 3>& verts_list, 
     std::array<Vec3Arr, 3>& norms_list, std::array<Vec2Arr, 3>& uvs_list, 
@@ -330,6 +331,11 @@ void parseSphereShape(
         }
         element = element->NextSiblingElement("ref");
     }
+    if (bsdf_id == -1) {
+        std::cerr << "The current object does not have an attached BSDF.\n";
+        throw std::runtime_error("Object with no BSDF");
+    }
+    bsdf_infos[bsdf_id].in_use = true;
 
     float radius = 0;
     Vec3 center(0, 0, 0);
@@ -361,6 +367,7 @@ void parseObjShape(
     const tinyxml2::XMLElement* shapeElement, 
     const std::unordered_map<std::string, int>& bsdf_map,
     const std::unordered_map<std::string, int>& emitter_map,
+    std::vector<BSDFInfo>& bsdf_infos,
     std::unordered_map<std::string, int>& emitter_obj_map,
     std::vector<ObjInfo>& objects, std::array<Vec3Arr, 3>& verts_list, 
     std::array<Vec3Arr, 3>& norms_list, std::array<Vec2Arr, 3>& uvs_list, 
@@ -390,6 +397,11 @@ void parseObjShape(
         }
         element = element->NextSiblingElement("ref");
     }
+    if (bsdf_id == -1) {
+        std::cerr << "The current object does not have an attached BSDF.\n";
+        throw std::runtime_error("Object with no BSDF");
+    }
+    bsdf_infos[bsdf_id].in_use = true;
 
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
@@ -534,11 +546,11 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     for (int i = 0; i < num_objects; i++) {
         std::string type = shape_elem->Attribute("type");
         if (type == "obj")
-            parseObjShape(shape_elem, bsdf_map, emitter_map, emitter_obj_map, objects, 
-                        verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
+            parseObjShape(shape_elem, bsdf_map, emitter_map, bsdf_infos, emitter_obj_map, 
+                    objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
         else if (type == "sphere")
-            parseSphereShape(shape_elem, bsdf_map, emitter_map, emitter_obj_map, objects, 
-                        verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
+            parseSphereShape(shape_elem, bsdf_map, emitter_map, bsdf_infos, emitter_obj_map, 
+                    objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
         sphere_objs[i] = type == "sphere";
         shape_elem = shape_elem->NextSiblingElement("shape");
     }
@@ -721,8 +733,13 @@ void Scene::update_emitters() {
 
 void Scene::update_materials() {
     for (size_t i = 0; i < bsdf_infos.size(); i++) {
-        const auto& bsdf_info = bsdf_infos[i];
-        bsdf_info.copy_to_gpu(bsdfs[i]);
+        auto& bsdf_info = bsdf_infos[i];
+        if (bsdf_info.bsdf_changed) {
+            bsdf_info.bsdf_value_clamping();
+            bsdf_info.create_on_gpu(bsdfs[i]);
+        } else {
+            bsdf_info.copy_to_gpu(bsdfs[i]);
+        }
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }

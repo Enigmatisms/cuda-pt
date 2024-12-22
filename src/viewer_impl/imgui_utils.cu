@@ -207,8 +207,10 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
     return false;
 }
 
-static bool draw_color_picker(std::string label, float* color_start) {
+static bool draw_color_picker(std::string label, std::string name, float* color_start) {
         // squared box
+    ImGui::Text(name.c_str());
+    ImGui::SameLine();
     ImGuiColorEditFlags color_edit_flags =
             ImGuiColorEditFlags_NoTooltip |
             ImGuiColorEditFlags_NoAlpha |
@@ -270,7 +272,7 @@ static bool emitter_widget(std::string description, Vec4& c_scaler, bool add_rul
 
     ImGui::Text("Emission for '%s'", description.c_str());
     
-    updated |= draw_color_picker(description, &c_scaler.x());
+    updated |= draw_color_picker(description, "Color", &c_scaler.x());
     updated |= draw_coupled_slider_input(description, "Scaler", c_scaler.w(), 0.f, 100.f);
     return updated;
 }
@@ -281,38 +283,47 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
         ImGui::Separator();
         std::string header_name = "Material '" + info.name + "' | Type: '" + BSDF_NAMES[info.type] + "'";
         ImGui::Indent();
+        if (info.in_use == false) {
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 0.8f));
+            header_name = "[NOT USED] Material '" + info.name + "'";
+            if (ImGui::CollapsingHeader(header_name.c_str(), ImGuiWindowFlags_AlwaysAutoResize))
+                ImGui::Text("This BSDF of type '%s' is not used.", BSDF_NAMES[info.type]);
+            ImGui::PopStyleColor(4);
+            ImGui::Unindent();
+            continue;
+        }
         if (ImGui::CollapsingHeader(header_name.c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
-            bool local_update = false;
+            bool local_update = draw_selection_menu(BSDF_NAMES, "##" + info.name + "-mat", "BSDF", reinterpret_cast<uint8_t&>(info.type));
+            info.bsdf_changed = local_update;
+            if (info.bsdf_changed) {
+                updated = true;
+            }
+            if (local_update) {
+                ImGui::Unindent();
+                continue;
+            }
             if (info.type == BSDFType::GGXConductor) {
-                ImGui::Text("Albedo\t");
-                ImGui::SameLine();
-                local_update |= draw_color_picker(info.name + "-kd", &info.bsdf.k_g.x());
-                local_update |= draw_selection_menu(METAL_NAMES, info.name + "-type", "Metal Type", reinterpret_cast<uint8_t&>(info.bsdf.mtype));
+                local_update |= draw_color_picker(info.name + "-kd", "Albedo", &info.bsdf.k_g.x());
+                local_update |= draw_selection_menu(METAL_NAMES, "##" + info.name + "-type", "Metal Type", reinterpret_cast<uint8_t&>(info.bsdf.mtype));
                 local_update |= draw_coupled_slider_input(info.name + "rx", "roughness X", info.bsdf.roughness_x());
                 local_update |= draw_coupled_slider_input(info.name + "ry", "roughness Y", info.bsdf.roughness_y());
             } else if (info.type == BSDFType::Plastic || info.type == BSDFType::PlasticForward) {
-                ImGui::Text("Diffuse\t");
-                ImGui::SameLine();
-                local_update |= draw_color_picker(info.name + "-kd", &info.bsdf.k_d.x());
-                ImGui::Text("Specular\t");
-                ImGui::SameLine();
-                updated |= draw_color_picker(info.name + "-ks", &info.bsdf.k_s.x());
-                ImGui::Text("Absorption\t");
-                ImGui::SameLine();
-                local_update |= draw_color_picker(info.name + "-kg", &info.bsdf.k_g.x());
+                local_update |= draw_color_picker(info.name + "-kd", "Substrate", &info.bsdf.k_d.x());
+                updated |= draw_color_picker(info.name + "-ks", "Coating", &info.bsdf.k_s.x());
+                local_update |= draw_color_picker(info.name + "-kg", "Absorption", &info.bsdf.k_g.x());
                 local_update |= draw_coupled_slider_input(info.name + "-ior", "IoR", info.bsdf.ior(), 1.0, 3.0);
                 local_update |= draw_coupled_slider_input(info.name + "-thc", "Thickness", info.bsdf.thickness());
                 local_update |= draw_coupled_slider_input(info.name + "-trp", "Transmit Proba", info.bsdf.trans_scaler());
-            } else {
-                ImGui::Text("Diffuse\t");
-                ImGui::SameLine();
-                local_update |= draw_color_picker(info.name + "-kd", &info.bsdf.k_d.x());
-                ImGui::Text("Specular\t");
-                ImGui::SameLine();
-                local_update |= draw_color_picker(info.name + "-ks", &info.bsdf.k_s.x());
-                ImGui::Text("Glossy\t");
-                ImGui::SameLine();
-                local_update |= draw_color_picker(info.name + "-kg", &info.bsdf.k_g.x());
+            } else if (info.type == BSDFType::Translucent) {
+                local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
+                local_update |= draw_coupled_slider_input(info.name + "ior", "IoR", info.bsdf.k_d.x());
+            } else if (info.type == BSDFType::Lambertian){
+                local_update |= draw_color_picker(info.name + "-kd", "Diffuse", &info.bsdf.k_d.x());
+            } else if (info.type == BSDFType::Specular){
+                local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
             }
             info.updated = local_update;
             updated |= local_update;
@@ -350,7 +361,6 @@ void render_settings_interface(
     }
 
     // Check if the collapsible window should be shown
-    camera_update   = false;
     scene_update    = false;
     renderer_update = false;
     material_update = false;

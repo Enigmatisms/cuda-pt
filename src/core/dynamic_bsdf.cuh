@@ -55,11 +55,13 @@ public:
         inline float roughness_x() const { return extras.x(); }
         inline float roughness_y() const { return extras.y(); }
     } bsdf;
-    mutable bool updated;
+    mutable bool updated;           // whether the parameters are updated (BSDF type not changed)
+    mutable bool bsdf_changed;      // whether we have changed the BSDF type
+    bool in_use;                    // wether the current BSDF is actually in use (may only appear in xml, but not used)
 public:
-    BSDFInfo(): name(""), type(BSDFType::Lambertian), bsdf{}, updated(false) {}
+    BSDFInfo(): name(""), type(BSDFType::Lambertian), bsdf{}, updated(false), bsdf_changed(false), in_use(false) {}
     BSDFInfo(std::string n, BSDFType t = BSDFType::Lambertian):
-        name(n), type(t), bsdf{}, updated(false) {}
+        name(n), type(t), bsdf{}, updated(false), bsdf_changed(false), in_use(false) {}
 
     template <typename TypeBSDF>
     static void general_bsdf_filler(BSDF** to_store, const BSDFParams& data, BSDFFlag flag) {
@@ -73,8 +75,13 @@ public:
         );
     }
 
+    // clamp the k_d, k_s, k_g into [0, 1], why doing this?
+    // when switching from GGXConductor to 'standard' BSDF, the 
+    // k_d (conductor eta) and k_s (k) can be out-of-range
+    void bsdf_value_clamping();
+
     // this will update the GPU data, but will not create new vptr and vtable
     void copy_to_gpu(BSDF*& to_store) const;
 
-    void create_on_gpu(BSDF*& to_store) const;
+    void create_on_gpu(BSDF*& to_store);
 };
