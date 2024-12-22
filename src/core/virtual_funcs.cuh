@@ -63,7 +63,7 @@ CPT_KERNEL void load_plastic_bsdf(
         // I will make sure (I can) the base ptr is actually of PlasticType*
         // So dynamic_cast is not needed (actually, not allowed on device code)
         PlasticType* ptr = static_cast<PlasticType*>(*dst);
-        ptr->eta = ior;
+        ptr->eta = 1.f / ior;
         ptr->trans_scaler = trans_scaler;
         ptr->thickness = thickness;
         ptr->set_kd(std::move(k_d));
