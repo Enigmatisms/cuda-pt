@@ -46,8 +46,8 @@
 	</brdf>
 
 	<emitter type="area" id="area">
-		<rgb name="emission" value="4, 4, 4"/>
-		<rgb name="scaler" value="5.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -100,7 +100,7 @@
 		<float name="ior" value="1.5"/>
 	</brdf>
 
-	<brdf type="metal-ggx" id="gold">
+	<brdf type="conductor-ggx" id="gold">
 		<string name="metal-type" value="Au"/>
 		<float name="roughness_x" value="0.003"/>
 		<float name="roughness_y" value="0.003"/>
@@ -117,32 +117,32 @@
 	</brdf>
 
 	<emitter type="area" id="lambo-front1">
-		<rgb name="emission" value="4, 4, 4"/>
-		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="80.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="lambo-front2">
-		<rgb name="emission" value="4, 4, 3"/>
-		<rgb name="scaler" value="0.3"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 1, 0.75"/>
+		<rgb name="scaler" value="1.2"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="lambo-inner">
-		<rgb name="emission" value="4, 3, 2"/>
-		<rgb name="scaler" value="10.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 0.75, 0.5"/>
+		<rgb name="scaler" value="40.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="lambo-tail">
-		<rgb name="emission" value="4, 0, 0"/>
-		<rgb name="scaler" value="20.0"/>
+		<rgb name="emission" value="1, 0, 0"/>
+		<rgb name="scaler" value="80.0"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="yellow-tail">
-		<rgb name="emission" value="4, 3, 0"/>
-		<rgb name="scaler" value="1.0"/>
+		<rgb name="emission" value="1, 0.75, 0"/>
+		<rgb name="scaler" value="4.0"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -263,28 +263,28 @@
 
 	<!-- Starting here is the Blue Sports Car -->
 
-	<brdf type="metal-ggx" id="shell">
+	<brdf type="conductor-ggx" id="shell">
 		<string name="metal-type" value="Cr"/>
 		<float name="roughness_x" value="0.003"/>
 		<float name="roughness_y" value="0.003"/>
 		<rgb name="k_g" value="#0022EE"/>
 	</brdf>
 
-	<brdf type="metal-ggx" id="engine">
+	<brdf type="conductor-ggx" id="engine">
 		<string name="metal-type" value="Ir"/>
 		<float name="roughness_x" value="0.001"/>
 		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="#EAEAEA"/>
 	</brdf>
 
-	<brdf type="metal-ggx" id="wheel">
+	<brdf type="conductor-ggx" id="wheel">
 		<string name="metal-type" value="Na"/>
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.01"/>
 		<rgb name="k_g" value="#FAFAFA"/>
 	</brdf>
 
-	<brdf type="metal-ggx" id="base">
+	<brdf type="conductor-ggx" id="base">
 		<string name="metal-type" value="TiO2"/>
 		<float name="roughness_x" value="0.005"/>
 		<float name="roughness_y" value="0.005"/>
@@ -310,14 +310,14 @@
 	</brdf>
 
 	<emitter type="area" id="blue-front-lamp">
-		<rgb name="emission" value="4, 4, 4"/>
-		<rgb name="scaler" value="5.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="tail">
-		<rgb name="emission" value="4, 0, 0"/>
-		<rgb name="scaler" value="10.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 0, 0"/>
+		<rgb name="scaler" value="40.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="red-shell"/>
 	</emitter>
 

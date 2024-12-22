@@ -1,0 +1,80 @@
+#pragma once
+#include "core/bsdf.cuh"
+#include "core/virtual_funcs.cuh"
+#include "core/metal_params.cuh"
+
+class BSDFInfo {
+public:
+    std::string name;
+    BSDFType    type;
+
+    struct BSDFParams {
+        Vec4 k_d;
+        Vec4 k_s;
+        Vec4 k_g;
+        Vec3 extras;
+        int kd_tex_id;
+        int ex_tex_id;
+        MetalType mtype;
+
+        BSDFParams() {}
+        CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec4, Vec4, Vec4)
+        BSDFParams(VType1&& _k_d, VType2&& _k_s, VType3&& _k_g, int _kd_id = -1, int _ex_id = -1):
+            k_d(std::forward<VType1&&>(_k_d)), k_s(std::forward<VType2&&>(_k_s)), k_g(std::forward<VType3&&>(_k_g)),
+            extras(1.5, 1, 0), kd_tex_id(_kd_id), ex_tex_id(_ex_id), mtype(MetalType::Al)
+        {}
+
+        CONDITION_TEMPLATE(VecType, Vec4)
+        void store_ggx_params(MetalType mt, VecType&& _k_g, float rx, float ry, int kd_id) {
+            k_g = std::forward<VecType&&>(_k_g);
+            mtype = mt;
+            roughness_x() = rx;
+            roughness_y() = ry;
+            kd_tex_id     = kd_id;
+        }
+
+        void store_plastic_params(
+            float _ior, 
+            float _trans_scaler, 
+            float _thickness
+        ) {
+            ior()          = _ior;
+            trans_scaler() = _trans_scaler;
+            thickness()    = _thickness;
+        }
+        
+        inline float& ior() { return extras.x(); }
+        inline float& trans_scaler() { return extras.y(); }
+        inline float& thickness() { return extras.z(); }
+        inline float& roughness_x() { return extras.x(); }
+        inline float& roughness_y() { return extras.y(); }
+
+        inline float ior() const { return extras.x(); }
+        inline float trans_scaler() const { return extras.y(); }
+        inline float thickness() const { return extras.z(); }
+        inline float roughness_x() const { return extras.x(); }
+        inline float roughness_y() const { return extras.y(); }
+    } bsdf;
+    mutable bool updated;
+public:
+    BSDFInfo(): name(""), type(BSDFType::Lambertian), bsdf{}, updated(false) {}
+    BSDFInfo(std::string n, BSDFType t = BSDFType::Lambertian):
+        name(n), type(t), bsdf{}, updated(false) {}
+
+    template <typename TypeBSDF>
+    static void general_bsdf_filler(BSDF** to_store, const BSDFParams& data, BSDFFlag flag) {
+        create_bsdf<TypeBSDF><<<1, 1>>>(to_store, 
+            data.k_d, 
+            data.k_s, 
+            data.k_g, 
+            data.kd_tex_id, 
+            data.ex_tex_id, 
+            flag
+        );
+    }
+
+    // this will update the GPU data, but will not create new vptr and vtable
+    void copy_to_gpu(BSDF*& to_store) const;
+
+    void create_on_gpu(BSDF*& to_store) const;
+};

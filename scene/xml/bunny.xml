@@ -73,8 +73,8 @@
 	</brdf>
 
 	<emitter type="area" id="area">
-		<rgb name="emission" value="25, 25, 25"/>
-		<rgb name="scaler" value="2.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="50.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 

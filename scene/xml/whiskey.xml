@@ -57,8 +57,8 @@
 	</brdf>
 
 	<emitter type="area" id="area">
-		<rgb name="emission" value="70.0, 63.2, 60.3"/>
-		<rgb name="scaler" value="25"/>
+		<rgb name="emission" value="1, 0.90286, 0.861429"/>
+		<rgb name="scaler" value="1750"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>

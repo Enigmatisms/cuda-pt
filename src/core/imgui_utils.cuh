@@ -6,6 +6,9 @@
 #include <driver_types.h>
 #include <GLFW/glfw3.h>
 
+class DeviceCamera;
+class BSDFInfo;
+
 namespace gui {
 
 using gl_uint = unsigned int;
@@ -46,7 +49,6 @@ void window_render(
 // window for displaying FPS & SPP
 void show_render_statistics(
     int num_sample, 
-    bool& sub_window_proc,
     bool show_fps
 );
 
@@ -66,14 +68,16 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity = 1);
 void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
+    std::vector<BSDFInfo>& bsdf_infos,
     int& max_depth,
     bool& show_window, 
     bool& show_fps, 
-    bool& render_settings_interface, 
     bool& capture,
     bool& gamma_corr,
+    
     bool& camera_update,
     bool& scene_update,
+    bool& material_update,
     bool& renderer_update
 );
 

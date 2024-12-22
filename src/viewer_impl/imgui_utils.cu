@@ -6,6 +6,7 @@
 #include "core/cuda_utils.cuh"
 #include "core/camera_model.cuh"
 #include "core/imgui_utils.cuh"
+#include "core/dynamic_bsdf.cuh"
 
 namespace gui {
 
@@ -66,10 +67,8 @@ void window_render(
 
 void show_render_statistics(
     int num_sample, 
-    bool& sub_window_proc,
     bool show_fps
 ) {
-    sub_window_proc = false;
     if (show_fps) {
         const char* window_title = "Statistics";
         ImVec2 text_size = ImGui::CalcTextSize(window_title);
@@ -80,9 +79,6 @@ void show_render_statistics(
         ImGuiIO& io = ImGui::GetIO();
         ImGui::Text("FPS: %.2f", io.Framerate);
         ImGui::Text("SPP: %4d", num_sample);
-        if (ImGui::IsWindowFocused()) {
-            sub_window_proc = true;
-        }
         ImGui::End();
     }
 }
@@ -211,49 +207,134 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
     return false;
 }
 
-bool draw_rgb_ui(std::string description, float& r, float& g, float& b, float& scaler, bool add_rule = true)
-{
+static bool draw_color_picker(std::string label, float* color_start) {
+        // squared box
+    ImGuiColorEditFlags color_edit_flags =
+            ImGuiColorEditFlags_NoTooltip |
+            ImGuiColorEditFlags_NoAlpha |
+            ImGuiColorEditFlags_InputRGB | 
+            ImGuiColorEditFlags_NoLabel | 
+            ImGuiColorEditFlags_DisplayRGB |
+            ImGuiColorEditFlags_PickerHueBar;
+    label = "##rgb-" + label;
+    return ImGui::ColorEdit3(label.c_str(), color_start, color_edit_flags);
+}
+
+static bool draw_coupled_slider_input(std::string id, std::string name, float& val, float min_val = 0.0, float max_val = 1.f) {
+    bool updated = false;
+    ImGui::Text(name.c_str());
+    ImGui::SameLine();
+
+    ImGui::PushItemWidth(120.0f);
+    std::string label = "##ScalerSlider-" + id;
+    updated |= ImGui::SliderFloat(label.c_str(), &val, 0.0f, max_val, "%.3f"); ImGui::SameLine();
+    label = "##ScalerInput-" + id;
+    updated |= ImGui::InputFloat(label.c_str(), &val, 0.0f, max_val, "%.3f");
+    ImGui::PopItemWidth();
+    return updated;
+}
+
+template <int N>
+static bool draw_selection_menu(
+    const std::array<const char*, N>& picks,
+    std::string id, std::string name,
+    uint8_t& current_value
+) {
+    ImGui::Text("%s", name);
+    ImGui::SameLine();
+
+    const char* current_name = picks[current_value];
+
+    bool changed = false;
+    if (ImGui::BeginCombo(id.c_str(), current_name)) {
+        for (uint8_t i = 0; i < N; ++i) {
+            bool is_selected = (current_value == i);
+            if (ImGui::Selectable(picks[i], is_selected)) {
+                current_value = i;
+                changed = !is_selected;
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+        return changed;
+    }
+    return changed;
+}
+
+static bool emitter_widget(std::string description, Vec4& c_scaler, bool add_rule = true) {
     bool updated = false;
     if (add_rule)
         ImGui::Separator();
 
     ImGui::Text("Emission for '%s'", description.c_str());
     
-    ImGui::Text("RGB");
-    ImGui::SameLine();
+    updated |= draw_color_picker(description, &c_scaler.x());
+    updated |= draw_coupled_slider_input(description, "Scaler", c_scaler.w(), 0.f, 100.f);
+    return updated;
+}
 
-    ImGui::PushItemWidth(100.0f); // width of the input item
-    std::string label = "R##RGB-" + description;
-    updated |= ImGui::InputFloat(label.c_str(), &r, 0.01f, 1.0f, "%.2f"); ImGui::SameLine();
-    label = "G##RGB-" + description;
-    updated |= ImGui::InputFloat(label.c_str(), &g, 0.01f, 1.0f, "%.2f"); ImGui::SameLine();
-    label = "B##RGB-" + description;
-    updated |= ImGui::InputFloat(label.c_str(), &b, 0.01f, 1.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::Text("Scaler");
-    ImGui::SameLine();
-
-    ImGui::PushItemWidth(120.0f);
-    label = "##ScalerSlider-" + description;
-    updated |= ImGui::SliderFloat(label.c_str(), &scaler, 0.0f, 100.0f, "%.2f"); ImGui::SameLine();
-    label = "##ScalerInput-" + description;
-    updated |= ImGui::InputFloat(label.c_str(), &scaler, 0.0f, 100.0f, "%.2f");
-    ImGui::PopItemWidth();
+static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
+    bool updated = false;
+    for (auto& info: bsdf_infos) {
+        ImGui::Separator();
+        std::string header_name = "Material '" + info.name + "' | Type: '" + BSDF_NAMES[info.type] + "'";
+        ImGui::Indent();
+        if (ImGui::CollapsingHeader(header_name.c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
+            bool local_update = false;
+            if (info.type == BSDFType::GGXConductor) {
+                ImGui::Text("Albedo\t");
+                ImGui::SameLine();
+                local_update |= draw_color_picker(info.name + "-kd", &info.bsdf.k_g.x());
+                local_update |= draw_selection_menu(METAL_NAMES, info.name + "-type", "Metal Type", reinterpret_cast<uint8_t&>(info.bsdf.mtype));
+                local_update |= draw_coupled_slider_input(info.name + "rx", "roughness X", info.bsdf.roughness_x());
+                local_update |= draw_coupled_slider_input(info.name + "ry", "roughness Y", info.bsdf.roughness_y());
+            } else if (info.type == BSDFType::Plastic || info.type == BSDFType::PlasticForward) {
+                ImGui::Text("Diffuse\t");
+                ImGui::SameLine();
+                local_update |= draw_color_picker(info.name + "-kd", &info.bsdf.k_d.x());
+                ImGui::Text("Specular\t");
+                ImGui::SameLine();
+                updated |= draw_color_picker(info.name + "-ks", &info.bsdf.k_s.x());
+                ImGui::Text("Absorption\t");
+                ImGui::SameLine();
+                local_update |= draw_color_picker(info.name + "-kg", &info.bsdf.k_g.x());
+                local_update |= draw_coupled_slider_input(info.name + "-ior", "IoR", info.bsdf.ior(), 1.0, 3.0);
+                local_update |= draw_coupled_slider_input(info.name + "-thc", "Thickness", info.bsdf.thickness());
+                local_update |= draw_coupled_slider_input(info.name + "-trp", "Transmit Proba", info.bsdf.trans_scaler());
+            } else {
+                ImGui::Text("Diffuse\t");
+                ImGui::SameLine();
+                local_update |= draw_color_picker(info.name + "-kd", &info.bsdf.k_d.x());
+                ImGui::Text("Specular\t");
+                ImGui::SameLine();
+                local_update |= draw_color_picker(info.name + "-ks", &info.bsdf.k_s.x());
+                ImGui::Text("Glossy\t");
+                ImGui::SameLine();
+                local_update |= draw_color_picker(info.name + "-kg", &info.bsdf.k_g.x());
+            }
+            info.updated = local_update;
+            updated |= local_update;
+        }
+        ImGui::Unindent();
+    }
     return updated;
 }
 
 void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
+    std::vector<BSDFInfo>& bsdf_infos,
     int& max_depth,
     bool& show_window, 
     bool& show_fps, 
-    bool& sub_window_process, 
     bool& capture,
     bool& gamma_corr,
 
     bool& camera_update,
     bool& scene_update,
+    bool& material_update,
     bool& renderer_update
 ) {
     // Begin the main menu bar at the top of the window
@@ -265,9 +346,6 @@ void render_settings_interface(
             ImGui::MenuItem("Show Frame Rate Bar", NULL, &show_fps);
             ImGui::EndMenu(); // End the "Options" menu
         }
-        if (ImGui::IsWindowFocused()) {
-            sub_window_process = true;
-        }
         ImGui::EndMainMenuBar(); // End the main menu bar
     }
 
@@ -275,6 +353,7 @@ void render_settings_interface(
     camera_update   = false;
     scene_update    = false;
     renderer_update = false;
+    material_update = false;
     if (show_window) {
         // Begin the collapsible window
         if (ImGui::Begin("Settings", &show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -295,15 +374,13 @@ void render_settings_interface(
             }
 
             if (ImGui::CollapsingHeader("Scene Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                // Empty placeholder for future Scene Settings
                 ImGui::Text("Scene emitter settings");
                 for (auto& [name, e_val]: emitters) {
-                    scene_update |= draw_rgb_ui(name, e_val.x(), e_val.y(), e_val.z(), e_val.w());
+                    scene_update |= emitter_widget(name, e_val);
                 }
             }
 
             if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                // Empty placeholder for future Renderer Settings
                 ImGui::Text("Max bounces");
                 ImGui::SameLine();
                 ImGui::PushItemWidth(100.0f);
@@ -311,15 +388,14 @@ void render_settings_interface(
                 ImGui::PopItemWidth();
                 ImGui::Separator();
             }
+            if (ImGui::CollapsingHeader("Material Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
+                material_update |= material_widget(bsdf_infos);
+            }
             if (ImGui::CollapsingHeader("Screen Capture", ImGuiWindowFlags_AlwaysAutoResize)) {
                 capture = ImGui::Button("Capture Frame");
-            }
-            if (ImGui::IsWindowFocused()) {
-                sub_window_process = true;
             }
             ImGui::End();
         }
     }
 }
-
 }   // namespace gui

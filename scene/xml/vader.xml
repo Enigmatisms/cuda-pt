@@ -59,7 +59,7 @@
 		<rgb name="k_g" value="0"/>
 	</brdf>
 
-	<brdf type="metal-ggx" id="helmet">
+	<brdf type="conductor-ggx" id="helmet">
 		<string name="metal-type" value="CuO"/>
 		<float name="roughness_x" value="0.005"/>
 		<float name="roughness_y" value="0.005"/>
@@ -76,14 +76,14 @@
 	</brdf>
 
 	<emitter type="area" id="area1">
-		<rgb name="emission" value="50.0, 50.0, 50.0"/>
-		<rgb name="scaler" value="1.2"/>
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="60"/>
         <string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="area2">
-		<rgb name="emission" value="50.0, 50.0, 50.0"/>
-		<rgb name="scaler" value="0.6"/>
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="30"/>
         <string name="bind_type" value="triangle"/>
 	</emitter>
 

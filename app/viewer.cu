@@ -81,10 +81,10 @@ int main(int argc, char** argv) {
 
     bool show_main_settings  = true;
     bool show_frame_rate_bar = true;
-    bool skip_mouse_event    = false;
     bool frame_capture       = false;
     bool exit_main_loop      = false;
     bool gamma_correct       = true;
+    ImGuiIO& io = ImGui::GetIO();
 
     while (!glfwWindowShouldClose(window.get())) {
         frame_capture = false;
@@ -96,30 +96,35 @@ int main(int argc, char** argv) {
 
         gui::show_render_statistics(
             renderer->get_num_sample() + 1,
-            skip_mouse_event,
             show_frame_rate_bar
         );
         bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1, frame_capture, exit_main_loop),
-             scene_updated = false, renderer_update = false;
+            scene_updated = false, 
+            renderer_update = false,
+            material_update = false;
         if (exit_main_loop) {
             break;
         }
         gui::render_settings_interface(
-            *scene.cam, scene.emitter_props, scene.config.max_depth, show_main_settings, 
-            show_frame_rate_bar, skip_mouse_event, frame_capture, 
-            gamma_correct, cam_updated, scene_updated, renderer_update
+            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.max_depth, 
+            show_main_settings, show_frame_rate_bar, frame_capture, 
+            gamma_correct, cam_updated, scene_updated, material_update, renderer_update
         );
-        if (!skip_mouse_event) {        // no sub window (setting window or main menu) is focused
+        if (!io.WantCaptureMouse) {        // no sub window (setting window or main menu) is focused
             cam_updated |= gui::mouse_camera_update(*scene.cam, 0.5);
         }
         if (scene_updated) {
             scene.update_emitters();
             CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
         }
+        if (material_update) {
+            scene.update_materials();
+            CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
+        }
         if (cam_updated) {
             renderer->update_camera(scene.cam);
         }
-        if (cam_updated || scene_updated || renderer_update)
+        if (cam_updated || scene_updated || material_update || renderer_update)
             renderer->reset_out_buffer();
         renderer->render_online(scene.config.max_depth, gamma_correct);
         

@@ -38,3 +38,17 @@ CPT_KERNEL void create_metal_bsdf(BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, floa
         (*dst)->set_ex_id(ex_tex_id);
     }
 }
+
+CPT_KERNEL void load_metal_bsdf(
+    BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        // I will make sure (I can) the base ptr is actually of PlasticType*
+        // So dynamic_cast is not needed (actually, not allowed on device code)
+        GGXConductorBSDF* ptr = static_cast<GGXConductorBSDF*>(*dst);
+        ptr->fresnel = FresnelTerms(std::move(eta_t), std::move(k));
+        ptr->set_kd(Vec4(0));
+        ptr->set_ks(Vec4(BSDF::roughness_to_alpha(roughness_x), BSDF::roughness_to_alpha(roughness_y), 1));
+        ptr->set_kg(std::move(k_g));
+    }
+}

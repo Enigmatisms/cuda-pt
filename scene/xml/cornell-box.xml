@@ -26,7 +26,7 @@
 		</film>
 	</sensor>
 
-	<brdf type="metal-ggx" id="large-box">
+	<brdf type="conductor-ggx" id="large-box">
 		<string name="metal-type" value="Au"/>
 		<float name="roughness_x" value="0.001"/>
 		<float name="roughness_y" value="0.001"/>
@@ -64,8 +64,8 @@
 	</brdf>
 
 	<emitter type="area" id="area">
-		<rgb name="emission" value="4, 4, 4"/>
-		<rgb name="scaler" value="12.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="48.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 

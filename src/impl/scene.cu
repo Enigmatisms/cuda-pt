@@ -95,7 +95,13 @@ Vec3 parsePoint(const tinyxml2::XMLElement* element) {
     return Vec3(x, y, z);
 }
 
-void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::string, int>& bsdf_map, BSDF** bsdfs, int index) {
+void parseBSDF(
+    const tinyxml2::XMLElement* bsdf_elem, 
+    std::unordered_map<std::string, int>& bsdf_map, 
+    std::vector<BSDFInfo>& bsdf_infos,
+    BSDF** bsdfs, 
+    int index
+) {
     std::string type = bsdf_elem->Attribute("type");
     std::string id = bsdf_elem->Attribute("id");
 
@@ -132,15 +138,20 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
         element = element->NextSiblingElement("rgb");
     }
 
+    BSDFInfo info(id);
+    info.bsdf = BSDFInfo::BSDFParams(k_d, k_s, k_g, kd_tex_id, ex_tex_id);
     if (type == "lambertian") {
         create_bsdf<LambertianBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT);
     } else if (type == "specular") {
         create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT);
+        info.type = BSDFType::Specular;
     } else if (type == "det-refraction") {
         create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
-    } else if (type == "metal-ggx") {
+        info.type = BSDFType::Translucent;
+    } else if (type == "conductor-ggx") {
         float roughness_x = 0.1f, roughness_y = 0.1f;
         MetalType mtype = MetalType::Cu;
+        info.type = BSDFType::GGXConductor;
         element = bsdf_elem->FirstChildElement("string");
         if (element) {
             std::string name = element->Attribute("name");
@@ -175,6 +186,7 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
                 throw std::runtime_error("Error parsing 'roughness' attribute");
             element = element->NextSiblingElement("float");
         }
+        info.bsdf.store_ggx_params(mtype, k_g, roughness_x, roughness_y, kd_tex_id);
         create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], 
                     METAL_KS[mtype], k_g, roughness_x, roughness_y, kd_tex_id, ex_tex_id);
     } else if (type == "plastic" || type == "plastic-forward") {
@@ -197,13 +209,17 @@ void parseBSDF(const tinyxml2::XMLElement* bsdf_elem, std::unordered_map<std::st
             element = element->NextSiblingElement("float");
         }
         if (type == "plastic") {
+            info.type = BSDFType::Plastic;
             create_plastic_bsdf<PlasticBSDF><<<1, 1>>>(bsdfs + index, 
                 k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
         } else {
+            info.type = BSDFType::PlasticForward;
             create_plastic_bsdf<PlasticForwardBSDF><<<1, 1>>>(bsdfs + index, 
                 k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
         }
+        info.bsdf.store_plastic_params(ior, trans_scaler, thickness);
     }
+    bsdf_infos.emplace_back(std::move(info));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
@@ -491,7 +507,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         ptr = ptr->NextSiblingElement("brdf");
     CUDA_CHECK_RETURN(cudaMalloc(&bsdfs, sizeof(BSDF*) * num_bsdfs));
     for (int i = 0; i < num_bsdfs; i++) {
-        parseBSDF(bsdf_elem, bsdf_map, bsdfs, i);
+        parseBSDF(bsdf_elem, bsdf_map, bsdf_infos, bsdfs, i);
         bsdf_elem = bsdf_elem->NextSiblingElement("brdf");
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -699,6 +715,14 @@ void Scene::update_emitters() {
     for (int index = 1; index <= num_emitters; index++) {
         Vec4 color = emitter_props[index - 1].second;
         set_emission<<<1, 1>>>(emitters[index], color.xyz(), color.w());
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+}
+
+void Scene::update_materials() {
+    for (size_t i = 0; i < bsdf_infos.size(); i++) {
+        const auto& bsdf_info = bsdf_infos[i];
+        bsdf_info.copy_to_gpu(bsdfs[i]);
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }

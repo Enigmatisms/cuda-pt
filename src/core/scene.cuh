@@ -20,6 +20,7 @@
 #include "core/emitter.cuh"
 #include "core/camera_model.cuh"
 #include "core/virtual_funcs.cuh"
+#include "core/dynamic_bsdf.cuh"
 #include "core/bvh.cuh"
 
 enum RendererType {
@@ -55,6 +56,7 @@ public:
     // used in Scene property online update, now we can
     // modify the emitter emission on-the-fly
     std::vector<std::pair<std::string, Vec4>> emitter_props;
+    std::vector<BSDFInfo> bsdf_infos;
 
     RenderingConfig config;
 
@@ -77,6 +79,7 @@ public:
     }
 
     void update_emitters();
+    void update_materials();
 
     void print() const noexcept;
 };

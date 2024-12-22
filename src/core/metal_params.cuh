@@ -3,7 +3,7 @@
  * @brief Metal Parameters
  * 
  */
-
+#include <array>
 #include "core/vec3.cuh"
 
 enum MetalType: uint8_t {
@@ -23,6 +23,10 @@ enum MetalType: uint8_t {
     Hg   = 13,
     Ir   = 14,
     NumMetalType
+};
+
+inline constexpr std::array<const char*, NumMetalType> METAL_NAMES = {
+    "Au", "Cr", "Cu", "Ag", "Al", "W", "TiO2", "Ni", "MgO", "Na", "SiC", "V", "CuO", "Hg", "Ir"
 };
 
 inline constexpr Vec3 METAL_ETA_TS[NumMetalType] = {

@@ -21,8 +21,22 @@ CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex
     }
 }
 
+// This kernel function is to set the general BSDF Params, when vptr and vtable are built
+template <typename BSDFType>
+CPT_KERNEL void load_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        (*dst)->set_kd(std::move(k_d));
+        (*dst)->set_ks(std::move(k_s));
+        (*dst)->set_kg(std::move(k_g));
+    }
+}
+
 CPT_KERNEL void create_metal_bsdf(
     BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y, int ks_tex_id = 0, int ex_tex_id = 0
+);
+
+CPT_KERNEL void load_metal_bsdf(
+    BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y
 );
 
 template <typename PlasticType>
@@ -36,6 +50,25 @@ CPT_KERNEL void create_plastic_bsdf(
         (*dst)->set_kd(std::move(k_d));
         (*dst)->set_ks(std::move(k_s));
         (*dst)->set_kg(std::move(sigma_a));
+    }
+}
+
+template <typename PlasticType>
+CPT_KERNEL void load_plastic_bsdf(
+    BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 
+    float ior, float trans_scaler = 1.f, 
+    float thickness = 0
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        // I will make sure (I can) the base ptr is actually of PlasticType*
+        // So dynamic_cast is not needed (actually, not allowed on device code)
+        PlasticType* ptr = static_cast<PlasticType*>(*dst);
+        ptr->eta = ior;
+        ptr->trans_scaler = trans_scaler;
+        ptr->thickness = thickness;
+        ptr->set_kd(std::move(k_d));
+        ptr->set_ks(std::move(k_s));
+        ptr->set_kg(std::move(sigma_a));
     }
 }
 

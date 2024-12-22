@@ -56,7 +56,7 @@
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
-	<brdf type="metal-ggx" id="floor">
+	<brdf type="conductor-ggx" id="floor">
 		<string name="metal-type" value="Al"/>
 		<float name="roughness_x" value="0.002"/>
 		<float name="roughness_y" value="0.002"/>
@@ -64,15 +64,15 @@
 	</brdf>
 
 	<emitter type="area" id="area1">
-		<rgb name="emission" value="70.0, 70, 70"/>
-		<rgb name="scaler" value="0.45"/>
+		<rgb name="emission" value="1.0, 1, 1"/>
+		<rgb name="scaler" value="31.5"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="area2">
-		<rgb name="emission" value="70.0, 70, 70"/>
-		<rgb name="scaler" value="0.15"/>
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="10.5"/>
 		<!-- <rgb name="scaler" value="0.1"/> -->
 		<string name="bind_type" value="triangle"/>
 	</emitter>

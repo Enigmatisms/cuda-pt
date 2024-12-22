@@ -79,7 +79,6 @@ public:
     }
 };
 
-
 class LambertianBSDF: public BSDF {
 public:
     using BSDF::k_d;
@@ -153,7 +152,7 @@ class TranslucentBSDF: public BSDF {
 public:
     using BSDF::k_s;        // specular reflection
     using BSDF::k_d;        // ior
-    
+
     CPT_CPU_GPU TranslucentBSDF(Vec4 k_s, Vec4 ior, int ex_id):
         BSDF(std::move(ior), std::move(k_s), Vec4(0, 0, 0), -1, ex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT) {}
 
@@ -268,9 +267,9 @@ class GGXConductorBSDF: public BSDF {
  * k_s is the k (Vec3) and the mapped roughness (k_s[3])
  * k_g is the underlying color (albedo)
  */
-using BSDF::k_s;
 public:
-    const FresnelTerms fresnel;
+    using BSDF::k_s;
+    FresnelTerms fresnel;
 public:
     CPT_CPU_GPU GGXConductorBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id = -1);
 
