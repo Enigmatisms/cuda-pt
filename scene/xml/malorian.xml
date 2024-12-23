@@ -1,0 +1,199 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
+<scene version="1.1">
+	<renderer type="pt"/>
+	<bool name="use_bvh" value="true"/>
+
+	<sensor type="perspective">
+		<float name="fov" value="10"/>
+        <integer name="sample_count" value="128"/>
+        <integer name="max_bounce" value="6"/>
+		<integer name="cache_level" value="4"/>
+        <bool name="vflip" value="true"/>
+        <bool name="hflip" value="true"/>
+		
+		<transform name="toWorld">
+			<lookat target="-85.961441, 104.602623, -91.675171" origin="-86.470062, 105.233765, -92.260803" up="0.430974, 0.769906, 0.470645"/>
+		</transform>
+
+		<film type="film">
+			<integer name="width" value="1500"/>
+			<integer name="height" value="1000"/>
+			<bool name="gamma_correction" value="false"/>
+		</film>
+	</sensor>
+
+	<brdf type="lambertian" id="white">
+		<rgb name="k_d" value="#BDBDBD"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="gun">
+		<string name="metal-type" value="Cr"/>
+		<float name="roughness_x" value="0.003"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#FFFFFF"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="laser-gears">
+		<string name="metal-type" value="Cr"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.5"/>
+		<rgb name="k_g" value="#EAEAFA"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="bullet-shells">
+		<string name="metal-type" value="Al"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.001"/>
+		<rgb name="k_g" value="#FFFFFF"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="bullet-heads">
+		<string name="metal-type" value="Au"/>
+		<float name="roughness_x" value="0.1"/>
+		<float name="roughness_y" value="0.02"/>
+		<rgb name="k_g" value="0.8275, 0.20784, 0.20784"/>
+	</brdf>
+
+	<brdf type="plastic" id="floor">
+		<rgb name="k_d" value="#FAFAFA"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="5"/>
+		<float name="ior" value="1.7"/>
+	</brdf>
+
+	<brdf type="plastic" id="handle">
+		<rgb name="k_d" value="0.43137, 0.16471, 0.003"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="5"/>
+		<float name="ior" value="1.15"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="side">
+		<string name="metal-type" value="Hg"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#FF0000"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="nails">
+		<string name="metal-type" value="Ag"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#EEEEEE"/>
+	</brdf>
+
+	<emitter type="area" id="front-emitter">
+		<rgb name="emission" value="1, 1, 0"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="back-emitter">
+		<rgb name="emission" value="0, 1, 1"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="side-emitter">
+		<rgb name="emission" value="1, 0, 1"/>
+		<rgb name="scaler" value="10.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="laser-5mm">
+		<rgb name="emission" value="0.8, 1, 0"/>
+		<rgb name="scaler" value="50.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="laser-3mm">
+		<rgb name="emission" value="1, 0, 0"/>
+		<rgb name="scaler" value="50.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/bullet-heads.obj"/>
+		<ref type="material" id="bullet-heads"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/bullet-shells.obj"/>
+		<ref type="material" id="bullet-shells"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/floor.obj"/>
+		<ref type="material" id="floor"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/handle-inner.obj"/>
+		<ref type="material" id="handle"/>
+	</shape>
+
+	<!-- <shape type="obj">
+		<string name="filename" value="../meshes/malorian/handle.obj"/>
+		<ref type="material" id="handle"/>
+	</shape> -->
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/laser-gears.obj"/>
+		<ref type="material" id="laser-gears"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/malorian.obj"/>
+		<ref type="material" id="gun"/>
+	</shape>
+
+	<!-- <shape type="obj">
+		<string name="filename" value="../meshes/malorian/nails.obj"/>
+		<ref type="material" id="nails"/>
+	</shape> -->
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/side-ornaments.obj"/>
+		<ref type="material" id="side"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/front-emitter.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="front-emitter"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/back-emitter.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="back-emitter"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/side-emitter.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="side-emitter"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/laser-5mm.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="laser-5mm"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/laser-3mm.obj"/>
+		<ref type="material" id="white"/>
+		<ref type="emitter" id="laser-3mm"/>
+	</shape>
+</scene>

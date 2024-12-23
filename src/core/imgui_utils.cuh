@@ -70,6 +70,8 @@ void render_settings_interface(
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
     int& max_depth,
+    float& trans_speed,
+    float& rot_sensitivity,
     bool& show_window, 
     bool& show_fps, 
     bool& capture,

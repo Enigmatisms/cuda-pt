@@ -79,6 +79,7 @@ int main(int argc, char** argv) {
     renderer->graphics_resc_init(gui::init_texture_and_pbo);
     renderer->update_camera(scene.cam);
 
+    float trans_speed = 0.1f, rot_speed = 0.5f;
     bool show_main_settings  = true;
     bool show_frame_rate_bar = true;
     bool frame_capture       = false;
@@ -98,7 +99,7 @@ int main(int argc, char** argv) {
             renderer->get_num_sample() + 1,
             show_frame_rate_bar
         );
-        bool cam_updated = gui::keyboard_camera_update(*scene.cam, 0.1, frame_capture, exit_main_loop),
+        bool cam_updated = gui::keyboard_camera_update(*scene.cam, trans_speed, frame_capture, exit_main_loop),
             scene_updated = false, 
             renderer_update = false,
             material_update = false;
@@ -107,11 +108,11 @@ int main(int argc, char** argv) {
         }
         gui::render_settings_interface(
             *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.max_depth, 
-            show_main_settings, show_frame_rate_bar, frame_capture, 
+            trans_speed, rot_speed, show_main_settings, show_frame_rate_bar, frame_capture, 
             gamma_correct, cam_updated, scene_updated, material_update, renderer_update
         );
         if (!io.WantCaptureMouse) {        // no sub window (setting window or main menu) is focused
-            cam_updated |= gui::mouse_camera_update(*scene.cam, 0.5);
+            cam_updated |= gui::mouse_camera_update(*scene.cam, rot_speed);
         }
         if (scene_updated) {
             scene.update_emitters();

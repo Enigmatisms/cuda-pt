@@ -8,7 +8,7 @@ This will definitely be benchmarked with AdaPT and, well CPU based renders like 
 
 ![sports-cars](./assets/cars.jpg)
 
-![splashing-water](https://github.com/user-attachments/assets/6606b7fc-72a2-4933-b46f-b2741ab6c6d9)
+![Malorian-Arms-3516](./assets/Malorian-Arms-3516.jpg)
 
 
 ##### Compile & Run

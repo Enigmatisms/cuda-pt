@@ -338,6 +338,8 @@ void render_settings_interface(
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
     int& max_depth,
+    float& trans_speed,
+    float& rot_sensitivity,
     bool& show_window, 
     bool& show_fps, 
     bool& capture,
@@ -372,15 +374,12 @@ void render_settings_interface(
                 camera_update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
 
                 float value = focal2fov(cam.inv_focal, cam._hw);
-                ImGui::Text("camera FoV");
-                camera_update |= ImGui::SliderFloat("##slider", &value, 1.0f, 150.0f, "%.2f", ImGuiSliderFlags_None);
-                ImGui::SameLine();
-                ImGui::PushItemWidth(100.0f);
-                camera_update |= ImGui::InputFloat("##input", &value, 1.0f, 150.0f, "%.2f");
-                ImGui::PopItemWidth();
+                camera_update |= draw_coupled_slider_input("Fov", "Camera FoV", value, 1.0f, 150.f);
                 cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
 
                 ImGui::Checkbox("Gamma Correction", &gamma_corr);
+                draw_coupled_slider_input("cam-speed", "Camera Speed", trans_speed, 0.01f, 2.f);
+                draw_coupled_slider_input("rot-speed", "Rotation Speed", rot_sensitivity, 0.1f, 2.f);
             }
 
             if (ImGui::CollapsingHeader("Scene Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
