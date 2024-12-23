@@ -21,6 +21,9 @@ public:
     Vec2(float _x, float _y): 
         _data(make_float2(_x, _y)) {}
 
+    CPT_CPU_GPU
+    Vec2(float2&& v): _data(std::move(v)) {}
+
     CPT_CPU_GPU_INLINE 
     float& operator[](int index) {
         return *((&_data.x) + index);

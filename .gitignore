@@ -3,5 +3,6 @@ build_debug/*
 **/build
 **/*.db
 **/*.out
+**/*.psd
 **/*.blend
 **/*.blend1
