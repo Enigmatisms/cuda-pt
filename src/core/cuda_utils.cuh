@@ -13,7 +13,6 @@
 #define CPT_GPU_INLINE __forceinline__ __device__
 #define CPT_CPU __host__
 #define CPT_CPU_INLINE __forceinline__ __host__
-#define CUDA_PT_PADDING(x, id) int __bytes##id[x];
 #define CUDA_PT_SINGLE_PADDING(id) int __bytes##id;
 
 #define FLOAT4(v) (*(reinterpret_cast<float4*>(&v)))
@@ -77,5 +76,12 @@ CPT_CPU_GPU_INLINE auto select(T1&& v_true, T2&& v_false, bool predicate) {
     return v_true * predicate + v_false * (1 - predicate);
 }
 
-inline int to_int_linear(float x) { return int(std::clamp(x, 0.f, 1.f) * 255); }
-inline int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.2) * 255 + .5); }
+CPT_CPU_INLINE int to_int_linear(float x) { return int(std::clamp(x, 0.f, 1.f) * 255); }
+CPT_CPU_INLINE int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.2) * 255 + .5); }
+
+CPT_CPU_GPU_INLINE float roughness_to_alpha(float roughness) {
+    roughness = fmaxf(roughness, 1e-3f);
+    float x = logf(roughness);
+    return 1.62142f + 0.819955f * x + 0.1734f * x * x + 0.0171201f * x * x * x +
+        0.000640711f * x * x * x * x;
+}

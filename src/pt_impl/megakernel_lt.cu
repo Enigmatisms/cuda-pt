@@ -149,7 +149,7 @@ CPT_KERNEL void render_lt_kernel(
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
             ) {
-                Vec4 direct_splat = throughput * c_material[material_id]->eval(it, shadow_ray.d, ray.d, false, false) * \
+                Vec4 direct_splat = throughput * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id, false, false) * \
                     (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
                 auto& to_write = image(pixel_x, pixel_y);
                 atomicAdd(&to_write.x(), direct_splat.x() * caustic_scale);
@@ -161,7 +161,7 @@ CPT_KERNEL void render_lt_kernel(
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
             BSDFFlag dummy_flag;
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, dummy_flag, false);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, dummy_flag, material_id, false);
             constraint_cnt += c_material[material_id]->require_lobe(BSDFFlag::BSDF_SPECULAR);
 
             if (throughput.numeric_err() || throughput < EPSILON) {

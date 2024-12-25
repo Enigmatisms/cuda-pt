@@ -304,8 +304,8 @@ CPT_KERNEL void nee_shader(
         ) {
             // MIS for BSDF / light sampling, to achieve better rendering
             // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
-            emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
-            payloads.L(px, py) += thp * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
+            emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d, material_id) * emitter->non_delta();
+            payloads.L(px, py) += thp * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id) * \
                 (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
             // numerical guard, in case emit_len_mis is 0
         }
@@ -362,7 +362,7 @@ CPT_KERNEL void bsdf_local_shader(
         ray.o = ray.advance(ray.hit_t);
         BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;                            
         ray.d = c_material[material_id]->sample_dir(
-            ray.d, it, thp, pdf, sg, sampled_lobe
+            ray.d, it, thp, pdf, sg, sampled_lobe, material_id
         );
         ray.set_delta((sampled_lobe | BSDFFlag::BSDF_SPECULAR) > 0);
 

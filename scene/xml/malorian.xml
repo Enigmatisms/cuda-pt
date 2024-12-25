@@ -8,20 +8,20 @@
 	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
-		<float name="fov" value="10"/>
+		<float name="fov" value="50"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="6"/>
+        <integer name="max_bounce" value="16"/>
 		<integer name="cache_level" value="4"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
-			<lookat target="-85.961441, 104.602623, -91.675171" origin="-86.470062, 105.233765, -92.260803" up="0.430974, 0.769906, 0.470645"/>
+			<lookat target="-22.681108, 28.275974, -19.554230" origin="-23.156204, 28.975445, -20.088108" up="0.467789, 0.714657, 0.520037"/>
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="1500"/>
-			<integer name="height" value="1000"/>
+			<integer name="width" value="2560"/>
+			<integer name="height" value="1440"/>
 			<bool name="gamma_correction" value="false"/>
 		</film>
 	</sensor>
@@ -33,31 +33,31 @@
 	</brdf>
 
 	<brdf type="conductor-ggx" id="gun">
-		<string name="metal-type" value="Cr"/>
+		<string name="conductor" value="Cr"/>
 		<float name="roughness_x" value="0.003"/>
 		<float name="roughness_y" value="0.01"/>
 		<rgb name="k_g" value="#FFFFFF"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="laser-gears">
-		<string name="metal-type" value="Cr"/>
+		<string name="conductor" value="Cr"/>
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.5"/>
 		<rgb name="k_g" value="#EAEAFA"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="bullet-shells">
-		<string name="metal-type" value="Al"/>
+		<string name="conductor" value="Al"/>
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="#FFFFFF"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="bullet-heads">
-		<string name="metal-type" value="Au"/>
+		<string name="conductor" value="Au"/>
 		<float name="roughness_x" value="0.1"/>
 		<float name="roughness_y" value="0.02"/>
-		<rgb name="k_g" value="0.8275, 0.20784, 0.20784"/>
+		<rgb name="k_g" value="0.8275, 0.5784, 0.5784"/>
 	</brdf>
 
 	<brdf type="plastic" id="floor">
@@ -70,7 +70,7 @@
 	</brdf>
 
 	<brdf type="plastic" id="handle">
-		<rgb name="k_d" value="0.43137, 0.16471, 0.003"/>
+		<rgb name="k_d" value="0.33137, 0.12471, 0.002"/>
 		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
 		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
 		<float name="trans_scaler" value="0.2"/>
@@ -79,14 +79,14 @@
 	</brdf>
 
 	<brdf type="conductor-ggx" id="side">
-		<string name="metal-type" value="Hg"/>
+		<string name="conductor" value="Hg"/>
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.01"/>
 		<rgb name="k_g" value="#FF0000"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="nails">
-		<string name="metal-type" value="Ag"/>
+		<string name="conductor" value="Ag"/>
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.01"/>
 		<rgb name="k_g" value="#EEEEEE"/>
@@ -142,10 +142,10 @@
 		<ref type="material" id="handle"/>
 	</shape>
 
-	<!-- <shape type="obj">
+	<shape type="obj">
 		<string name="filename" value="../meshes/malorian/handle.obj"/>
 		<ref type="material" id="handle"/>
-	</shape> -->
+	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/malorian/laser-gears.obj"/>
@@ -157,10 +157,10 @@
 		<ref type="material" id="gun"/>
 	</shape>
 
-	<!-- <shape type="obj">
+	<shape type="obj">
 		<string name="filename" value="../meshes/malorian/nails.obj"/>
 		<ref type="material" id="nails"/>
-	</shape> -->
+	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/malorian/side-ornaments.obj"/>

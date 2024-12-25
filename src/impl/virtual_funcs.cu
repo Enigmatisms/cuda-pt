@@ -32,10 +32,9 @@ CPT_KERNEL void create_abstract_source(Emitter* &dst) {
     }
 }
 
-CPT_KERNEL void create_metal_bsdf(BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y, int ks_tex_id, int ex_tex_id) {
+CPT_KERNEL void create_metal_bsdf(BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *dst = new GGXConductorBSDF(eta_t, k, k_g, roughness_x, roughness_y, ks_tex_id);
-        (*dst)->set_ex_id(ex_tex_id);
+        *dst = new GGXConductorBSDF(eta_t, k, k_g, roughness_x, roughness_y);
     }
 }
 
@@ -48,7 +47,7 @@ CPT_KERNEL void load_metal_bsdf(
         GGXConductorBSDF* ptr = static_cast<GGXConductorBSDF*>(*dst);
         ptr->fresnel = FresnelTerms(std::move(eta_t), std::move(k));
         ptr->set_kd(Vec4(0));
-        ptr->set_ks(Vec4(BSDF::roughness_to_alpha(roughness_x), BSDF::roughness_to_alpha(roughness_y), 1));
+        ptr->set_ks(Vec4(roughness_to_alpha(roughness_x), roughness_to_alpha(roughness_y), 1));
         ptr->set_kg(std::move(k_g));
     }
 }

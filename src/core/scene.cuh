@@ -18,6 +18,7 @@
 #include "core/shapes.cuh"
 #include "core/object.cuh"
 #include "core/emitter.cuh"
+#include "core/textures.cuh"
 #include "core/camera_model.cuh"
 #include "core/virtual_funcs.cuh"
 #include "core/dynamic_bsdf.cuh"
@@ -53,6 +54,11 @@ public:
     std::array<Vec3Arr, 3> norms_list;
     std::array<Vec2Arr, 3> uvs_list;
     std::vector<int> emitter_prims;
+
+    // texture related
+    Textures textures;
+    std::vector<Texture<float4>> host_tex_4d;
+    std::vector<Texture<float2>> host_tex_2d;
     // used in Scene property online update, now we can
     // modify the emitter emission on-the-fly
     std::vector<std::pair<std::string, Vec4>> emitter_props;

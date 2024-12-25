@@ -47,23 +47,13 @@
 		<rgb name="k_s" value="0"/>
 	</brdf>
 
-	<brdf type="det-refraction" id="glass">
-		<rgb name="k_d" value="1.5"/>
-		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
-		<rgb name="k_g" value="1.0"/>
-	</brdf>
-
-    <brdf type="specular" id="mirror">
-		<rgb name="k_d" value="0"/>
-		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
-		<rgb name="k_g" value="0"/>
-	</brdf>
-
 	<brdf type="conductor-ggx" id="helmet">
-		<string name="metal-type" value="CuO"/>
+		<string name="conductor" value="Al"/>
 		<float name="roughness_x" value="0.005"/>
 		<float name="roughness_y" value="0.005"/>
 		<rgb name="k_g" value="1"/>
+
+		<ref type="texture" id="vader"/>
 	</brdf>
 
 	<brdf type="plastic" id="blue-plastic">
@@ -101,7 +91,7 @@
 
     <shape type="obj">
 		<string name="filename" value="../meshes/vader/vader.obj"/>
-		<ref type="material" id="mirror"/>
+		<ref type="material" id="helmet"/>
 	</shape>
 
 	<shape type="obj">
@@ -109,4 +99,8 @@
 		<ref type="material" id="floor"/>
 	</shape>
 
+	<texture id="vader">
+		<string name="glossy" value="../textures/camouflage.jpg"/>
+		<string name="normal" value="../textures/direction-polish-highres/Metal009_2K-JPG_NormalGL.jpg"/>
+	</texture>
 </scene>

@@ -6,3 +6,4 @@ build_debug/*
 **/*.psd
 **/*.blend
 **/*.blend1
+scene/textures

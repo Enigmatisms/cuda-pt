@@ -27,7 +27,7 @@
 	</sensor>
 
 	<brdf type="conductor-ggx" id="large-box">
-		<string name="metal-type" value="Au"/>
+		<string name="conductor" value="Au"/>
 		<float name="roughness_x" value="0.001"/>
 		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="1"/>

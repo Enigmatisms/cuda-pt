@@ -145,8 +145,7 @@ public:
 
     // indir points towards the incident point, outdir points away from it
     CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec3, Vec3, Vec3)
-    CPT_GPU static Vec4 eval(VType1&& n_s, VType2&& indir, VType3&& outdir, const FresnelTerms& fres, float alphax, float alphay) {
-        auto R_w2l = rotation_fixed_anchor(std::forward<VType1&&>(n_s), false);
+    CPT_GPU static Vec4 eval(VType1&& n_s, VType2&& indir, VType3&& outdir, SO3&& R_w2l, const FresnelTerms& fres, float alphax, float alphay) {
         Vec3 local_in  = -R_w2l.rotate(std::forward<VType2&&>(indir)),
              local_out = R_w2l.rotate(std::forward<VType3&&>(outdir));
         // Get fresnel term
@@ -163,24 +162,31 @@ public:
     }
 };
 
-CPT_CPU_GPU GGXConductorBSDF::GGXConductorBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y, int ks_id):
+CPT_CPU_GPU GGXConductorBSDF::GGXConductorBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y):
     BSDF(Vec4(0), Vec4(roughness_to_alpha(roughness_x), roughness_to_alpha(roughness_y), 1), 
-        std::move(albedo), -1, ks_id, BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
+        std::move(albedo), BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
         fresnel(std::move(eta_t), std::move(k)) {}
 
-CPT_GPU float GGXConductorBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
-    auto R_w2l = rotation_fixed_anchor(it.shading_norm, false);
+CPT_GPU float GGXConductorBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const {
+    SO3 R_w2l;
+    const Vec3 normal = c_textures.eval_normal_reused(it, index, R_w2l);
     const Vec3 local_in  = -R_w2l.rotate(in),
                local_out = R_w2l.rotate(out),
                local_wh  = (local_out + local_in).normalized();
     // since outdir points outward, indir points inwards, therefore the prod should be negative
-    float pdf_v = GGX::pdf(local_wh, local_in, k_s.x(), k_s.y());
+    const Vec2 alpha = c_textures.eval_rough(it.uv_coord, index, Vec2( k_s.x(), k_s.y() ));
+    float pdf_v = GGX::pdf(local_wh, local_in, alpha.x(), alpha.y());
     bool not_same_hemisphere = (local_in.z() > 0) ^ (local_out.z() > 0);
     return not_same_hemisphere ? 0 : pdf_v * __frcp_rn(4.f * local_wh.dot(local_in));
 }
 
-CPT_GPU Vec4 GGXConductorBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
-    return k_g * GGX::eval(it.shading_norm, in, out, fresnel, k_s.x(), k_s.y()) * fmaxf(0, out.dot(it.shading_norm));
+CPT_GPU Vec4 GGXConductorBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi, bool is_radiance) const {
+    SO3 R_w2l;
+    const Vec3 normal = c_textures.eval_normal_reused(it, index, R_w2l);
+    const cudaTextureObject_t glos_tex = c_textures.glos_tex[index];
+    const Vec2 alpha = c_textures.eval_rough(it.uv_coord, index, Vec2( k_s.x(), k_s.y() ));
+    return c_textures.eval(glos_tex, it.uv_coord, k_g) * 
+        GGX::eval(normal, in, out, std::move(R_w2l), fresnel, alpha.x(), alpha.y()) * fmaxf(0, out.dot(normal));
 }
 
 CPT_GPU Vec3 GGXConductorBSDF::sample_dir(    
@@ -189,16 +195,19 @@ CPT_GPU Vec3 GGXConductorBSDF::sample_dir(
     Vec4& throughput, 
     float& pdf, Sampler& sp, 
     BSDFFlag& samp_lobe, 
+    int index,
     bool is_radiance
 ) const {
-    auto R_w2l     = rotation_fixed_anchor(it.shading_norm, false);         // transpose will be l2w
+    SO3 R_w2l;
+    const Vec3 normal = c_textures.eval_normal_reused(it, index, R_w2l);
+    const Vec2 alpha = c_textures.eval_rough(it.uv_coord, index, Vec2( k_s.x(), k_s.y() ));
     const Vec3 local_in = -R_w2l.rotate(indir),                             // from world to local
-          local_whf     = GGX::sample_wh(local_in, k_s.x(), k_s.y(), sp.next2D());
+          local_whf     = GGX::sample_wh(local_in, alpha.x(), alpha.y(), sp.next2D());
 
-    auto D_e = GGX::D(local_whf, k_s.x(), k_s.y());
+    auto D_e = GGX::D(local_whf, alpha.x(), alpha.y());
     float dot_indir_m = local_in.dot(local_whf);
     // calculate PDF
-    pdf = D_e * GGX::G1(local_in, k_s.x(), k_s.y()) * fabsf(dot_indir_m / local_in.z());
+    pdf = D_e * GGX::G1(local_in, alpha.x(), alpha.y()) * fabsf(dot_indir_m / local_in.z());
     pdf = (pdf > 0 && dot_indir_m > 0) ? (pdf * __frcp_rn(4.f * dot_indir_m)) : 0;
     // calculate reflected ray direction
     Vec3 local_ref = reflection(local_in, local_whf, dot_indir_m),      // local space reflection vector
@@ -207,8 +216,11 @@ CPT_GPU Vec3 GGXConductorBSDF::sample_dir(
     Vec4 fres_v = fresnel.fresnel_conductor(fabsf(local_ref.dot(local_whf)));
     // calculate throughput
     if (cos_i > 0 && cos_o > 0 && pdf > 0) {
-        throughput *= (1.f / pdf) * k_g * D_e * GGX::G(local_in, local_ref, k_s.x(), k_s.y()) * 
-        __frcp_rn(4.f * cos_i * cos_o) * fres_v * fmaxf(it.shading_norm.dot(refdir), 0);
+        const cudaTextureObject_t glos_tex = c_textures.glos_tex[index];
+        throughput *= 
+            (1.f / pdf) * c_textures.eval(glos_tex, it.uv_coord, k_g) * 
+            D_e * GGX::G(local_in, local_ref, alpha.x(), alpha.y()) * 
+            __frcp_rn(4.f * cos_i * cos_o) * fres_v * fmaxf(normal.dot(refdir), 0);
     }
     samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
     return refdir;                              
@@ -219,8 +231,8 @@ CPT_GPU Vec3 GGXConductorBSDF::sample_dir(
 
 CPT_CPU_GPU PlasticBSDF::PlasticBSDF(
     Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
-    float trans_scaler, float thickness, int kd_id, int ks_id
-): BSDF(_k_d, std::move(_k_s), std::move(sigma_a), kd_id, ks_id, 
+    float trans_scaler, float thickness
+): BSDF(_k_d, std::move(_k_s), std::move(sigma_a),
     BSDFFlag::BSDF_SPECULAR | 
     BSDFFlag::BSDF_DIFFUSE  | 
     BSDFFlag::BSDF_REFLECT
@@ -228,26 +240,33 @@ CPT_CPU_GPU PlasticBSDF::PlasticBSDF(
     precomp_diff_f = FresnelTerms::diffuse_fresnel(ior);
 }
 
-CPT_GPU float PlasticBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
-    float dot_wo = out.dot(it.shading_norm), dot_wi = in.dot(it.shading_norm),
+CPT_GPU float PlasticBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const {
+    const Vec3 normal = c_textures.eval_normal(it, index);
+    float dot_wo = out.dot(normal), dot_wi = in.dot(normal),
           Fi = FresnelTerms::fresnel_simple(eta, -dot_wi),
           specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
-    Vec3 refdir = -reflection(in, it.shading_norm);
+    Vec3 refdir = -reflection(in, normal);
     // 'refdir.dot(out) >= 1.f - THP_EPS' means reflected incident ray is very close to 'out'
     float pdf = refdir.dot(out) < 1.f - THP_EPS ? M_1_Pi * dot_wo * (1.f - specular_prob) : specular_prob;
     return dot_wo > 0 && dot_wi < 0 ? pdf : 0;
 }
 
-CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
-    float dot_wo = out.dot(it.shading_norm), dot_wi = in.dot(it.shading_norm),
+CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi, bool is_radiance) const {
+    const Vec3 normal = c_textures.eval_normal(it, index);
+    float dot_wo = out.dot(normal), dot_wi = in.dot(normal),
           Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_wi)),
           Fo = FresnelTerms::fresnel_simple(eta, dot_wo);
-    Vec3 refdir = -reflection(in, it.shading_norm);
+    Vec3 refdir = -reflection(in, normal);
 
+    const cudaTextureObject_t diff_tex = c_textures.diff_tex[index],
+                              spec_tex = c_textures.spec_tex[index],
+                              siga_tex = c_textures.glos_tex[index];    // sigma_a is stored in glossy texture
+    Vec4 k_diff = c_textures.eval(diff_tex, it.uv_coord, k_d);
     Vec4 brdf = (M_1_Pi * (1.0f - Fi) * (1.0f - Fo) * eta * eta) * dot_wo *
-            (k_d / (- k_d * precomp_diff_f + 1.f)) * 
-            (k_g * thickness * (-1.0f / dot_wo + 1.0f / dot_wi)).exp_xyz();
-    brdf += refdir.dot(out) < 1.f - THP_EPS ? Vec4(0) : Vec4(Fi, 1);
+            (k_diff / (- k_diff * precomp_diff_f + 1.f)) * 
+            (c_textures.eval(siga_tex, it.uv_coord, k_g) * 
+            thickness * (-1.0f / dot_wo + 1.0f / dot_wi)).exp_xyz();
+    brdf += refdir.dot(out) < 1.f - THP_EPS ? Vec4(0) : Vec4(Fi, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
 
     return dot_wo > 0 && dot_wi < 0 ? brdf : Vec4(0, 1);
 }
@@ -258,9 +277,11 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
     Vec4& throughput, 
     float& pdf, Sampler& sp, 
     BSDFFlag& samp_lobe, 
+    int index,
     bool is_radiance
 ) const {
-    float dot_indir = it.shading_norm.dot(indir);
+    const Vec3 normal = c_textures.eval_normal(it, index);
+    float dot_indir = normal.dot(indir);
     throughput = dot_indir < 0 ? throughput : Vec4(0, 1);
 
     float Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_indir)),
@@ -269,22 +290,28 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
     Vec3 outdir;
 
     if (sp.next1D() < specular_prob) {      // coating specular reflection
-        outdir = -reflection(indir, it.shading_norm, dot_indir);
+        outdir = -reflection(indir, normal, dot_indir);
         pdf = specular_prob;
-        throughput *= Vec4(Fi / specular_prob, 1) * k_s;
+        const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
+        throughput *= Vec4(Fi / specular_prob, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
         samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_SPECULAR);
     } else {                                // substrate diffuse reflection
         float dummy_v = 1;
         Vec3 local_dir = sample_cosine_hemisphere(sp.next2D(), dummy_v);
         float Fo = FresnelTerms::fresnel_simple(eta, local_dir.z());
+
+        const cudaTextureObject_t diff_tex = c_textures.diff_tex[index],
+                                  siga_tex = c_textures.glos_tex[index];        // sigma_a is stored in glossy texture
+        Vec4 k_diff = c_textures.eval(diff_tex, it.uv_coord, k_d);
        
         // use fmaxf instead of (1-Fi) * (1-Fo), to make the result looks brighter
-        Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fo) * eta * eta) * (k_d / (-k_d * precomp_diff_f + 1.f)) * 
-            (k_g * thickness * (-1.0f / local_dir.z() + 1.0f / dot_indir)).exp_xyz();
+        Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fo) * eta * eta) * (k_diff / (-k_diff * precomp_diff_f + 1.f)) * 
+            (c_textures.eval(siga_tex, it.uv_coord, k_g) * 
+            thickness * (-1.0f / local_dir.z() + 1.0f / dot_indir)).exp_xyz();
 
         pdf = M_1_Pi * local_dir.z() * (1.0f - specular_prob);
         throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;
-        outdir = delocalize_rotate(it.shading_norm, local_dir);
+        outdir = delocalize_rotate(normal, local_dir);
         samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_DIFFUSE);
     }
     return outdir;
@@ -294,18 +321,19 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
 
 CPT_CPU_GPU PlasticForwardBSDF::PlasticForwardBSDF(
     Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
-    float trans_scaler, float thickness, int kd_id, int ks_id
-): BSDF(_k_d, std::move(_k_s), std::move(sigma_a), kd_id, ks_id, 
+    float trans_scaler, float thickness
+): BSDF(_k_d, std::move(_k_s), std::move(sigma_a),
     BSDFFlag::BSDF_SPECULAR | 
     BSDFFlag::BSDF_TRANSMIT | 
     BSDFFlag::BSDF_REFLECT
 ), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {}
 
-CPT_GPU float PlasticForwardBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in) const {
-    float dot_wi = in.dot(it.shading_norm),
+CPT_GPU float PlasticForwardBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const {
+    const Vec3 normal = c_textures.eval_normal(it, index);
+    float dot_wi = in.dot(normal),
           Fi = FresnelTerms::fresnel_simple(eta, -dot_wi),
           specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
-    Vec3 refdir = -reflection(in, it.shading_norm);
+    Vec3 refdir = -reflection(in, normal);
     // 'refdir.dot(out) >= 1.f - THP_EPS' means reflected incident ray is very close to 'out'
     float pdf = 0; 
     pdf = refdir.dot(out) < 1.f - THP_EPS ? pdf : specular_prob;
@@ -313,13 +341,19 @@ CPT_GPU float PlasticForwardBSDF::pdf(const Interaction& it, const Vec3& out, co
     return pdf;
 }
 
-CPT_GPU Vec4 PlasticForwardBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, bool is_mi, bool is_radiance) const {
-    float dot_wi = in.dot(it.shading_norm),
+CPT_GPU Vec4 PlasticForwardBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi, bool is_radiance) const {
+    const Vec3 normal = c_textures.eval_normal(it, index);
+    float dot_wi = in.dot(normal),
           Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_wi));
-    Vec3 refdir = -reflection(in, it.shading_norm);
-    Vec4 brdf = in.dot(out) < 1.f - THP_EPS ? Vec4(0, 1) : (1.0f - Fi) * (1.0f - Fi) * k_d *
-            eta * eta * (k_g * thickness * (-2.f / fabsf(dot_wi))).exp_xyz();     // transmit?
-    brdf += refdir.dot(out) < 1.f - THP_EPS ? brdf : Vec4(Fi, 1);
+    Vec3 refdir = -reflection(in, normal);
+
+    const cudaTextureObject_t diff_tex = c_textures.diff_tex[index],
+                              spec_tex = c_textures.spec_tex[index],
+                              siga_tex = c_textures.glos_tex[index];    // sigma_a is stored in glossy texture
+    Vec4 brdf = in.dot(out) < 1.f - THP_EPS ? Vec4(0, 1) : (1.0f - Fi) * (1.0f - Fi) * 
+             c_textures.eval(diff_tex, it.uv_coord, k_d) * eta * eta * 
+            (c_textures.eval(siga_tex, it.uv_coord, k_g) * thickness * (-2.f / fabsf(dot_wi))).exp_xyz();     // transmit?
+    brdf += refdir.dot(out) < 1.f - THP_EPS ? brdf : Vec4(Fi, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
     return brdf;
 }
 
@@ -329,22 +363,28 @@ CPT_GPU Vec3 PlasticForwardBSDF::sample_dir(
     Vec4& throughput, 
     float& pdf, Sampler& sp, 
     BSDFFlag& samp_lobe, 
+    int index,
     bool is_radiance
 ) const {
-    float dot_indir = it.shading_norm.dot(indir),
+    const Vec3 normal = c_textures.eval_normal(it, index);
+    float dot_indir = normal.dot(indir),
           Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_indir)),
           specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
 
     Vec3 outdir;
 
     if (sp.next1D() < specular_prob) {      // coating specular reflection
-        outdir = -reflection(indir, it.shading_norm, dot_indir);
+        outdir = -reflection(indir, normal, dot_indir);
         pdf = specular_prob;
-        throughput *= Vec4(Fi / specular_prob, 1) * k_s;
+        const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
+        throughput *= Vec4(Fi / specular_prob, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
         samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_SPECULAR);
     } else {                                // substrate diffuse reflection
-        Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fi) * eta * eta) * k_d *
-            (k_g * thickness * (-2.0f / fabsf(dot_indir))).exp_xyz();
+        const cudaTextureObject_t diff_tex = c_textures.diff_tex[index],
+                                  siga_tex = c_textures.glos_tex[index];        // sigma_a is stored in glossy texture
+        Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fi) * eta * eta) * 
+             c_textures.eval(diff_tex, it.uv_coord, k_d) *
+            (c_textures.eval(siga_tex, it.uv_coord, k_g) * thickness * (-2.0f / fabsf(dot_indir))).exp_xyz();
 
         pdf = 1.0f - specular_prob;
         throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;

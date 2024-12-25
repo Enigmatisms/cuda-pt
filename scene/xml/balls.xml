@@ -87,14 +87,14 @@
 	</brdf>
 
 	<brdf type="conductor-ggx" id="gold">
-		<string name="metal-type" value="Au"/>
+		<string name="conductor" value="Au"/>
 		<float name="roughness_x" value="0.005"/>
 		<float name="roughness_y" value="0.005"/>
 		<rgb name="k_g" value="1"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="ir">
-		<string name="metal-type" value="Ir"/>
+		<string name="conductor" value="Ir"/>
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="1"/>

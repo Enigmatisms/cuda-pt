@@ -3,6 +3,7 @@
  * @date: 9.15.2024
  * @author: Qianyue He
 */
+#include "core/textures.cuh"
 #include "renderer/base_pt.cuh"
 #include "renderer/megakernel_pt.cuh"
 
@@ -324,8 +325,8 @@ CPT_KERNEL void render_pt_kernel(
             ) {
                 // MIS for BSDF / light sampling, to achieve better rendering
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
-                emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
-                radiance += throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
+                emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d, material_id) * emitter->non_delta();
+                radiance += throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id) * \
                     (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
                 // numerical guard, in case emit_len_mis is 0
             }
@@ -333,7 +334,7 @@ CPT_KERNEL void render_pt_kernel(
             // step 4: sample a new ray direction, bounce the 
             BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe, material_id);
             ray.set_delta((BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0);
 
             if (radiance.numeric_err())
