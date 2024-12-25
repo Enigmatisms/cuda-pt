@@ -79,6 +79,7 @@ static bool load_composed_float2(
     // force 4 channels
     unsigned char* data1 = stbi_load(file1.c_str(), &width, &height, &n_channels, 1);
     unsigned char* data2 = file2.length() > 1 ? stbi_load(file2.c_str(), &w2, &h2, &n_channels, 1) : nullptr;
+
     if (!data1) {
         std::cerr << "Failed to load primary image: " << file1 << std::endl;
         return false;
@@ -94,18 +95,20 @@ static bool load_composed_float2(
     int num_pixels = width * height;
     out_data.resize(num_pixels);
 
+    float sum = 0.0;
     #pragma omp parallel for num_threads(2)
     for (int i = 0; i < num_pixels; ++i) {
-        float v1 = static_cast<float>(data1[2 * i + 0]) / 255.0f,
-              v2 = data2 ? static_cast<float>(data2[2 * i + 1]) / 255.0f : 0.01f;
+        float v1 = static_cast<float>(data1[i + 0]) / 255.0f,
+              v2 = data2 ? static_cast<float>(data2[i + 1]) / 255.0f : v1;
         v1 = v1 * scale + offset;
         v2 = v2 * scale + offset;
         out_data[i].x = to_alpha ? roughness_to_alpha(v1) : v1;
         out_data[i].y = to_alpha ? roughness_to_alpha(v2) : v2;
     }
 
+
     stbi_image_free(data1);
-    stbi_image_free(data2);
+    if (data2) stbi_image_free(data2);
     return true;
 }
 
@@ -162,9 +165,9 @@ Texture<TexTy>::Texture(
         result = load_image_to_float4(path, host_data, width, height, is_normal_map ? -1.f: 0.f, is_normal_map ? 2.f : 1.f);
     } else {
         if (is_roughness_ior) {
-            result = load_composed_float2(path, path2, host_data, width, height, 0, 1, true);
+            result = load_composed_float2(path, path2, host_data, width, height, 1, 1.5, true);
         } else {
-            result = load_composed_float2(path, path2, host_data, width, height, 1, 1.5, false);        // max ior: 2.5, range [1, 2.5]
+            result = load_composed_float2(path, path2, host_data, width, height, 0, 1, false);        // max ior: 2.5, range [1, 2.5]
         }
     }
     if (result == false) {
