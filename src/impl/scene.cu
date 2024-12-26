@@ -272,9 +272,13 @@ void parseEmitterNames(
 void parseEmitter(
     const tinyxml2::XMLElement* emitter_elem, 
     std::unordered_map<std::string, int>& emitter_obj_map,      // key emitter name, value object_id,
+    const std::unordered_map<std::string, TextureInfo>& tex_map,
     std::vector<std::pair<std::string, Vec4>>& e_props,
     std::vector<std::string> obj_ref_names,
-    Emitter** emitters, int index
+    std::vector<Texture<float4>>& host_texs,
+    Emitter** emitters, 
+    int& envmap_id,
+    int index
 ) {
     std::string type = emitter_elem->Attribute("type");
     std::string id = emitter_elem->Attribute("id");
@@ -326,6 +330,49 @@ void parseEmitter(
         }
         bool spherical_bound = element->Attribute("value") == std::string("sphere");
         create_area_source<<<1, 1>>>(emitters[index], emission * scaler, emitter_obj_map[id], spherical_bound);
+    } else if (type == "envmap") {
+        envmap_id = index;
+        element = emitter_elem->FirstChildElement("float");
+        float scaler = 1.f, azimuth = 0.f, zenith = 0.f;
+        while (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            tinyxml2::XMLError eResult;
+            if (name == "scaler") {
+                eResult = element->QueryFloatAttribute("value", &scaler);
+            } else if (name == "azimuth") {
+                eResult = element->QueryFloatAttribute("value", &azimuth);
+            } else if (name == "zenith") {
+                eResult = element->QueryFloatAttribute("value", &zenith);
+            }
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
+            element = element->NextSiblingElement("float");
+        }
+        e_props.back().second = Vec4(-1, scaler, azimuth, zenith);
+        element = emitter_elem->FirstChildElement("ref");
+        if (element) {
+            std::string name = element->Attribute("type");
+            if (!name.empty() && name == "texture") {
+                std::string value = element->Attribute("id");
+                auto it = tex_map.find(value);
+                if (it == tex_map.end()) {
+                    std::cerr << "Texture named '" << value  << "' not found.\n";
+                    throw std::runtime_error("Referenced Texture not found.");
+                } else {
+                    if (!it->second.diff_path.empty()) {
+                        Texture<float4> tex(it->second.diff_path, TextureType::DIFFUSE_TEX);
+                        create_envmap_source<<<1, 1>>>(emitters[index], 
+                                tex.object(), scaler, azimuth * DEG2RAD, zenith * DEG2RAD);
+                        printf("HDRI texture info: %llu\n", tex.object());
+                        host_texs.emplace_back(std::move(tex));
+                    } else {
+                        std::cerr << "The texture for HDRI should be set for it's 'emission' element, but none is found.\n";
+                        throw std::runtime_error("Referenced Texture not found.");
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -511,7 +558,7 @@ void parseTexture(
         const tinyxml2::XMLElement* element = tex_elem->FirstChildElement("string");
         while (element) {
             std::string name = element->Attribute("name");
-            if (name == "diffuse") {
+            if (name == "diffuse" || name == "emission") {
                 info.diff_path = folder_prefix + element->Attribute("value");
             } else if (name == "specular") {
                 info.spec_path = folder_prefix + element->Attribute("value");
@@ -538,7 +585,7 @@ void parseTexture(
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "Voxel-SDF-PT"};
 
-Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), use_bvh(false) {
+Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0), use_bvh(false) {
     tinyxml2::XMLDocument doc;
     if (doc.LoadFile(path.c_str()) != tinyxml2::XML_SUCCESS) {
         std::cerr << "Failed to load file" << std::endl;
@@ -635,16 +682,19 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
 
 
     //  ------------------------- (4) parse all emitters --------------------------
+    printf("Parsing emitters...\n");
+
     ptr = emitter_elem;
     for (; ptr != nullptr; ++ num_emitters)
         ptr = ptr->NextSiblingElement("emitter");
     CUDA_CHECK_RETURN(cudaMalloc(&emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(emitters[0]);
     for (int i = 1; i <= num_emitters; i++) {
-        parseEmitter(emitter_elem, emitter_obj_map, emitter_props, emitter_names, emitters, i);
+        parseEmitter(emitter_elem, emitter_obj_map, tex_map, emitter_props, emitter_names, host_tex_4d, emitters, envmap_id, i);
         emitter_elem = emitter_elem->NextSiblingElement("emitter");
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    printf("Emitter parsed.\n");
 
     // ------------------------- (5) parse camera & scene config -------------------------
     CUDA_CHECK_RETURN(cudaMallocHost(&cam, sizeof(DeviceCamera)));
@@ -805,7 +855,11 @@ CPT_KERNEL static void vec2_to_packed_half_kernel(const Vec2* src1, const Vec2* 
 void Scene::update_emitters() {
     for (int index = 1; index <= num_emitters; index++) {
         Vec4 color = emitter_props[index - 1].second;
-        set_emission<<<1, 1>>>(emitters[index], color.xyz(), color.w());
+        if (color.x() < 0) {
+            call_setter<<<1, 1>>>(emitters[index], color.y(), color.z() * DEG2RAD, color.w() * DEG2RAD);
+        } else {
+            set_emission<<<1, 1>>>(emitters[index], color.xyz(), color.w());
+        }
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }

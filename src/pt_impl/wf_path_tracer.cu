@@ -51,7 +51,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
             // step3: miss shader (ray inactive and Russian Roulette)
 #ifndef FUSED_MISS_SHADER
             miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, ray_idx_buffer, bounce, stream_offset, num_valid_ray
+                payload_buffer, ray_idx_buffer, bounce, stream_offset, num_valid_ray, envmap_id
             );
 #endif  // FUSED_MISS_SHADER
             
@@ -149,7 +149,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
                 // step3: miss shader (ray inactive)
 #ifndef FUSED_MISS_SHADER
                 miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer, ray_idx_buffer, bounce, stream_offset, num_valid_ray
+                    payload_buffer, ray_idx_buffer, bounce, stream_offset, num_valid_ray, envmap_id
                 );
 #endif  // FUSED_MISS_SHADER
                 

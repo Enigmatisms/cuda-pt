@@ -289,7 +289,7 @@ CPT_KERNEL void nee_shader(
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
         // use ray.o to avoid creating another shadow_int variable
         Vec4 direct_comp(0, 0, 0, 1);
-        shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sg.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+        shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sg.next2D(), verts, norms, emitter_id) - shadow_ray.o;
 
         float emit_len_mis = shadow_ray.d.length();
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
@@ -390,7 +390,8 @@ CPT_KERNEL void miss_shader(
     const IndexBuffer idx_buffer,
     const int bounce,
     int stream_offset,
-    int num_valid
+    int num_valid,
+    int envmap_id
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
@@ -410,6 +411,7 @@ CPT_KERNEL void miss_shader(
         }
         if ((!payloads.is_hit(px, py)) || max_value <= 1e-5f) {
             // TODO: process no-hit ray, environment map lighting
+            
             payloads.set_active(px, py, false);
         }
         payloads.thp(px, py) = thp;

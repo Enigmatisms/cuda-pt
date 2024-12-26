@@ -221,6 +221,7 @@ CPT_KERNEL void render_pt_kernel(
     int node_num,
     int accum_cnt,
     int cache_num,
+    int envmap_id,
     bool gamma_corr
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -309,7 +310,7 @@ CPT_KERNEL void render_pt_kernel(
             emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
             Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
-            shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+            shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
             
             float emit_len_mis = shadow_ray.d.length();
             shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
@@ -348,6 +349,13 @@ CPT_KERNEL void render_pt_kernel(
                 throughput *= 1. / max_value;
             }
 #endif // RENDERER_USE_BVH
+        } else {
+            radiance += throughput * c_emitter[envmap_id]->eval_le(&ray.d);
+#ifdef RENDERER_USE_BVH
+            break;
+#else 
+            throughput *= 0;
+#endif // RENDERER_USE_BVH
         }
     }
     if constexpr (render_once) {
@@ -383,6 +391,7 @@ template CPT_KERNEL void render_pt_kernel<true>(
     int node_num,
     int accum_cnt,
     int cache_num,
+    int envmap_index,
     bool gamma_corr
 );
 
@@ -407,5 +416,6 @@ template CPT_KERNEL void render_pt_kernel<false>(
     int node_num,
     int accum_cnt,
     int cache_num,
+    int envmap_index,
     bool gamma_corr
 );

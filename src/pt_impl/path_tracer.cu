@@ -15,7 +15,7 @@ static constexpr int SHFL_THREAD_Y = 3;     // blockDim.y: 1 << SHFL_THREAD_Y, b
 PathTracer::PathTracer(
     const Scene& scene
 ): TracerBase(scene), 
-    num_objs(scene.objects.size()), num_nodes(-1), num_emitter(scene.num_emitters)
+    num_objs(scene.objects.size()), num_nodes(-1), num_emitter(scene.num_emitters), envmap_id(scene.envmap_id)
 {
 #ifdef RENDERER_USE_BVH
     if (scene.bvh_available()) {
@@ -36,12 +36,18 @@ PathTracer::PathTracer(
         throw std::runtime_error("BVH not available in scene. Abort.");
     }
 #endif  // RENDERER_USE_BVH
-    size_t emitter_prim_size = sizeof(int) * scene.emitter_prims.size();
+    /**
+     * Explanation: For envmap and point source, there is no attached object, therefore, for scene that contains solely these emitters
+     * We can have a zero emitter_prim_size, which is troublesome. We therefore needs to 'pad' it, to at least the size of
+     * the first object, then the sample_emitter_primitive can return values that will not cause any memory leak
+     */
+    size_t emitter_prim_size = sizeof(int) * std::max(scene.emitter_prims.size(), (size_t)scene.objects.front().prim_num),
+           actual_prim_size  = sizeof(int) * scene.emitter_prims.size();
     CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
     CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
     CUDA_CHECK_RETURN(cudaMalloc(&emitter_prims, emitter_prim_size));
     CUDA_CHECK_RETURN(cudaMemcpy(camera, &scene.cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(emitter_prims, scene.emitter_prims.data(), emitter_prim_size, cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(emitter_prims, scene.emitter_prims.data(), actual_prim_size, cudaMemcpyHostToDevice));
     for (int i = 0; i < num_objs; i++)
         obj_info[i] = scene.objects[i];
 #ifdef TRIANGLE_ONLY
@@ -77,7 +83,7 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
             *camera, verts, norms, uvs, obj_info, aabbs, 
             emitter_prims, bvh_leaves, nodes, _cached_nodes,
             image, output_buffer, num_prims, num_objs, num_emitter, 
-            i * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache
+            i * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache, envmap_id
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
@@ -101,7 +107,7 @@ CPT_CPU void PathTracer::render_online(
         *camera, verts, norms, uvs, obj_info, aabbs, 
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache, gamma_corr
+        accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }

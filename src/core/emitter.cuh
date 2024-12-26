@@ -10,6 +10,7 @@
 #include "core/vec3.cuh"
 #include "core/vec4.cuh"
 #include "core/sampling.cuh"
+#include "core/quaternion.cuh"
 
 CPT_CPU_GPU_INLINE float distance_attenuate(Vec3&& diff) {
     return min(1.f / max(diff.length2(), 1e-5f), 1.f);
@@ -42,7 +43,7 @@ public:
         return Vec4(0, 0, 0, 1);
     }
 
-    CPT_GPU_INLINE virtual Vec3 sample(const Vec3& hit_pos, Vec4& le, float& pdf, Vec2&&, const PrecomputedArray&, const ArrayType<Vec3>&, int) const {
+    CPT_GPU_INLINE virtual Vec3 sample(const Vec3& hit_pos, const Vec3&, Vec4& le, float& pdf, Vec2&&, const PrecomputedArray&, const ArrayType<Vec3>&, int) const {
         pdf = 1;
         le.fill(0);
         return Vec3(0, 0, 0);
@@ -68,6 +69,11 @@ public:
     CPT_CPU_GPU int get_obj_ref() const noexcept {
         return obj_ref_id * (obj_ref_id >= 0);
     }
+
+    // reserved handle, can be used to set many things, like (pos in PointSource)
+    CPT_GPU_INLINE virtual void set_func1(float val) noexcept {}
+    CPT_GPU_INLINE virtual void set_func2(float val) noexcept {}
+    CPT_GPU_INLINE virtual void set_func3(float val) noexcept {}
 };
 
 class PointSource: public Emitter {
@@ -80,7 +86,11 @@ public:
     CPT_CPU_GPU PointSource(VType1&& le, VType2&& pos): 
         Emitter(std::forward<VType1>(le)), pos(std::forward<VType2>(pos)) {}
 
-    CPT_GPU_INLINE Vec3 sample(const Vec3& hit_pos, Vec4& le, float&, Vec2&&, const PrecomputedArray&, const ArrayType<Vec3>&, int) const override {
+    CPT_GPU_INLINE Vec3 sample(
+        const Vec3& hit_pos, 
+        const Vec3&, 
+        Vec4& le, float&, Vec2&&, const PrecomputedArray&, const ArrayType<Vec3>&, int
+    ) const override {
         le = this->Le * distance_attenuate(pos - hit_pos);
         return this->pos;
     }
@@ -109,7 +119,7 @@ public:
         Emitter(std::forward<VType>(le), obj_ref, is_sphere) {}
 
     CPT_GPU_INLINE Vec3 sample(
-        const Vec3& hit_pos, Vec4& le, float& pdf, 
+        const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, 
         Vec2&& uv, const PrecomputedArray& prims, const ArrayType<Vec3>& norms, int sampled_index
     ) const override {
         float sample_sum = uv.x() + uv.y();
@@ -164,5 +174,53 @@ public:
 
     CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
         return select(this->Le, Vec4(0, 0, 0, 1), inci_dir->dot(*normal) < 0);
+    }
+};
+
+class EnvMapEmitter: public Emitter {
+private:
+    float azimuth;
+    float zenith;
+    float scale;
+    cudaTextureObject_t env;
+    Quaternion rot;
+public:
+    CPT_CPU_GPU EnvMapEmitter() {}
+
+    // Allow to rotate the HDRI env map online
+    CPT_GPU EnvMapEmitter(cudaTextureObject_t _env, float _scale = 1, float _azimuth = 0, float _zenith = 0): 
+        Emitter(Vec4(0, 1), -1, false), env(_env), scale(_scale), azimuth(_azimuth), zenith(_zenith) 
+    {
+        update_rot();
+    }
+    
+    CPT_GPU Vec3 sample(
+        const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, 
+        Vec2&& uv, const PrecomputedArray& prims, const ArrayType<Vec3>& norms, int sampled_index
+    ) const override;
+
+    CPT_GPU Vec4 sample_le(
+        Vec3& ray_o, Vec3& ray_d, float& pdf, 
+        Vec2&& uv, const PrecomputedArray& prims, const ArrayType<Vec3>& norms, int sampled_index,
+        float extra_u, float extra_v
+    ) const override;
+
+    CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override;
+
+    CPT_GPU_INLINE virtual void set_func1(float val) noexcept { 
+        scale = val;
+    }
+    CPT_GPU_INLINE virtual void set_func2(float val) noexcept { 
+        azimuth = val;
+    }
+    CPT_GPU_INLINE virtual void set_func3(float val) noexcept { 
+        zenith  = val;
+        update_rot();       // only call once
+    }
+
+    CPT_GPU_INLINE void update_rot() {
+        auto quat_yaw = Quaternion::angleAxis(azimuth, Vec3(0, 0, 1)),
+             quat_pit = Quaternion::angleAxis(zenith, Vec3(1, 0, 0)); 
+        rot = quat_yaw * quat_pit;
     }
 };

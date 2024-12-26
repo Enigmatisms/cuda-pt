@@ -114,6 +114,7 @@ CPT_KERNEL void render_pt_kernel(
     int node_num  = -1,
     int accum_cnt = 1,
     int cache_num = 0,
+    int envmap_id = 0,
     bool gamma_corr = false
 );
 

@@ -22,6 +22,7 @@ protected:
     int num_nodes;
     int num_cache;                  // number of cached BVH nodes
     int num_emitter;
+    const int envmap_id;
 
     cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t nodes;

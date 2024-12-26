@@ -77,6 +77,13 @@
         <string name="bind_type" value="triangle"/>
 	</emitter>
 
+	<emitter type="envmap" id="env">
+		<float name="scaler" value="1.0"/>		
+		<float name="azimuth" value="0"/>			
+		<float name="zenith" value="90"/>			
+		<ref type="texture" id="envmap"/>
+	</emitter>
+
 	<shape type="obj">
 		<string name="filename" value="../meshes/vader/vader-emitter.obj"/>
 		<ref type="material" id="light"/>
@@ -101,7 +108,11 @@
 
 	<texture id="vader">
 		<string name="glossy" value="../textures/camouflage.jpg"/>
-		<string name="rough1" value="../textures/direction-polish-highres/Metal009_2K-JPG_Roughness_Low.jpg"/>
-		<string name="normal" value="../textures/direction-polish-highres/Metal009_2K-JPG_NormalGL.jpg"/>
+		<string name="rough1" value="../textures/updown-polish-highres/Metal009_2K-JPG_Roughness_Low.jpg"/>
+		<string name="normal" value="../textures/updown-polish-highres/Metal009_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="envmap">
+		<string name="diffuse" value="../textures/envmaps/day-sky-city.jpg"/>
 	</texture>
 </scene>

@@ -37,7 +37,7 @@
 #define NO_STREAM_COMPACTION
 // #define STABLE_PARTITION
 #define NO_RAY_SORTING
-#define FUSED_MISS_SHADER
+// #define FUSED_MISS_SHADER
 
 #ifdef STABLE_PARTITION
 #define partition_func(...) thrust::stable_partition(__VA_ARGS__)
@@ -297,7 +297,8 @@ CPT_KERNEL void miss_shader(
     const IndexBuffer idx_buffer,
     const int bounce,
     int stream_offset,
-    int num_valid
+    int num_valid,
+    int envmap_id
 );
 
 template <bool render_once>

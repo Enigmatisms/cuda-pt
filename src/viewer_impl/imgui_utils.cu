@@ -197,8 +197,8 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
             float deltaX = io.MouseDelta.x;
             float deltaY = io.MouseDelta.y;
 
-            float yaw = deltaX * sensitivity * M_Pi / 180.0f;
-            float pitch = deltaY * sensitivity * M_Pi / 180.0f;
+            float yaw = deltaX * sensitivity * DEG2RAD;
+            float pitch = deltaY * sensitivity * DEG2RAD;
 
             cam.rotate(yaw, pitch);
             return true;
@@ -229,9 +229,9 @@ static bool draw_coupled_slider_input(std::string id, std::string name, float& v
 
     ImGui::PushItemWidth(120.0f);
     std::string label = "##ScalerSlider-" + id;
-    updated |= ImGui::SliderFloat(label.c_str(), &val, 0.0f, max_val, "%.3f"); ImGui::SameLine();
+    updated |= ImGui::SliderFloat(label.c_str(), &val, min_val, max_val, "%.3f"); ImGui::SameLine();
     label = "##ScalerInput-" + id;
-    updated |= ImGui::InputFloat(label.c_str(), &val, 0.0f, max_val, "%.3f");
+    updated |= ImGui::InputFloat(label.c_str(), &val, min_val, max_val, "%.3f");
     ImGui::PopItemWidth();
     return updated;
 }
@@ -269,11 +269,16 @@ static bool emitter_widget(std::string description, Vec4& c_scaler, bool add_rul
     bool updated = false;
     if (add_rule)
         ImGui::Separator();
-
-    ImGui::Text("Emission for '%s'", description.c_str());
-    
-    updated |= draw_color_picker(description, "Color", &c_scaler.x());
-    updated |= draw_coupled_slider_input(description, "Scaler", c_scaler.w(), 0.f, 100.f);
+    if (c_scaler.x() < 0) {
+        ImGui::Text("Environment Map '%s'", description.c_str());
+        updated |= draw_coupled_slider_input(description + "-scale", "Scaler", c_scaler.y(), 0.f, 100.f);
+        updated |= draw_coupled_slider_input(description + "-azimuth", "Azimuth", c_scaler.z(), -180.f, 180.f);
+        updated |= draw_coupled_slider_input(description + "-zenith", "Zenith", c_scaler.w(), 0.f, 180.f);
+    } else {
+        ImGui::Text("Emission for '%s'", description.c_str());
+        updated |= draw_color_picker(description, "Color", &c_scaler.x());
+        updated |= draw_coupled_slider_input(description, "Scaler", c_scaler.w(), 0.f, 100.f);
+    }
     return updated;
 }
 
