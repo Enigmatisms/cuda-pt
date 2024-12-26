@@ -10,7 +10,7 @@
 
 __constant__ Textures c_textures;
 
-static bool save_image(
+bool save_image(
     const std::string& filename,
     const std::vector<unsigned char>& image_data, 
     int width, 
@@ -95,7 +95,6 @@ static bool load_composed_float2(
     int num_pixels = width * height;
     out_data.resize(num_pixels);
 
-    float sum = 0.0;
     #pragma omp parallel for num_threads(2)
     for (int i = 0; i < num_pixels; ++i) {
         float v1 = static_cast<float>(data1[i + 0]) / 255.0f,
@@ -105,7 +104,6 @@ static bool load_composed_float2(
         out_data[i].x = to_alpha ? roughness_to_alpha(v1) : v1;
         out_data[i].y = to_alpha ? roughness_to_alpha(v2) : v2;
     }
-
 
     stbi_image_free(data1);
     if (data2) stbi_image_free(data2);

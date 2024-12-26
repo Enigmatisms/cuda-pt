@@ -352,7 +352,7 @@ CPT_KERNEL void bsdf_local_shader(
 
         // emitter MIS
         float pdf = payloads.pdf(px, py), emission_weight = pdf / (pdf + 
-                objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, ray.hit_t) * 
+                objects[object_id].solid_angle_pdf(c_textures.eval_normal(it, material_id), ray.d, ray.hit_t) * 
                 hit_emitter * secondary_bounce * ray.non_delta());
         // (2) check if the ray hits an emitter
         Vec4 direct_comp = thp *\
@@ -364,7 +364,7 @@ CPT_KERNEL void bsdf_local_shader(
         ray.d = c_material[material_id]->sample_dir(
             ray.d, it, thp, pdf, sg, sampled_lobe, material_id
         );
-        ray.set_delta((sampled_lobe | BSDFFlag::BSDF_SPECULAR) > 0);
+        ray.set_delta((sampled_lobe & BSDFFlag::BSDF_SPECULAR) > 0);
 
         payloads.set_sampler(px, py, sg);
         payloads.thp(px, py) = thp;

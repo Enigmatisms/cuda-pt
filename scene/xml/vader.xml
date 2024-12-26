@@ -101,6 +101,7 @@
 
 	<texture id="vader">
 		<string name="glossy" value="../textures/camouflage.jpg"/>
+		<string name="rough1" value="../textures/direction-polish-highres/Metal009_2K-JPG_Roughness_Low.jpg"/>
 		<string name="normal" value="../textures/direction-polish-highres/Metal009_2K-JPG_NormalGL.jpg"/>
 	</texture>
 </scene>

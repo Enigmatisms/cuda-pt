@@ -70,15 +70,11 @@ public:
     cudaTextureObject_t* roughness;     // float2
 public:
     // return world space normal
-    CPT_GPU_INLINE Vec3 eval_normal(const Interaction& it, int index, bool verbose = false) {
+    CPT_GPU_INLINE Vec3 eval_normal(const Interaction& it, int index) {
         const cudaTextureObject_t norm_tex = normals[index];
         auto R_w2l = rotation_fixed_anchor(it.shading_norm, false);
         Vec3 local_n = R_w2l.rotate(it.shading_norm);
         float4 pnorm = norm_tex == 0 ? make_float4(0, 0, 1, 0) : tex2D<float4>(norm_tex, it.uv_coord.x_float(), it.uv_coord.y_float());
-        if (verbose) {
-            auto res = Vec3(pnorm.x, pnorm.y, pnorm.z).normalized();
-            printf("normal: %f, %f, %f\n", res.x(), res.y(), res.z());
-        }
         return R_w2l.transposed_rotate(Vec3(pnorm.x, pnorm.y, pnorm.z).normalized());
     }
 
@@ -155,4 +151,3 @@ bool save_image(
     std::string format = "png",
     const int quality = 90
 );
-

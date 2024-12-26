@@ -337,55 +337,44 @@ void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
-    int& max_depth,
-    float& trans_speed,
-    float& rot_sensitivity,
-    bool& show_window, 
-    bool& show_fps, 
-    bool& capture,
-    bool& gamma_corr,
-
-    bool& camera_update,
-    bool& scene_update,
-    bool& material_update,
-    bool& renderer_update
+    GUIParams& params
 ) {
     // Begin the main menu bar at the top of the window
     if (ImGui::BeginMainMenuBar()) {
         // Create a menu item called "Options" in the main menu bar
         if (ImGui::BeginMenu("Options")) {
             // Add a checkbox in the menu to toggle the visibility of the collapsible window
-            ImGui::MenuItem("Show Settings Window", NULL, &show_window);
-            ImGui::MenuItem("Show Frame Rate Bar", NULL, &show_fps);
+            ImGui::MenuItem("Show Settings Window", NULL, &params.show_window);
+            ImGui::MenuItem("Show Frame Rate Bar", NULL, &params.show_fps);
             ImGui::EndMenu(); // End the "Options" menu
         }
         ImGui::EndMainMenuBar(); // End the main menu bar
     }
 
     // Check if the collapsible window should be shown
-    scene_update    = false;
-    renderer_update = false;
-    material_update = false;
-    if (show_window) {
+    params.scene_update    = false;
+    params.renderer_update = false;
+    params.material_update = false;
+    if (params.show_window) {
         // Begin the collapsible window
-        if (ImGui::Begin("Settings", &show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::Begin("Settings", &params.show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
             // Collapsible group for Camera Settings
             if (ImGui::CollapsingHeader("Camera Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                camera_update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
+                params.camera_update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
 
                 float value = focal2fov(cam.inv_focal, cam._hw);
-                camera_update |= draw_coupled_slider_input("Fov", "Camera FoV", value, 1.0f, 150.f);
+                params.camera_update |= draw_coupled_slider_input("Fov", "Camera FoV", value, 1.0f, 150.f);
                 cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
 
-                ImGui::Checkbox("Gamma Correction", &gamma_corr);
-                draw_coupled_slider_input("cam-speed", "Camera Speed", trans_speed, 0.01f, 2.f);
-                draw_coupled_slider_input("rot-speed", "Rotation Speed", rot_sensitivity, 0.1f, 2.f);
+                ImGui::Checkbox("Gamma Correction", &params.gamma_corr);
+                draw_coupled_slider_input("cam-speed", "Camera Speed", params.trans_speed, 0.01f, 2.f);
+                draw_coupled_slider_input("rot-speed", "Rotation Speed", params.rot_sensitivity, 0.1f, 2.f);
             }
 
             if (ImGui::CollapsingHeader("Scene Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::Text("Scene emitter settings");
                 for (auto& [name, e_val]: emitters) {
-                    scene_update |= emitter_widget(name, e_val);
+                    params.scene_update |= emitter_widget(name, e_val);
                 }
             }
 
@@ -393,15 +382,21 @@ void render_settings_interface(
                 ImGui::Text("Max bounces");
                 ImGui::SameLine();
                 ImGui::PushItemWidth(100.0f);
-                renderer_update |= ImGui::InputInt("##max_depth", &max_depth, 1, 128); ImGui::SameLine();
+                params.renderer_update |= ImGui::InputInt("##max_depth", &params.max_depth, 1, 128); ImGui::SameLine();
                 ImGui::PopItemWidth();
                 ImGui::Separator();
+                ImGui::Checkbox("Output PNG", &params.output_png);
+                if (!params.output_png) {
+                    ImGui::PushItemWidth(120.0f);
+                    ImGui::InputInt("Compression Quality", &params.compress_q, 1, 100);
+                    ImGui::PopItemWidth();
+                }
             }
             if (ImGui::CollapsingHeader("Material Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                material_update |= material_widget(bsdf_infos);
+                params.material_update |= material_widget(bsdf_infos);
             }
             if (ImGui::CollapsingHeader("Screen Capture", ImGuiWindowFlags_AlwaysAutoResize)) {
-                capture = ImGui::Button("Capture Frame");
+                params.capture = ImGui::Button("Capture Frame");
             }
             ImGui::End();
         }

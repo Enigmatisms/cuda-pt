@@ -20,8 +20,8 @@
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="2560"/>
-			<integer name="height" value="1440"/>
+			<integer name="width" value="1920"/>
+			<integer name="height" value="1080"/>
 			<bool name="gamma_correction" value="false"/>
 		</film>
 	</sensor>
@@ -37,6 +37,8 @@
 		<float name="roughness_x" value="0.003"/>
 		<float name="roughness_y" value="0.01"/>
 		<rgb name="k_g" value="#FFFFFF"/>
+
+		<ref type="texture" id="gun"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="laser-gears">
@@ -51,6 +53,8 @@
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="#FFFFFF"/>
+
+		<ref type="texture" id="bullet"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="bullet-heads">
@@ -67,6 +71,8 @@
 		<float name="trans_scaler" value="0.2"/>
 		<float name="thickness" value="5"/>
 		<float name="ior" value="1.7"/>
+
+		<ref type="texture" id="floor"/>
 	</brdf>
 
 	<brdf type="plastic" id="handle">
@@ -76,6 +82,57 @@
 		<float name="trans_scaler" value="0.2"/>
 		<float name="thickness" value="5"/>
 		<float name="ior" value="1.15"/>
+
+		<ref type="texture" id="leather"/>
+	</brdf>
+
+	<brdf type="plastic" id="chip1">
+		<rgb name="k_d" value="1.0, 1.0, 1.0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="2"/>
+		<float name="ior" value="1.5"/>
+
+		<ref type="texture" id="chip1"/>
+	</brdf>
+
+	<brdf type="plastic" id="chip2">
+		<rgb name="k_d" value="1.0, 1.0, 1.0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="2"/>
+		<float name="ior" value="1.5"/>
+
+		<ref type="texture" id="chip2"/>
+	</brdf>
+
+	<brdf type="plastic" id="chip3">
+		<rgb name="k_d" value="1.0, 1.0, 1.0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="2"/>
+		<float name="ior" value="1.5"/>
+
+		<ref type="texture" id="chip3"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="chip-base">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#FAFAFA"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="laser-shell">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#FF0000"/>
+
+		<ref type="texture" id="laser-shell"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="side">
@@ -163,6 +220,31 @@
 	</shape>
 
 	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/laser-shell.obj"/>
+		<ref type="material" id="laser-shell"/>
+	</shape>
+	
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/chip1.obj"/>
+		<ref type="material" id="chip1"/>
+	</shape>
+	
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/chip2.obj"/>
+		<ref type="material" id="chip2"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/chip3.obj"/>
+		<ref type="material" id="chip3"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/malorian/chip-base.obj"/>
+		<ref type="material" id="chip-base"/>
+	</shape>
+
+	<shape type="obj">
 		<string name="filename" value="../meshes/malorian/side-ornaments.obj"/>
 		<ref type="material" id="side"/>
 	</shape>
@@ -196,4 +278,54 @@
 		<ref type="material" id="white"/>
 		<ref type="emitter" id="laser-3mm"/>
 	</shape>
+
+	<texture id="metal">
+		<string name="glossy" value="../textures/metalscratch-highres/Metal059B_2K-JPG_Color.jpg"/>
+		<string name="rough1" value="../textures/metalscratch-highres/Metal059B_2K-JPG_Roughness_Low.jpg"/>
+		<string name="normal" value="../textures/metalscratch-highres/Metal059B_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="leather">
+		<string name="normal" value="../textures/leather/Leather037_1K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="gun">
+		<string name="glossy" value="../textures/leftright-polish-highres/Metal009_2K-JPG_Color.jpg"/>
+		<string name="rough1" value="../textures/leftright-polish-highres/Metal009_2K-JPG_Roughness_Scratched.jpg"/>
+		<string name="normal" value="../textures/chip2-highres/Chip005_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="laser-shell">
+		<string name="glossy" value="../textures/chip2-highres/Chip005_2K-JPG_Color.jpg"/>
+		<string name="rough1" value="../textures/chip2-highres/Chip005_2K-JPG_Roughness.jpg"/>
+		<string name="normal" value="../textures/chip2-highres/Chip005_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="chip1">
+		<string name="diffuse" value="../textures/chip1-highres/Chip001_2K-JPG_Color.jpg"/>
+		<string name="specular" value="../textures/chip1-highres/Chip001_2K-JPG_Metalness.jpg"/>
+		<string name="normal" value="../textures/chip1-highres/Chip001_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="chip2">
+		<string name="diffuse" value="../textures/chip2-highres/Chip005_2K-JPG_Color.jpg"/>
+		<string name="specular" value="../textures/chip2-highres/Chip005_2K-JPG_Metalness.jpg"/>
+		<string name="normal" value="../textures/chip2-highres/Chip005_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="chip3">
+		<string name="diffuse" value="../textures/chip4/Chip004_1K-JPG_Color.jpg"/>
+		<string name="specular" value="../textures/chip4/Chip004_1K-JPG_Metalness.jpg"/>
+		<string name="normal" value="../textures/chip4/Chip004_1K-JPG_NormalGL.jpg"/>
+	</texture>
+
+	<texture id="floor">
+		<string name="normal" value="../textures/chip2-highres/Chip005_2K-JPG_NormalDX.jpg"/>
+	</texture>
+
+	<texture id="bullet">
+		<string name="glossy" value="../textures/bright-bump/Metal061B_1K-JPG_Color.jpg"/>
+		<string name="rough1" value="../textures/bright-bump/Metal061B_1K-JPG_Roughness.jpg"/>
+		<string name="normal" value="../textures/bright-bump/Metal061B_1K-JPG_NormalDX.jpg"/>
+	</texture>
 </scene>

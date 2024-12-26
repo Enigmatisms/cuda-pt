@@ -268,7 +268,7 @@ CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec
             thickness * (-1.0f / dot_wo + 1.0f / dot_wi)).exp_xyz();
     brdf += refdir.dot(out) < 1.f - THP_EPS ? Vec4(0) : Vec4(Fi, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
 
-    return dot_wo > 0 && dot_wi < 0 ? brdf : Vec4(0, 1);
+    return brdf;
 }
 
 CPT_GPU Vec3 PlasticBSDF::sample_dir(

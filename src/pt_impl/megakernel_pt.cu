@@ -294,7 +294,7 @@ CPT_KERNEL void render_pt_kernel(
 
             // emitter MIS
             emission_weight = emission_weight / (emission_weight + 
-                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * 
+                    objects[object_id].solid_angle_pdf(c_textures.eval_normal(it, material_id), ray.d, min_dist) * 
                     hit_emitter * (b > 0) * ray.non_delta());
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf

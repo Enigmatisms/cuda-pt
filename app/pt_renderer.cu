@@ -1,7 +1,6 @@
 #include "core/scene.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
-#include <ext/lodepng/lodepng.h>
 
 __constant__ Emitter* c_emitter[9];
 __constant__ BSDF*    c_material[32];
@@ -56,11 +55,9 @@ int main(int argc, char** argv) {
     auto bytes_buffer = renderer->render(scene.config.spp, scene.config.max_depth, scene.config.gamma_correction);
 
     std::string file_name = "render.png";
-
-    if (unsigned error = lodepng::encode(file_name, bytes_buffer, scene.config.width, scene.config.height); error) {
-        std::cerr << "lodepng::encoder error " << error << ": " << lodepng_error_text(error)
-                  << std::endl;
-        throw std::runtime_error("lodepng::encode() fail");
+    if (!save_image(file_name, bytes_buffer, scene.config.width, scene.config.height, "png")) {
+        std::cerr << "stb::save_image() failed to output image" << std::endl;
+        throw std::runtime_error("stb::save_image() fail");
     }
 
     printf("[IMAGE] Image saved to `%s`\n", file_name.c_str());

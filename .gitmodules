@@ -1,6 +1,3 @@
-[submodule "src/ext/lodepng"]
-	path = src/ext/lodepng
-	url = git@gitee.com:Enigmatisms/lodepng.git
 [submodule "src/ext/tinyxml2"]
 	path = src/ext/tinyxml2
 	url = git@gitee.com:Enigmatisms/tinyxml2.git
