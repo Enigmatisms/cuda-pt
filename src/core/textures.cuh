@@ -151,3 +151,31 @@ bool save_image(
     std::string format = "png",
     const int quality = 90
 );
+
+template <typename TexType>
+cudaTextureObject_t createTexture1D(
+    const TexType* tex_src, 
+    size_t size, 
+    TexType* tex_dst, 
+    cudaTextureFilterMode mode = cudaFilterModePoint,
+    bool use_normalized_coords = false
+) {
+    cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
+    CUDA_CHECK_RETURN(cudaMemcpy(tex_dst, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
+    cudaResourceDesc res_desc;
+    memset(&res_desc, 0, sizeof(res_desc));
+    res_desc.resType = cudaResourceTypeLinear;
+    res_desc.res.linear.devPtr = tex_dst;
+    res_desc.res.linear.desc   = channel_desc;
+    res_desc.res.linear.sizeInBytes = size * sizeof(TexType);
+
+    cudaTextureDesc tex_desc;
+    memset(&tex_desc, 0, sizeof(tex_desc));
+    tex_desc.addressMode[0] = cudaAddressModeClamp;
+    tex_desc.filterMode = mode;
+    tex_desc.readMode = cudaReadModeElementType;
+    tex_desc.normalizedCoords = use_normalized_coords;
+    cudaTextureObject_t tex_obj;
+    CUDA_CHECK_RETURN(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
+    return tex_obj;
+}

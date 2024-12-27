@@ -37,6 +37,14 @@ CPT_KERNEL void load_metal_bsdf(
     BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y
 );
 
+CPT_KERNEL void load_dispersion_bsdf(
+    BSDF** dst, Vec4 k_s, float index_a, float index_b
+);
+
+CPT_KERNEL void create_dispersion_bsdf(
+    BSDF** dst, Vec4 k_s, float index_a, float index_b
+);
+
 template <typename PlasticType>
 CPT_KERNEL void create_plastic_bsdf(
     BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 

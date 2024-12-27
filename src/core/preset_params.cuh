@@ -1,7 +1,6 @@
 #pragma once
 /**
- * @brief Metal Parameters
- * 
+ * @brief Metal Parameters & Dispersion Params
  */
 #include <array>
 #include "core/vec3.cuh"
@@ -29,6 +28,7 @@ inline constexpr std::array<const char*, NumMetalType> METAL_NAMES = {
     "Au", "Cr", "Cu", "Ag", "Al", "W", "TiO2", "Ni", "MgO", "Na", "SiC", "V", "CuO", "Hg", "Ir"
 };
 
+// Data from Tungsten Renderer
 inline constexpr Vec3 METAL_ETA_TS[NumMetalType] = {
     Vec3(0.1431189557f, 0.3749570432f, 1.4424785571f),      // Au
     Vec3(4.3696828663f, 2.9167024892f, 1.6547005413f),      // Cr
@@ -63,4 +63,26 @@ inline constexpr Vec3 METAL_KS[NumMetalType] = {
     Vec3(0.5202739621f, 0.5707372756f, 0.7172250613f),      // CuO
     Vec3(6.3276269444f, 4.3719414152f, 3.4217899270f),      // Hg
     Vec3(5.5921510077f, 4.0671757150f, 3.2672611269f)       // Ir
+};
+
+// Data from Wikipedia and LuxRenderer
+enum DispersionType: uint8_t {
+    Diamond     = 0,
+    Silica      = 1,
+    Glass_BK7   = 2,
+    Glass_BaF10 = 3,
+    Glass_SF10  = 4,
+    NumDispersionType
+};
+
+inline constexpr std::array<const char*, DispersionType::NumDispersionType> DISPERSION_NAMES = {
+    "Diamond", "Silica", "Glass_BK7", "Glass_BaF10", "Glass_SF10"
+};
+
+inline constexpr Vec2 DISPERSION_PARAMS[NumDispersionType] = {
+    Vec2(2.3840, 34221.2),     // Diamond
+    Vec2(1.4580, 3540.0),      // Silica
+    Vec2(1.5046, 4200.0),      // Glass_BK7
+    Vec2(1.6700, 7430.0),      // Glass_BaF10
+    Vec2(1.7280, 13420.0)      // Glass_SF10
 };

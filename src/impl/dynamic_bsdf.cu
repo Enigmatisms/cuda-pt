@@ -46,6 +46,15 @@ void BSDFInfo::copy_to_gpu(BSDF*& to_store) const {
             bsdf.roughness_x(), 
             bsdf.roughness_y()
         );
+    } else if (type == BSDFType::Dispersion) {
+        Vec2 dis_params = DISPERSION_PARAMS[std::min(bsdf.mtype, 
+                (uint8_t)DispersionType::NumDispersionType)];
+        load_dispersion_bsdf<<<1, 1>>>(
+            &to_store,
+            bsdf.k_s,
+            dis_params.x(),
+            dis_params.y()
+        );
     }
     updated = false;
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());

@@ -11,7 +11,7 @@
 #include "core/sampling.cuh"
 #include "core/textures.cuh"
 #include "core/interaction.cuh"
-#include "core/metal_params.cuh"
+#include "core/preset_params.cuh"
 
 enum BSDFFlag: int {
     BSDF_NONE     = 0x00,
@@ -31,7 +31,8 @@ enum BSDFType: uint8_t {
     Plastic        = 0x03,
     PlasticForward = 0x04,
     GGXConductor   = 0x05,
-    NumSupportedBSDF = 0x06
+    Dispersion     = 0x06,
+    NumSupportedBSDF = 0x07
 };
 
 extern const std::array<const char*, NumSupportedBSDF> BSDF_NAMES;
@@ -157,12 +158,17 @@ public:
         return 0.f;
     }
 
-    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = true) const override {
-        const Vec3 normal = c_textures.eval_normal(it, index);
+    CPT_GPU_INLINE static Vec4 eval_impl(
+        const Vec3& normal, 
+        const Vec3& out, 
+        const Vec3& in,
+        const Vec4& ks,
+        const float eta,
+        bool is_radiance = true
+    ) {
         float dot_normal = in.dot(normal);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
-        float eta = c_textures.eval_rough(it.uv_coord, index, Vec2( k_d.x() )).x();
         float ni = dot_normal < 0 ? 1.f : eta;
         float nr = dot_normal < 0 ? eta : 1.f, cos_r2 = 0;
         float eta2 = ni * ni / (nr * nr);
@@ -171,20 +177,23 @@ public:
         bool total_ref = FresnelTerms::is_total_reflection(dot_normal, ni, nr);
         nr = FresnelTerms::fresnel_dielectric(ni, nr, fabsf(dot_normal), sqrtf(fabsf(cos_r2)));
         bool reflc_dot = out.dot(ret_dir) > 0.99999f, refra_dot = out.dot(refra_vec) > 0.99999f;        // 0.9999  means 0.26 deg
-        const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
-        return c_textures.eval(spec_tex, it.uv_coord, k_s) * \
-                (reflc_dot | refra_dot) * (refra_dot && is_radiance ? eta2 : 1.f);
-    }
+        return ks * (reflc_dot | refra_dot) * (refra_dot && is_radiance ? eta2 : 1.f);
+    } 
 
-    CPT_GPU Vec3 sample_dir(
-        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
-    ) const override {
-        const Vec3 normal = c_textures.eval_normal(it, index);
+    CPT_GPU_INLINE static Vec3 sample_dir_impl(
+        const Vec3& indir, 
+        const Vec3& normal, 
+        const Vec4& ks,
+        const float eta,
+        Vec4& throughput,
+        Sampler& sp,
+        float& pdf,
+        BSDFFlag& samp_lobe, 
+        bool is_radiance = true
+    ) {
         float dot_normal = indir.dot(normal);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
         // see https://computergraphics.stackexchange.com/questions/13540/shading-normal-and-geometric-normal-for-refractive-surface-rendering
-        float eta = c_textures.eval_rough(it.uv_coord, index, Vec2( k_d.x() )).x();
         float ni = dot_normal < 0 ? 1.f : eta;
         float nr = dot_normal < 0 ? eta : 1.f, cos_r2 = 0;
         float eta2 = ni * ni / (nr * nr);
@@ -198,10 +207,27 @@ public:
         samp_lobe = static_cast<BSDFFlag>(
             BSDFFlag::BSDF_SPECULAR | (total_ref || reflect ? BSDFFlag::BSDF_REFLECT : BSDFFlag::BSDF_TRANSMIT)
         );
-
-        const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
-        throughput *= c_textures.eval(spec_tex, it.uv_coord, k_s) * (is_radiance && !reflect ? eta2 : 1.f);
+        throughput *= ks * (is_radiance && !reflect ? eta2 : 1.f);
         return ret_dir;
+    }
+
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = true) const override {
+        const Vec3 normal = c_textures.eval_normal(it, index);
+        const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
+        const Vec4 ks = c_textures.eval(spec_tex, it.uv_coord, k_s);
+        float eta = c_textures.eval_rough(it.uv_coord, index, Vec2( k_d.x() )).x();
+        return eval_impl(normal, out, in, ks, eta, is_radiance);
+    }
+
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+    ) const override {
+        const Vec3 normal = c_textures.eval_normal(it, index);
+        const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
+        const Vec4 ks = c_textures.eval(spec_tex, it.uv_coord, k_s);
+        float eta = c_textures.eval_rough(it.uv_coord, index, Vec2( k_d.x() )).x();
+        return sample_dir_impl(indir, normal, ks, eta, throughput, sp, pdf, samp_lobe, is_radiance);
     }
 };
 
@@ -284,4 +310,50 @@ public:
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
         Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
     ) const override;
+};
+
+/**
+ * @brief 360nm to 830nm Wave dispersion translucent BSDF
+ * We uniformly sample from wavelength range 360nm to 830nm,
+ * and the IoR is computed by Cauchy's Equation A + B / \lambda^2
+ */
+class DispersionBSDF: public BSDF {
+public:
+    static constexpr float WL_MIN   = 360;
+    static constexpr float WL_RANGE = 471;        // 360 + 471 -> 831 (830 included for indexing)
+    static constexpr float D65_MIN   = 300;
+    static constexpr float D65_RANGE = 531;
+public:
+    CPT_CPU_GPU DispersionBSDF(Vec4 k_s, float index_a, float index_b):
+        BSDF(Vec4(index_a, index_b, 0), std::move(k_s), Vec4(0, 0, 0), BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_TRANSMIT) {}
+
+    CPT_CPU_GPU DispersionBSDF(): BSDF() {}
+    
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& incid, int) const override;
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = true) const override;
+    CPT_GPU Vec3 sample_dir(
+        const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
+        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+    ) const override;
+
+    CPT_GPU_INLINE static Vec4 wavelength_to_XYZ(float wavelength);
+    CPT_GPU_INLINE static Vec4 wavelength_to_RGB(float wavelength);
+
+    CPT_GPU_INLINE static float sample_wavelength(Sampler& sp) {
+        return sp.next1D() * WL_RANGE + WL_MIN;
+    }
+
+    CPT_GPU_INLINE float get_ior(float wavelength) const {
+        // k_d.y() is B, (nm^2)
+        return k_d.x() + k_d.y() / (wavelength * wavelength);
+    }
+
+    CONDITION_TEMPLATE_SEP_3(VType1, VType2, NType, Vec3, Vec3, Vec3)
+    CPT_GPU_INLINE bool get_wavelength_from(VType1&& indir, VType2&& outdir, NType&& normal, float& wavelength) const {
+        float cos_i = normal.dot(indir), cos_o = normal.dot(outdir),
+              sin_i = sqrtf(1.f - cos_i * cos_i), sin_o = sqrtf(1.f - cos_o * cos_o);
+        float eta = sin_i > sin_o ? sin_i / sin_o : sin_o / sin_i;
+        wavelength = sqrtf(k_d.y() / fmaxf(eta - k_d.x(), 1e-5f));
+        return wavelength > WL_MIN && wavelength < WL_MIN + WL_RANGE;
+    }
 };

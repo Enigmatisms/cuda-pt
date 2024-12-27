@@ -7,7 +7,7 @@
 #include <numeric>
 #include "core/scene.cuh"
 
-const std::unordered_map<std::string, MetalType> material_mapping = {
+const std::unordered_map<std::string, MetalType> conductor_mapping = {
     {"Au", MetalType::Au},
     {"Cr", MetalType::Cr},
     {"Cu", MetalType::Cu},
@@ -23,6 +23,14 @@ const std::unordered_map<std::string, MetalType> material_mapping = {
     {"CuO", MetalType::CuO},
     {"Hg",  MetalType::Hg},
     {"Ir",  MetalType::Ir},
+};
+
+const std::unordered_map<std::string, DispersionType> dielectric_mapping = {
+    {"Diamond",     DispersionType::Diamond},
+    {"Silica",      DispersionType::Silica},
+    {"Glass_BK7",   DispersionType::Glass_BK7},
+    {"Glass_BaF10", DispersionType::Glass_BaF10},
+    {"Glass_SF10",  DispersionType::Glass_SF10}
 };
 
 std::string getFolderPath(std::string filePath) {
@@ -192,10 +200,10 @@ void parseBSDF(
             std::string value = element->Attribute("value");
             if (name == "type" || name == "metal" || name == "conductor") {
                 std::string metal_type = element->Attribute("value");
-                auto it = material_mapping.find(metal_type);
-                if (it == material_mapping.end()) {
-                    std::cout << "BSDF[" << id << "]" << ": Only 8 types of metals are supported: ";
-                    for (const auto [k, v]: material_mapping)
+                auto it = conductor_mapping.find(metal_type);
+                if (it == conductor_mapping.end()) {
+                    std::cout << "BSDF[" << id << "]" << ": Only << " << int(NumMetalType) << " types of metals are supported: ";
+                    for (const auto [k, v]: conductor_mapping)
                         std::cout << k << ", ";
                     std::cout << std::endl;
                     std::cout << "Current type '" << metal_type << "' is not supported. Setting to 'Cu'\n";
@@ -252,6 +260,29 @@ void parseBSDF(
                     k_d, k_s, k_g, ior, trans_scaler, thickness);
         }
         info.bsdf.store_plastic_params(ior, trans_scaler, thickness);
+    } else if (type == "dispersion") {
+        element = bsdf_elem->FirstChildElement("string");
+        DispersionType dtype = DispersionType::Diamond;
+        if (element) {
+            std::string name = element->Attribute("name");
+            std::string value = element->Attribute("value");
+            if (name == "type" || name == "dielectric") {
+                std::string dielec_type = element->Attribute("value");
+                auto it = dielectric_mapping.find(dielec_type);
+                if (it == dielectric_mapping.end()) {
+                    std::cout << "BSDF[" << id << "]" << ": Only 5 types of metals are supported: ";
+                    for (const auto [k, v]: dielectric_mapping)
+                        std::cout << k << ", ";
+                    std::cout << std::endl;
+                    std::cout << "Current type '" << dielec_type << "' is not supported. Setting to 'Diamond'\n";
+                } else {
+                    dtype = it->second;
+                }
+            }
+        }
+        Vec2 dis_params = DISPERSION_PARAMS[dtype];
+        info.bsdf.store_dispersion_params(dtype, k_s);
+        create_dispersion_bsdf<<<1, 1>>>(bsdfs + index, k_s, dis_params.x(), dis_params.y());
     }
     bsdf_infos.emplace_back(std::move(info));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());

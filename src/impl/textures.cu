@@ -110,16 +110,16 @@ static bool load_composed_float2(
     return true;
 }
 
-template <typename T>
-static cudaTextureObject_t createTexture2D(const T* host_data, int width, int height, T** d_ptr_out)
+template <typename TexType>
+static cudaTextureObject_t createTexture2D(const TexType* host_data, int width, int height, TexType** d_ptr_out)
 {
-    cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<T>();
+    cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
 
-    T* d_ptr;
+    TexType* d_ptr;
     size_t pitch;
-    CUDA_CHECK_RETURN(cudaMallocPitch(&d_ptr, &pitch, width * sizeof(T), height));
+    CUDA_CHECK_RETURN(cudaMallocPitch(&d_ptr, &pitch, width * sizeof(TexType), height));
 
-    size_t host_pitch = width * sizeof(T);
+    size_t host_pitch = width * sizeof(TexType);
     CUDA_CHECK_RETURN(cudaMemcpy2D(d_ptr, pitch, host_data, host_pitch, host_pitch, height, cudaMemcpyHostToDevice));
 
     cudaResourceDesc res_desc;

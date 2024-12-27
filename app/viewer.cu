@@ -5,6 +5,7 @@
 #include <ext/imgui/backends/imgui_impl_glfw.h>
 #include <ext/imgui/backends/imgui_impl_opengl3.h>
 
+#include "core/xyz.cuh"
 #include "core/scene.cuh"
 #include "core/imgui_utils.cuh"
 #include "renderer/light_tracer.cuh"
@@ -39,7 +40,9 @@ int main(int argc, char** argv) {
 
     std::cout << "[SCENE] Loading scenes from '" << xml_path << "'\n";
     Scene scene(xml_path);
-
+    
+    ColorSpaceXYZ xyz_host;
+    xyz_host.init();
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
@@ -150,12 +153,12 @@ int main(int argc, char** argv) {
         glfwSwapBuffers(window.get());
     }
     scene.print();
-
     gui::clean_up(
         window.get(),
         renderer->get_pbo_id(),
         renderer->get_texture_id()
     );
+    xyz_host.destroy();
 
     return 0;
 }

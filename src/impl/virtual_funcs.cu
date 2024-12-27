@@ -65,3 +65,22 @@ CPT_KERNEL void load_metal_bsdf(
         ptr->set_kg(std::move(k_g));
     }
 }
+
+CPT_KERNEL void load_dispersion_bsdf(
+    BSDF** dst, Vec4 k_s, float index_a, float index_b
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        (*dst)->set_kd(Vec4(index_a, index_b, 0));
+        (*dst)->set_ks(std::move(k_s));
+    }
+}
+
+CPT_KERNEL void create_dispersion_bsdf(
+    BSDF** dst, Vec4 k_s, float index_a, float index_b
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        *dst = new DispersionBSDF(k_s, index_a, index_b);
+        (*dst)->set_kd(Vec4(index_a, index_b, 0));
+        (*dst)->set_ks(std::move(k_s));
+    }
+}

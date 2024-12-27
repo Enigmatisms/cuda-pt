@@ -312,7 +312,7 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
             }
             if (info.type == BSDFType::GGXConductor) {
                 local_update |= draw_color_picker(info.name + "-kd", "Albedo", &info.bsdf.k_g.x());
-                local_update |= draw_selection_menu(METAL_NAMES, "##" + info.name + "-type", "Metal Type", reinterpret_cast<uint8_t&>(info.bsdf.mtype));
+                local_update |= draw_selection_menu(METAL_NAMES, "##" + info.name + "-type", "Metal Type", info.bsdf.mtype);
                 local_update |= draw_coupled_slider_input(info.name + "rx", "roughness X", info.bsdf.roughness_x());
                 local_update |= draw_coupled_slider_input(info.name + "ry", "roughness Y", info.bsdf.roughness_y());
             } else if (info.type == BSDFType::Plastic || info.type == BSDFType::PlasticForward) {
@@ -329,6 +329,9 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
                 local_update |= draw_color_picker(info.name + "-kd", "Diffuse", &info.bsdf.k_d.x());
             } else if (info.type == BSDFType::Specular){
                 local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
+            } else if (info.type == BSDFType::Dispersion) {
+                local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_g.x());
+                local_update |= draw_selection_menu(DISPERSION_NAMES, "##" + info.name + "-type", "Dispersion Type", info.bsdf.mtype);
             }
             info.updated = local_update;
             updated |= local_update;

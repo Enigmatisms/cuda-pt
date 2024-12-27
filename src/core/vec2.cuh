@@ -14,12 +14,12 @@ public:
     CPT_CPU_GPU Vec2() {}
 
     CPT_CPU_GPU
-    Vec2(float _v): 
-        _data(make_float2(_v, _v)) {}
+    constexpr Vec2(float _v): 
+        _data({_v, _v}) {}
 
     CPT_CPU_GPU
-    Vec2(float _x, float _y): 
-        _data(make_float2(_x, _y)) {}
+    constexpr Vec2(float _x, float _y): 
+        _data({_x, _y}) {}
 
     CPT_CPU_GPU
     Vec2(float2&& v): _data(std::move(v)) {}
@@ -37,8 +37,8 @@ public:
     CPT_CPU_GPU_INLINE float& x() { return _data.x; }
     CPT_CPU_GPU_INLINE float& y() { return _data.y; }
 
-    CPT_CPU_GPU_INLINE const float& x() const { return _data.x; }
-    CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
+    constexpr CPT_CPU_GPU_INLINE const float& x() const { return _data.x; }
+    constexpr CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
 
     CPT_CPU_GPU_INLINE
     Vec2 abs() const noexcept {
@@ -46,9 +46,9 @@ public:
     }
 
     CONDITION_TEMPLATE(VecType, Vec2)
-    CPT_CPU_GPU_INLINE Vec2 operator+(VecType&& b) const noexcept { return Vec2(_data.x + b.x(), _data.y + b.y()); }
+    constexpr CPT_CPU_GPU_INLINE Vec2 operator+(VecType&& b) const noexcept { return Vec2(_data.x + b.x(), _data.y + b.y()); }
 
-    CPT_CPU_GPU_INLINE Vec2 operator+(float b) const noexcept { return Vec2(_data.x + b, _data.y + b); }
+    constexpr CPT_CPU_GPU_INLINE Vec2 operator+(float b) const noexcept { return Vec2(_data.x + b, _data.y + b); }
 
     CONDITION_TEMPLATE(VecType, Vec2)
     Vec2& operator+=(VecType&& b) noexcept {
@@ -58,7 +58,7 @@ public:
     }
 
     CPT_CPU_GPU_INLINE
-    Vec2 operator-() const noexcept {
+    constexpr Vec2 operator-() const noexcept {
         return Vec2(-_data.x, -_data.y);
     }
 
@@ -72,12 +72,12 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE
-    Vec2 operator-(VecType&& b) const { return Vec2(_data.x - b.x(), _data.y - b.y()); }
+    constexpr Vec2 operator-(VecType&& b) const { return Vec2(_data.x - b.x(), _data.y - b.y()); }
 
     CPT_CPU_GPU_INLINE Vec2 operator-(float b) const { return Vec2(_data.x - b, _data.y - b); }
 
     CPT_CPU_GPU_INLINE
-    Vec2 operator*(float b) const noexcept { return Vec2(_data.x * b, _data.y * b); }
+    constexpr Vec2 operator*(float b) const noexcept { return Vec2(_data.x * b, _data.y * b); }
 
     CPT_CPU_GPU_INLINE
     Vec2& operator*=(float b) noexcept {
@@ -88,7 +88,7 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE
-    Vec2 operator*(VecType&& b) const noexcept { return Vec2(_data.x * b.x(), _data.y * b.y()); }
+    constexpr Vec2 operator*(VecType&& b) const noexcept { return Vec2(_data.x * b.x(), _data.y * b.y()); }
 
     CONDITION_TEMPLATE(VecType, Vec2)
     CPT_CPU_GPU_INLINE
