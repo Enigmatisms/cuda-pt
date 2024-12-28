@@ -81,6 +81,8 @@ int main(int argc, char** argv) {
     renderer->graphics_resc_init(gui::init_texture_and_pbo);
     renderer->update_camera(scene.cam);
     gui::GUIParams params;
+    params.max_depth  = scene.config.max_depth;
+    params.gamma_corr = scene.config.gamma_correction;
     bool exit_main_loop      = false;
 
     ImGuiIO& io = ImGui::GetIO();

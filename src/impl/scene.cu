@@ -27,10 +27,13 @@ const std::unordered_map<std::string, MetalType> conductor_mapping = {
 
 const std::unordered_map<std::string, DispersionType> dielectric_mapping = {
     {"Diamond",     DispersionType::Diamond},
+    {"DiamondHigh", DispersionType::DiamondHigh},
     {"Silica",      DispersionType::Silica},
     {"Glass_BK7",   DispersionType::Glass_BK7},
     {"Glass_BaF10", DispersionType::Glass_BaF10},
-    {"Glass_SF10",  DispersionType::Glass_SF10}
+    {"Glass_SF10",  DispersionType::Glass_SF10},
+    {"Sapphire",    DispersionType::Sapphire},
+    {"Water",       DispersionType::Water}
 };
 
 std::string getFolderPath(std::string filePath) {
@@ -237,7 +240,6 @@ void parseBSDF(
         float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
         while (element) {
             std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
             tinyxml2::XMLError eResult;
             if (name == "trans_scaler") {
                 eResult = element->QueryFloatAttribute("value", &trans_scaler);
@@ -265,12 +267,11 @@ void parseBSDF(
         DispersionType dtype = DispersionType::Diamond;
         if (element) {
             std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
             if (name == "type" || name == "dielectric") {
                 std::string dielec_type = element->Attribute("value");
                 auto it = dielectric_mapping.find(dielec_type);
                 if (it == dielectric_mapping.end()) {
-                    std::cout << "BSDF[" << id << "]" << ": Only 5 types of metals are supported: ";
+                    std::cout << "BSDF[" << id << "]" << ": Only 8 types of metals are supported: ";
                     for (const auto [k, v]: dielectric_mapping)
                         std::cout << k << ", ";
                     std::cout << std::endl;
@@ -281,6 +282,7 @@ void parseBSDF(
             }
         }
         Vec2 dis_params = DISPERSION_PARAMS[dtype];
+        info.type = BSDFType::Dispersion;
         info.bsdf.store_dispersion_params(dtype, k_s);
         create_dispersion_bsdf<<<1, 1>>>(bsdfs + index, k_s, dis_params.x(), dis_params.y());
     }
@@ -338,20 +340,28 @@ void parseEmitter(
         if (name == "center" || name == "pos")
             pos = parsePoint(element);
         create_point_source<<<1, 1>>>(emitters[index], emission * scaler, pos);
-    } else if (type == "spot") {
-        element = emitter_elem->FirstChildElement("point");
-        Vec3 pos(0, 0, 0), dir(0, 0, 1);
-        while (element) {
+    } else if (type == "area-spot") {
+        element = emitter_elem->FirstChildElement("float");
+        float cos_val = 0.99;
+        if (element) {
             std::string name = element->Attribute("name");
-            if (name == "pos") {
-                pos = parsePoint(element);
-            } else if (name == "dir") {
-                dir = parsePoint(element);
+            tinyxml2::XMLError eResult;
+            if (name == "half-angle" || name == "angle") {
+                eResult = element->QueryFloatAttribute("value", &cos_val);
+                cos_val = cosf(cos_val * DEG2RAD);
             }
-            element = element->NextSiblingElement("point");
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'Area Spot Emitter' attribute");
         }
-        // create Spot source
-        printf("Spot source created at: [%f, %f, %f], [%f, %f, %f]\n", pos.x(), pos.y(), pos.z(), dir.x(), dir.y(), dir.z());
+        element = emitter_elem->FirstChildElement("string");
+        std::string attr_name = element->Attribute("name");
+        if (!element || attr_name != "bind_type") {
+            std::cerr << "Bound primitive is not specified for area spot source '" << id << "', name: "<< element->Attribute("name") << std::endl;
+            throw std::runtime_error("Bound primitive is not specified for area spot source");
+        }
+        bool spherical_bound = element->Attribute("value") == std::string("sphere");
+        printf("Cos val: %f\n", cos_val);
+        create_area_spot_source<<<1, 1>>>(emitters[index], emission * scaler, cos_val, emitter_obj_map[id], spherical_bound);
     } else if (type == "area") {
         element = emitter_elem->FirstChildElement("string");
         std::string attr_name = element->Attribute("name");
@@ -367,7 +377,6 @@ void parseEmitter(
         float scaler = 1.f, azimuth = 0.f, zenith = 0.f;
         while (element) {
             std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
             tinyxml2::XMLError eResult;
             if (name == "scaler") {
                 eResult = element->QueryFloatAttribute("value", &scaler);
@@ -377,7 +386,7 @@ void parseEmitter(
                 eResult = element->QueryFloatAttribute("value", &zenith);
             }
             if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
+                throw std::runtime_error("Error parsing 'EnvMap Emitter' attribute");
             element = element->NextSiblingElement("float");
         }
         e_props.back().second = Vec4(-1, scaler, azimuth, zenith);
@@ -395,7 +404,6 @@ void parseEmitter(
                         Texture<float4> tex(it->second.diff_path, TextureType::DIFFUSE_TEX);
                         create_envmap_source<<<1, 1>>>(emitters[index], 
                                 tex.object(), scaler, azimuth * DEG2RAD, zenith * DEG2RAD);
-                        printf("HDRI texture info: %llu\n", tex.object());
                         host_texs.emplace_back(std::move(tex));
                     } else {
                         std::cerr << "The texture for HDRI should be set for it's 'emission' element, but none is found.\n";
@@ -713,8 +721,6 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
 
 
     //  ------------------------- (4) parse all emitters --------------------------
-    printf("Parsing emitters...\n");
-
     ptr = emitter_elem;
     for (; ptr != nullptr; ++ num_emitters)
         ptr = ptr->NextSiblingElement("emitter");
@@ -725,7 +731,6 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         emitter_elem = emitter_elem->NextSiblingElement("emitter");
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    printf("Emitter parsed.\n");
 
     // ------------------------- (5) parse camera & scene config -------------------------
     CUDA_CHECK_RETURN(cudaMallocHost(&cam, sizeof(DeviceCamera)));

@@ -166,8 +166,8 @@ public:
 
     CPT_CPU_GPU_INLINE
     bool numeric_err() const noexcept {
-        return isnan(_data.x) || isnan(_data.y) || isnan(_data.z) || isnan(_data.w) || \
-               isinf(_data.x) || isinf(_data.y) || isinf(_data.z) || isinf(_data.w);
+        return isnan(_data.x) || isnan(_data.y) || isnan(_data.z) || \
+               isinf(_data.x) || isinf(_data.y) || isinf(_data.z);
     }
 
     CPT_CPU_GPU_INLINE

@@ -111,6 +111,14 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) {
             0.003f,
             0.003f
         );
+    } else if (type == BSDFType::Dispersion) {
+        Vec2 dis_params = DISPERSION_PARAMS[std::min(bsdf.mtype, 
+                (uint8_t)DispersionType::NumDispersionType)];
+        create_dispersion_bsdf<<<1, 1>>>(&to_store, 
+            bsdf.k_s, 
+            dis_params.x(),
+            dis_params.y()
+        );
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }

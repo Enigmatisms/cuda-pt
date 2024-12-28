@@ -22,7 +22,7 @@
 		<film type="film">
 			<integer name="width" value="1920"/>
 			<integer name="height" value="1080"/>
-			<bool name="gamma_correction" value="false"/>
+			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>
 

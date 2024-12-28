@@ -68,21 +68,27 @@ inline constexpr Vec3 METAL_KS[NumMetalType] = {
 // Data from Wikipedia and LuxRenderer
 enum DispersionType: uint8_t {
     Diamond     = 0,
-    Silica      = 1,
-    Glass_BK7   = 2,
-    Glass_BaF10 = 3,
-    Glass_SF10  = 4,
+    DiamondHigh = 1,
+    Silica      = 2,
+    Glass_BK7   = 3,
+    Glass_BaF10 = 4,
+    Glass_SF10  = 5,
+    Sapphire    = 6,
+    Water       = 7,
     NumDispersionType
 };
 
 inline constexpr std::array<const char*, DispersionType::NumDispersionType> DISPERSION_NAMES = {
-    "Diamond", "Silica", "Glass_BK7", "Glass_BaF10", "Glass_SF10"
+    "Diamond", "DiamondHigh", "Silica", "Glass_BK7", "Glass_BaF10", "Glass_SF10", "Sapphire", "Water"
 };
 
 inline constexpr Vec2 DISPERSION_PARAMS[NumDispersionType] = {
-    Vec2(2.3840, 34221.2),     // Diamond
+    Vec2(2.3840, 12100.0),     // Diamond
+    Vec2(2.3840, 60500.0),     // Diamond High Dispersion Band Width
     Vec2(1.4580, 3540.0),      // Silica
     Vec2(1.5046, 4200.0),      // Glass_BK7
     Vec2(1.6700, 7430.0),      // Glass_BaF10
-    Vec2(1.7280, 13420.0)      // Glass_SF10
+    Vec2(1.7280, 13420.0),     // Glass_SF10
+    Vec2(1.7522, 5500.0),      // Sapphire
+    Vec2(1.3244, 3100.0)       // Water
 };

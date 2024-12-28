@@ -26,10 +26,10 @@
         <integer name="end_s" value="100"/>   
 
 		<film type="film">
-			<integer name="width" value="768"/>
-			<integer name="height" value="768"/>
+			<integer name="width" value="1024"/>
+			<integer name="height" value="1024"/>
 			<integer name="specular_constraint" value="0"/>
-			<bool name="gamma_correction" value="false"/>
+			<bool name="gamma_correction" value="true"/>
 			<bool name="bidirectional" value="false"/>
 			<float name="caustic_scaling" value="1.5"/>
 		</film>

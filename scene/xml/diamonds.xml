@@ -10,19 +10,20 @@
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="32"/>
+        <integer name="max_bounce" value="7"/>
 		<integer name="cache_level" value="4"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
-			<lookat target="-8.781343, 8.226387, -6.032082" origin="-9.415852, 8.876163, -6.450638" up="0.488632, 0.756808, 0.434144"/>
+			<lookat target="-7.087669, 7.545001, -7.431572" origin="-7.603191, 8.223796, -7.954521" up="0.426074, 0.732565, 0.530857"/>
+			<!-- <lookat target="2.285317, 10.999553, -8.233936" origin="2.506608, 11.808423, -8.778692" up="-0.223855, 0.585822, 0.778911"/> -->
 		</transform>
 
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
-			<bool name="gamma_correction" value="false"/>
+			<bool name="gamma_correction" value="true"/>
 			<integer name="specular_constraint" value="0"/>
 		</film>
 	</sensor>
@@ -38,9 +39,20 @@
 		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
 	</brdf>
 
+	<brdf type="dispersion" id="sapphires">
+		<rgb name="type" value="Sapphire"/>
+		<rgb name="k_s" value="#1f62cf"/>
+	</brdf>
+
 	<brdf type="det-refraction" id="glass">
 		<rgb name="k_d" value="2.4"/>
 		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+	<brdf type="det-refraction" id="glass-blue">
+		<rgb name="k_d" value="1.75"/>
+		<rgb name="k_s" value="#1f62cf"/>
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
@@ -52,7 +64,7 @@
 	</brdf>
 
 	<emitter type="envmap" id="envmap">
-		<float name="scaler" value="1.0"/>		
+		<float name="scaler" value="1.2"/>		
 		<float name="azimuth" value="0"/>			
 		<float name="zenith" value="90"/>			
 		<ref type="texture" id="envmap"/>
@@ -60,7 +72,7 @@
 
 	<emitter type="area" id="area">
 		<rgb name="emission" value="1, 1, 1"/>
-		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="10.0"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -71,7 +83,12 @@
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/diamonds/diamonds.obj"/>
-		<ref type="material" id="glass"/>
+		<ref type="material" id="diamond"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/diamonds/sapphires.obj"/>
+		<ref type="material" id="sapphires"/>
 	</shape>
 
 	<shape type="obj">

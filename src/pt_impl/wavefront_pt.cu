@@ -400,7 +400,7 @@ CPT_KERNEL void miss_shader(
     if (block_index < num_valid) {
         uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
-        Vec4 thp        = payloads.thp(px, py);
+        Vec4 thp        = payloads.thp(px, py), old_thp = thp;
         Sampler sampler = payloads.get_sampler(px, py);
         // using BVH enables the usage of RR, since there is no within-loop synchronization
         float max_value = thp.max_elem_3d();
@@ -409,9 +409,14 @@ CPT_KERNEL void miss_shader(
             max_value = (sampler.next1D() > max_value || max_value < THP_EPS) ? 0 : max_value;
             thp *= max_value == 0 ? 0 : (1.f / max_value);
         }
-        if ((!payloads.is_hit(px, py)) || max_value <= 1e-5f) {
-            // TODO: process no-hit ray, environment map lighting
-            
+
+        Vec3 ray_d;
+        bool is_active = true;
+        payloads.get_ray_d(px, py, ray_d, is_active);
+        if (is_active && !payloads.is_hit(px, py)) {
+            payloads.L(px, py) += old_thp * c_emitter[envmap_id]->eval_le(&ray_d);
+            payloads.set_active(px, py, false);
+        } else if (max_value <= 1e-5f) {
             payloads.set_active(px, py, false);
         }
         payloads.thp(px, py) = thp;

@@ -22,7 +22,7 @@
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
-			<bool name="gamma_correction" value="false"/>
+			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>
 
@@ -64,6 +64,7 @@
 	</brdf>
 
 	<emitter type="area" id="area">
+		<!-- <float name="angle" value="10"/> -->
 		<rgb name="emission" value="1, 1, 1"/>
 		<rgb name="scaler" value="48.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>

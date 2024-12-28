@@ -34,7 +34,7 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
-#define NO_STREAM_COMPACTION
+// #define NO_STREAM_COMPACTION
 // #define STABLE_PARTITION
 #define NO_RAY_SORTING
 // #define FUSED_MISS_SHADER
@@ -81,6 +81,10 @@ public:
         CPT_CPU_GPU_INLINE void set_active(bool v) noexcept {
             ray_tag &= 0xefffffff;      // clear bit 28
             ray_tag |= uint32_t(v) << 28;
+        }
+
+        CPT_CPU_GPU_INLINE bool is_active() const noexcept {
+            return (ray_tag & 0x10000000) > 0;
         }
 
         CPT_CPU_GPU_INLINE bool is_hit() const noexcept {
@@ -144,8 +148,11 @@ public:
         return ray_ds[index].is_hit();
     }
 
-    CPT_CPU_GPU_INLINE bool is_active(int col, int row) const noexcept {
-        return (ray_ds[col + row * _width].ray_tag & 0x10000000) > 0;
+    CPT_CPU_GPU_INLINE void get_ray_d(int col, int row, Vec3& dir, bool& is_active) const noexcept {
+        int index = col + row * _width;
+        auto temp = ray_ds[index];
+        dir = temp.d;
+        is_active = temp.is_active();
     }
 
     CPT_CPU_GPU_INLINE Sampler get_sampler(int col, int row) const { 

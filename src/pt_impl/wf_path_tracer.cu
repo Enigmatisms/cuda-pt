@@ -145,7 +145,6 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
             for (int bounce = 0; bounce < max_depth; bounce ++) {
                 
-                // TODO: we can implement a RR shader here.
                 // step3: miss shader (ray inactive)
 #ifndef FUSED_MISS_SHADER
                 miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(

@@ -111,12 +111,14 @@ public:
  * TODO: Object <---> mesh relationship is not fully implemented
 */
 class AreaSource: public Emitter {
+private:
+    cudaTextureObject_t emission_tex;
 public:
     CPT_CPU_GPU AreaSource() {}
 
     CONDITION_TEMPLATE(VType, Vec4)
-    CPT_CPU_GPU AreaSource(VType&& le, int obj_ref, bool is_sphere = false): 
-        Emitter(std::forward<VType>(le), obj_ref, is_sphere) {}
+    CPT_CPU_GPU AreaSource(VType&& le, int obj_ref, bool is_sphere = false, cudaTextureObject_t _emission_tex = 0): 
+        Emitter(std::forward<VType>(le), obj_ref, is_sphere), emission_tex(emission_tex) {}
 
     CPT_GPU_INLINE Vec3 sample(
         const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, 
@@ -174,6 +176,78 @@ public:
 
     CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
         return select(this->Le, Vec4(0, 0, 0, 1), inci_dir->dot(*normal) < 0);
+    }
+};
+
+// directed sources, shoots onl
+class AreaSpotSource: public Emitter {
+public:
+    cudaTextureObject_t emission_tex;
+    float cos_val;
+public:
+    CPT_CPU_GPU AreaSpotSource() {}
+
+    CONDITION_TEMPLATE(VType, Vec4)
+    CPT_CPU_GPU AreaSpotSource(VType&& le, float _cos_val, int obj_ref, bool is_sphere = false, cudaTextureObject_t _emission_tex = 0): 
+        Emitter(std::forward<VType>(le), obj_ref, is_sphere), cos_val(_cos_val), emission_tex(emission_tex) {}
+
+    // Can reduce the code length by reusing, the code in this class comes from AreaSource
+    CPT_GPU_INLINE Vec3 sample(
+        const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, 
+        Vec2&& uv, const PrecomputedArray& prims, const ArrayType<Vec3>& norms, int sampled_index
+    ) const override {
+        float sample_sum = uv.x() + uv.y();
+        uv = select(uv, -uv + 1.f, sample_sum < 1.f);
+        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y();
+        Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
+        Vec3 normal = \
+            (norms.x(sampled_index) * diff_x * diff_y + \
+             norms.y(sampled_index) * uv.x() * diff_y + \
+             norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
+        sampled = select(
+            sampled, prims.get_sphere_point(sphere_normal, sampled_index),
+            is_sphere == false
+        );
+        normal = select(normal, sphere_normal, is_sphere == false);
+        // normal needs special calculation
+        sphere_normal = hit_pos - sampled;
+        pdf *= sphere_normal.length2();
+        sphere_normal.normalize();
+        sample_sum = normal.dot(sphere_normal);           // dot_light
+        pdf *= float(sample_sum > 0) / sample_sum;
+        le = Le * (sample_sum > cos_val);
+        return sampled;
+    }
+
+    CPT_GPU_INLINE Vec4 sample_le(
+        Vec3& ray_o, Vec3& ray_d, float& pdf, 
+        Vec2&& uv, const PrecomputedArray& prims, const ArrayType<Vec3>& norms, int sampled_index,
+        float extra_u, float extra_v
+    ) const override {
+        float sample_sum = uv.x() + uv.y();
+        uv = select(uv, -uv + 1.f, sample_sum < 1.f);
+        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y(), pdf_dir = 1;
+        Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
+        Vec3 normal = \
+           (norms.x(sampled_index) * diff_x * diff_y + \
+            norms.y(sampled_index) * uv.x() * diff_y + \
+            norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
+        normal = select(normal, sphere_normal, is_sphere == false);
+        ray_o = select(
+            sampled, prims.get_sphere_point(sphere_normal, sampled_index),
+            is_sphere == false
+        ) + normal * EPSILON;
+        ray_d  = sample_uniform_cone(Vec2(extra_u, extra_v), cos_val, pdf_dir);
+        ray_d  = delocalize_rotate(normal, ray_d);
+        // input pdf is already the pdf of position (1 / area)
+        pdf   *= pdf_dir;
+        return Le * fabsf(normal.dot(ray_d));
+    }
+
+    CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
+        return select(this->Le, Vec4(0, 0, 0, 1), inci_dir->dot(*normal) < -cos_val);
     }
 };
 

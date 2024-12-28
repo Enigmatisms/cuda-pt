@@ -330,7 +330,7 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
             } else if (info.type == BSDFType::Specular){
                 local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
             } else if (info.type == BSDFType::Dispersion) {
-                local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_g.x());
+                local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
                 local_update |= draw_selection_menu(DISPERSION_NAMES, "##" + info.name + "-type", "Dispersion Type", info.bsdf.mtype);
             }
             info.updated = local_update;

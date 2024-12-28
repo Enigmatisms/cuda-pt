@@ -22,7 +22,7 @@
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
-			<bool name="gamma_correction" value="false"/>
+			<bool name="gamma_correction" value="true"/>
 			<integer name="specular_constraint" value="-1"/>
 		</film>
 	</sensor>

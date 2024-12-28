@@ -422,7 +422,7 @@ CPT_GPU float DispersionBSDF::pdf(const Interaction& it, const Vec3& out, const 
     float out_pdf = 0;
     if ((in_pos ^ out_pos) == false) {          // refraction
         float wavelength = 0;
-        out_pdf = get_wavelength_from(incid, out, normal, wavelength) ? 1 : 0;
+        out_pdf = get_wavelength_from(incid, out, normal, wavelength);
         float eta = get_ior(wavelength), cos_theta_i = incid.dot(normal),
               F = FresnelTerms::fresnel_simple(eta, -cos_theta_i);      // F is the reflected part
         out_pdf *= (1.f - F) / DispersionBSDF::WL_RANGE;
@@ -434,12 +434,12 @@ CPT_GPU Vec4 DispersionBSDF::eval(const Interaction& it, const Vec3& out, const 
     const Vec3 normal = c_textures.eval_normal(it, index);
     float wavelength = 0; 
     Vec4 result(0, 1);
-    if (get_wavelength_from(in, out, normal, wavelength)) {
-        const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
-        const Vec4 ks = c_textures.eval(spec_tex, it.uv_coord, k_s);
-        float eta = get_ior(wavelength);
-        result = TranslucentBSDF::eval_impl(normal, out, in, ks, eta, is_radiance) * wavelength_to_RGB(wavelength);
-    }
+    bool valid = get_wavelength_from(in, out, normal, wavelength);
+    const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
+    const Vec4 ks = c_textures.eval(spec_tex, it.uv_coord, k_s);
+    float eta = valid ? get_ior(wavelength) : k_d.x();
+    result = TranslucentBSDF::eval_impl(normal, out, in, ks, eta, is_radiance);
+    result *= valid ? wavelength_to_RGB(wavelength) : Vec4(1);
     return result;
 }
 

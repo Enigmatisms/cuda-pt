@@ -16,13 +16,22 @@ CPT_KERNEL void create_point_source(Emitter* &dst, Vec4 le, Vec3 pos) {
 
 CPT_KERNEL void create_area_source(Emitter* &dst, Vec4 le, int obj_ref, bool is_sphere, cudaTextureObject_t obj) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        dst = new AreaSource(std::move(le), obj_ref, is_sphere);
+        dst = new AreaSource(std::move(le), obj_ref, is_sphere, obj);
+    }
+}
+
+CPT_KERNEL void create_area_spot_source(Emitter* &dst, Vec4 le, float cos_val, int obj_ref, bool is_sphere, cudaTextureObject_t obj) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        dst = new AreaSpotSource(std::move(le), cos_val, obj_ref, is_sphere, obj);
     }
 }
 
 CPT_KERNEL void create_envmap_source(Emitter* &dst, cudaTextureObject_t obj, float scaler, float azimuth, float zenith) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         dst = new EnvMapEmitter(obj, scaler, azimuth, zenith);
+        dst->set_func1(scaler);
+        dst->set_func2(azimuth);
+        dst->set_func3(zenith);
     }
 }
 
