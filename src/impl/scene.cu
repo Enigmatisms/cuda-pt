@@ -938,7 +938,10 @@ void Scene::print() const noexcept {
     std::cout << std::endl;
     std::cout << "\tConfig: width:\t\t" << config.width << std::endl;
     std::cout << "\tConfig: height:\t\t" << config.height << std::endl;
-    std::cout << "\tConfig: max depth:\t" << config.max_depth << std::endl;
+    std::cout << "\tConfig: max depth:\t" << config.md.max_depth << std::endl;
+    std::cout << "\tConfig: max diffuse:\t" << config.md.max_diffuse << std::endl;
+    std::cout << "\tConfig: max specular:\t" << config.md.max_specular << std::endl;
+    std::cout << "\tConfig: max transmit:\t" << config.md.max_tranmit << std::endl;
     std::cout << "\tConfig: SPP:\t\t" << config.spp << std::endl;
     std::cout << "\tConfig: Gamma corr:\t" << config.gamma_correction << std::endl;
     std::cout << "\tConfig: Spec Cons:\t" << config.spec_constraint << std::endl;

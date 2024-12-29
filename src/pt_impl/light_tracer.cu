@@ -13,8 +13,8 @@ static constexpr int SHFL_THREAD_X = 4;     // blockDim.x: 1 << SHFL_THREAD_X, b
 static constexpr int SHFL_THREAD_Y = 3;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
 CPT_CPU std::vector<uint8_t> LightTracer::render(
+    const MaxDepthParams& md,
     int num_iter,
-    int max_depth,
     bool gamma_correction
 ) {
     printf("Rendering starts.\n");
@@ -25,17 +25,17 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
         if (bidirectional) {
             render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
                 *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
-                bvh_leaves, nodes, _cached_nodes, image, 
+                bvh_leaves, nodes, _cached_nodes, image, md,
                 output_buffer, num_prims, num_objs, num_emitter, 
-                accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt
+                accum_cnt * SEED_SCALER, num_nodes, accum_cnt
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         render_lt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
             *camera, verts, norms, uvs, obj_info, aabbs,
             emitter_prims, bvh_leaves, nodes, _cached_nodes, 
-            image, nullptr, num_prims, num_objs, num_emitter, 
-            i * SEED_SCALER, max_depth, num_nodes, spec_constraint
+            image, md, nullptr, num_prims, num_objs, num_emitter, 
+            i * SEED_SCALER, num_nodes, spec_constraint
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
@@ -45,7 +45,7 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
 }
 
 CPT_CPU void LightTracer::render_online(
-    int max_depth,
+    const MaxDepthParams& md,
     bool gamma_corr
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
@@ -56,18 +56,18 @@ CPT_CPU void LightTracer::render_online(
     if (bidirectional) {
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
             *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
-            bvh_leaves, nodes, _cached_nodes, image, 
+            bvh_leaves, nodes, _cached_nodes, image, md,
             output_buffer, num_prims, num_objs, num_emitter, 
-            accum_cnt * SEED_SCALER, max_depth, num_nodes, accum_cnt, num_cache, false
+            accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, false
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
     render_lt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
         *camera, verts, norms, uvs, obj_info, aabbs, emitter_prims,
-        bvh_leaves, nodes, _cached_nodes, image, 
+        bvh_leaves, nodes, _cached_nodes, image, md, 
         output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER, max_depth, num_nodes, 
-        accum_cnt, num_cache, spec_constraint, caustic_scaling, gamma_corr
+        accum_cnt * SEED_SCALER, num_nodes, accum_cnt, 
+        num_cache, spec_constraint, caustic_scaling, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }

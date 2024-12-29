@@ -43,12 +43,12 @@ CPT_KERNEL void render_lt_kernel(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
@@ -92,7 +92,7 @@ CPT_KERNEL void render_lt_kernel(
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
-    for (int b = 0; b < max_depth; b++) {
+    for (int b = 0; b < md_params.max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
@@ -198,12 +198,12 @@ template CPT_KERNEL void render_lt_kernel<true>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
@@ -224,12 +224,12 @@ template CPT_KERNEL void render_lt_kernel<false>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,

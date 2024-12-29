@@ -33,13 +33,13 @@ public:
         caustic_scaling(caustics_scale) {}
 
     virtual CPT_CPU std::vector<uint8_t> render(
+        const MaxDepthParams& md,
         int num_iter = 64,
-        int max_depth = 4,
         bool gamma_correction = true
     ) override;
 
     virtual CPT_CPU void render_online(
-        int max_depth = 4,
+        const MaxDepthParams& md,
         bool gamma_corr = false
     ) override;
 };

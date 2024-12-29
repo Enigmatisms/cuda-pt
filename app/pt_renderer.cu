@@ -3,7 +3,7 @@
 #include "renderer/wf_path_tracer.cuh"
 
 __constant__ Emitter* c_emitter[9];
-__constant__ BSDF*    c_material[32];
+__constant__ BSDF*    c_material[48];
 
 int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaFree(nullptr));       // initialize CUDA
@@ -51,8 +51,8 @@ int main(int argc, char** argv) {
     }
     renderer->update_camera(scene.cam);
 
-    printf("[RENDERER] Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.max_depth, scene.config.spp);
-    auto bytes_buffer = renderer->render(scene.config.spp, scene.config.max_depth, scene.config.gamma_correction);
+    printf("[RENDERER] Prepare to render the scene... [%d] bounces, [%d] SPP\n", scene.config.md.max_depth, scene.config.spp);
+    auto bytes_buffer = renderer->render(scene.config.md, scene.config.spp, scene.config.gamma_correction);
 
     std::string file_name = "render.png";
     if (!save_image(file_name, bytes_buffer, scene.config.width, scene.config.height, "png")) {

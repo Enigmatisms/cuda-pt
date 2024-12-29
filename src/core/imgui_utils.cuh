@@ -5,6 +5,7 @@
 
 #include <driver_types.h>
 #include <GLFW/glfw3.h>
+#include "core/max_depth.h"
 
 class DeviceCamera;
 class BSDFInfo;
@@ -14,7 +15,6 @@ namespace gui {
 using gl_uint = unsigned int;
 
 struct GUIParams {
-    int max_depth = 6;
     int compress_q = 90;
 
     float trans_speed = 0.1f;
@@ -92,6 +92,7 @@ void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
+    MaxDepthParams& md_params,
     GUIParams& params
 );
 

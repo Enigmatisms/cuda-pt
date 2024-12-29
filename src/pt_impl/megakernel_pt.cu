@@ -212,12 +212,12 @@ CPT_KERNEL void render_pt_kernel(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
@@ -230,7 +230,7 @@ CPT_KERNEL void render_pt_kernel(
     // step 1: generate ray
 
     // step 2: bouncing around the scene until the max depth is reached
-    int min_index = -1, object_id = 0;
+    int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
     extern __shared__ float4 s_cached[];
 #ifdef RENDERER_USE_BVH
@@ -252,7 +252,8 @@ CPT_KERNEL void render_pt_kernel(
     float emission_weight = 1.f;
     bool hit_emitter = false;
     
-    for (int b = 0; b < max_depth; b++) {
+    for (int b = 0; b < md_params.max_depth; b++) {
+        if ()
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
@@ -338,11 +339,19 @@ CPT_KERNEL void render_pt_kernel(
             ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe, material_id);
             ray.set_delta((BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0);
 
+
             if (radiance.numeric_err())
                 radiance.fill(0);
             
 #ifdef RENDERER_USE_BVH
-            // using BVH enables the usage of RR, since there is no within-loop synchronization
+            // using BVH enables breaking, since there is no within-loop synchronization
+            diff_b  += (BSDFFlag::BSDF_DIFFUSE  & sampled_lobe) > 0;
+            spec_b  += (BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0;
+            trans_b += (BSDFFlag::BSDF_TRANSMIT & sampled_lobe) > 0;
+            if (diff_b  >= md_params.max_diffuse  || 
+                spec_b  >= md_params.max_specular || 
+                trans_b >= md_params.max_tranmit
+            ) break;
             float max_value = throughput.max_elem_3d();
             if (b >= RR_BOUNCE && max_value < RR_THRESHOLD) {
                 if (sampler.next1D() > max_value || max_value < THP_EPS) break;
@@ -382,12 +391,12 @@ template CPT_KERNEL void render_pt_kernel<true>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
@@ -407,12 +416,12 @@ template CPT_KERNEL void render_pt_kernel<false>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,

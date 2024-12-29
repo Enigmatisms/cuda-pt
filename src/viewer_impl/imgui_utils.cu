@@ -236,6 +236,17 @@ static bool draw_coupled_slider_input(std::string id, std::string name, float& v
     return updated;
 }
 
+static bool draw_integer_input(std::string id, std::string name, int& val, int min_val = 1, int max_val = 64, float width = 100.f) {
+    bool updated = false;
+    ImGui::Text(name.c_str());
+    ImGui::SameLine();
+    ImGui::PushItemWidth(width);
+    updated |= ImGui::InputInt("##" + id, &val, min_val, max_val);
+    ImGui::PopItemWidth();
+    ImGui::Separator();
+    return updated;
+}
+
 template <int N>
 static bool draw_selection_menu(
     const std::array<const char*, N>& picks,
@@ -345,6 +356,7 @@ void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
+    MaxDepthParams& md_params,
     GUIParams& params
 ) {
     // Begin the main menu bar at the top of the window
@@ -387,12 +399,10 @@ void render_settings_interface(
             }
 
             if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                ImGui::Text("Max bounces");
-                ImGui::SameLine();
-                ImGui::PushItemWidth(100.0f);
-                params.renderer_update |= ImGui::InputInt("##max_depth", &params.max_depth, 1, 128); ImGui::SameLine();
-                ImGui::PopItemWidth();
-                ImGui::Separator();
+                params.renderer_update |= draw_integer_input("max_depth", "Max Depth", md_params.max_depth);
+                params.renderer_update |= draw_integer_input("max_diff",  "Max Diffuse", md_params.max_diffuse);
+                params.renderer_update |= draw_integer_input("max_spec",  "Max Specular", md_params.max_specular);
+                params.renderer_update |= draw_integer_input("max_trans", "Max Transmit", md_params.max_tranmit);
                 ImGui::Checkbox("Output PNG", &params.output_png);
                 if (!params.output_png) {
                     ImGui::PushItemWidth(120.0f);

@@ -12,7 +12,7 @@
 #include "renderer/wf_path_tracer.cuh"
 
 __constant__ Emitter* c_emitter[9];
-__constant__ BSDF*    c_material[32];
+__constant__ BSDF*    c_material[48];
 
 std::string get_current_time() {
     // Get the current time as a time_point
@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
             break;
         }
         gui::render_settings_interface(
-            *scene.cam, scene.emitter_props, scene.bsdf_infos, params
+            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.md, params
         );
         if (!io.WantCaptureMouse) {        // no sub window (setting window or main menu) is focused
             params.camera_update |= gui::mouse_camera_update(*scene.cam, params.rot_sensitivity);
@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
         }
         if (params.buffer_flush_update())
             renderer->reset_out_buffer();
-        renderer->render_online(params.max_depth, params.gamma_corr);
+        renderer->render_online(scene.config.md, params.gamma_corr);
         
         if (params.capture) {
             auto fbuffer = renderer->get_image_buffer(params.gamma_corr);

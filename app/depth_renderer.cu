@@ -15,7 +15,8 @@ int main(int argc, char** argv) {
     Scene scene(xml_path);
 
     DepthTracer dtracer(scene);
-    auto bytes_buffer = dtracer.render(16);
+    MaxDepthParams md;
+    auto bytes_buffer = dtracer.render(md);
 
     std::string file_name = "depth-render.png";
     if (!save_image(file_name, bytes_buffer, scene.config.width, scene.config.height, "png")) {

@@ -23,7 +23,7 @@ WavefrontPathTracer::WavefrontPathTracer(const Scene& scene):
 }
 
 CPT_CPU void WavefrontPathTracer::render_online(
-    int max_depth,
+    const MaxDepthParams& md,
     bool gamma_corr
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
@@ -46,7 +46,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
             patch_y, accum_cnt, stream_id, image.w(), num_nodes, num_cache);
         int num_valid_ray = TOTAL_RAY;
         auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
-        for (int bounce = 0; bounce < max_depth; bounce ++) {
+        for (int bounce = 0; bounce < md.max_depth; bounce ++) {
             
             // step3: miss shader (ray inactive and Russian Roulette)
 #ifndef FUSED_MISS_SHADER
@@ -93,7 +93,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
             );
 
             // step2: closesthit shader
-            if (bounce + 1 >= max_depth) break;
+            if (bounce + 1 >= md.max_depth) break;
             closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                 payload_buffer, verts, norms, uvs, obj_info, aabbs, 
                 bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, 
@@ -110,8 +110,8 @@ CPT_CPU void WavefrontPathTracer::render_online(
 }
 
 CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
+    const MaxDepthParams& md,
     int num_iter,
-    int max_depth,
     bool gamma_correction
 ) {
     TicToc _timer("render_pt_kernel()", num_iter);
@@ -143,7 +143,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
                 patch_y, i, stream_id, image.w(), num_nodes, num_cache);
             int num_valid_ray = TOTAL_RAY;
             auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
-            for (int bounce = 0; bounce < max_depth; bounce ++) {
+            for (int bounce = 0; bounce < md.max_depth; bounce ++) {
                 
                 // step3: miss shader (ray inactive)
 #ifndef FUSED_MISS_SHADER
@@ -190,7 +190,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
                 );
 
                 // step2: closesthit shader
-                if (bounce + 1 >= max_depth) break;
+                if (bounce + 1 >= md.max_depth) break;
                 closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                     payload_buffer, verts, norms, uvs, obj_info, aabbs, 
                     bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, 
