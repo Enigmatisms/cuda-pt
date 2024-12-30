@@ -244,19 +244,19 @@ CPT_CPU_GPU PlasticBSDF::PlasticBSDF(
 
 CPT_GPU float PlasticBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const {
     const Vec3 normal = c_textures.eval_normal(it, index);
-    float dot_wo = out.dot(normal), dot_wi = in.dot(normal),
-          Fi = FresnelTerms::fresnel_simple(eta, -dot_wi),
+    float dot_wo = fabs(out.dot(normal)), dot_wi = fabs(in.dot(normal)),
+          Fi = FresnelTerms::fresnel_simple(eta, dot_wi),
           specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
     Vec3 refdir = -reflection(in, normal);
     // 'refdir.dot(out) >= 1.f - THP_EPS' means reflected incident ray is very close to 'out'
     float pdf = refdir.dot(out) < 1.f - THP_EPS ? M_1_Pi * dot_wo * (1.f - specular_prob) : specular_prob;
-    return dot_wo > 0 && dot_wi < 0 ? pdf : 0;
+    return pdf;
 }
 
 CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi, bool is_radiance) const {
     const Vec3 normal = c_textures.eval_normal(it, index);
-    float dot_wo = out.dot(normal), dot_wi = in.dot(normal),
-          Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_wi)),
+    float dot_wo = fabsf(out.dot(normal)), dot_wi = fabsf(in.dot(normal)),
+          Fi = FresnelTerms::fresnel_simple(eta, dot_wi),
           Fo = FresnelTerms::fresnel_simple(eta, dot_wo);
     Vec3 refdir = -reflection(in, normal);
 
@@ -267,7 +267,7 @@ CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec
     Vec4 brdf = (M_1_Pi * (1.0f - Fi) * (1.0f - Fo) * eta * eta) * dot_wo *
             (k_diff / (- k_diff * precomp_diff_f + 1.f)) * 
             (c_textures.eval(siga_tex, it.uv_coord, k_g) * 
-            thickness * (-1.0f / dot_wo + 1.0f / dot_wi)).exp_xyz();
+            thickness * (-1.0f / dot_wo - 1.0f / dot_wi)).exp_xyz();
     brdf += refdir.dot(out) < 1.f - THP_EPS ? Vec4(0) : Vec4(Fi, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
 
     return brdf;
@@ -283,16 +283,14 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
     bool is_radiance
 ) const {
     const Vec3 normal = c_textures.eval_normal(it, index);
-    float dot_indir = normal.dot(indir);
-    throughput = dot_indir < 0 ? throughput : Vec4(0, 1);
-
-    float Fi = FresnelTerms::fresnel_simple(eta, fabsf(dot_indir)),
+    float dot_indir = fabsf(normal.dot(indir));
+    float Fi = FresnelTerms::fresnel_simple(eta, dot_indir),
           specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
 
     Vec3 outdir;
 
     if (sp.next1D() < specular_prob) {      // coating specular reflection
-        outdir = -reflection(indir, normal, dot_indir);
+        outdir = -reflection(indir, normal);
         pdf = specular_prob;
         const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
         throughput *= Vec4(Fi / specular_prob, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
@@ -309,7 +307,7 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
         // use fmaxf instead of (1-Fi) * (1-Fo), to make the result looks brighter
         Vec4 local_thp = ((1.0f - Fi) * (1.0f - Fo) * eta * eta) * (k_diff / (-k_diff * precomp_diff_f + 1.f)) * 
             (c_textures.eval(siga_tex, it.uv_coord, k_g) * 
-            thickness * (-1.0f / local_dir.z() + 1.0f / dot_indir)).exp_xyz();
+            thickness * (-1.0f / local_dir.z() - 1.0f / dot_indir)).exp_xyz();
 
         pdf = M_1_Pi * local_dir.z() * (1.0f - specular_prob);
         throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;

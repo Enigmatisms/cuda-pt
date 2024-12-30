@@ -253,7 +253,6 @@ CPT_KERNEL void render_pt_kernel(
     bool hit_emitter = false;
     
     for (int b = 0; b < md_params.max_depth; b++) {
-        if ()
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================

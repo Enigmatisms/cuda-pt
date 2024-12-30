@@ -77,7 +77,7 @@ CPT_CPU_GPU_INLINE auto select(T1&& v_true, T2&& v_false, bool predicate) {
 }
 
 CPT_CPU_INLINE int to_int_linear(float x) { return int(std::clamp(x, 0.f, 1.f) * 255); }
-CPT_CPU_INLINE int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.2) * 255 + .5); }
+CPT_CPU_INLINE int to_int(float x) { return int(powf(std::clamp(x, 0.f, 1.f), 1 / 2.1) * 255 + .5); }
 
 CPT_CPU_GPU_INLINE float roughness_to_alpha(float roughness) {
     roughness = fmaxf(roughness, 1e-3f);

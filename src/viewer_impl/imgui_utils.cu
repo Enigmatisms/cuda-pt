@@ -241,7 +241,7 @@ static bool draw_integer_input(std::string id, std::string name, int& val, int m
     ImGui::Text(name.c_str());
     ImGui::SameLine();
     ImGui::PushItemWidth(width);
-    updated |= ImGui::InputInt("##" + id, &val, min_val, max_val);
+    updated |= ImGui::InputInt(("##" + id).c_str(), &val, min_val, max_val);
     ImGui::PopItemWidth();
     ImGui::Separator();
     return updated;

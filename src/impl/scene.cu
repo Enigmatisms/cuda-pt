@@ -360,7 +360,6 @@ void parseEmitter(
             throw std::runtime_error("Bound primitive is not specified for area spot source");
         }
         bool spherical_bound = element->Attribute("value") == std::string("sphere");
-        printf("Cos val: %f\n", cos_val);
         create_area_spot_source<<<1, 1>>>(emitters[index], emission * scaler, cos_val, emitter_obj_map[id], spherical_bound);
     } else if (type == "area") {
         element = emitter_elem->FirstChildElement("string");

@@ -8,33 +8,58 @@
 	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
-		<float name="fov" value="32"/>
+		<!-- <float name="fov" value="32"/> -->
+		<float name="fov" value="48"/>
         <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="8"/>
+        <integer name="max_bounce" value="16"/>
+        <integer name="max_diffuse" value="7"/>
+        <integer name="max_specular" value="12"/>
+        <integer name="max_transmit" value="12"/>
+
 		<integer name="cache_level" value="5"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
-			<lookat target="3.284629, 1.281576, 6.144281" origin="3.168463, 1.244684, 7.136826" up="-0.004290, 0.999319, 0.036641"/>
+			<!-- <lookat target="3.214929, 1.259441, 6.739809" origin="3.098763, 1.222549, 7.732354" up="-0.004290, 0.999319, 0.036641"/> -->
+			<!-- <lookat target="3.205850, 1.401939, 3.542233" origin="2.971070, 1.398597, 4.514276" up="-0.000784, 0.999994, 0.003249"/> -->
+			<lookat target="4.386742, 1.350119, 0.887063" origin="4.053925, 1.291838, 1.828252" up="-0.019840, 0.998300, 0.054801"/>
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="960"/>
-			<integer name="height" value="640"/>
+			<integer name="width" value="1920"/>
+			<integer name="height" value="1280"/>
 			<bool name="gamma_correction" value="true"/>
 			<integer name="specular_constraint" value="-1"/>
 		</film>
 	</sensor>
 
-	<brdf type="lambertian" id="box">
-		<rgb name="k_d" value="#BCBCBC"/>
+	<brdf type="specular" id="mirror">
+		<rgb name="k_d" value="1.0"/>
 		<rgb name="k_g" value="1.0"/>
-		<rgb name="k_s" value="0.0"/>
+		<rgb name="k_s" value="#DADADA"/>
 	</brdf>
 
 	<brdf type="lambertian" id="white">
 		<rgb name="k_d" value="#BDBDBD"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+    <brdf type="lambertian" id="signs">
+		<rgb name="k_d" value="#FAFAFA"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+    <brdf type="lambertian" id="branches">
+		<rgb name="k_d" value="#211202"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+    <brdf type="lambertian" id="dark-abs">
+		<rgb name="k_d" value="#121212"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
@@ -49,12 +74,30 @@
 	</brdf>
 
     <brdf type="plastic" id="leaf">
-		<rgb name="k_d" value="#6db33f"/>
+		<rgb name="k_d" value="#22421a"/>
 		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
 		<rgb name="sigma_a" value="0.2, 0.2, 0.2"/>
 		<float name="trans_scaler" value="1"/>
 		<float name="thickness" value="1"/>
 		<float name="ior" value="1.2"/>
+	</brdf>
+
+    <brdf type="plastic" id="green-apples">
+		<rgb name="k_d" value="#76CD26"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.2, 0.2, 0.2"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.2"/>
+	</brdf>
+
+    <brdf type="plastic" id="pickle">
+		<rgb name="k_d" value="#5c7542"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.2, 0.2, 0.2"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.1"/>
 	</brdf>
 
     <brdf type="plastic" id="black-plastic">
@@ -73,6 +116,71 @@
 		<float name="trans_scaler" value="1"/>
 		<float name="thickness" value="1"/>
 		<float name="ior" value="1.5"/>
+	</brdf>
+
+    <brdf type="plastic" id="blinds">
+		<rgb name="k_d" value="#FFFFF0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.3"/>
+
+        <ref type="texture" id="wood-blind"/>
+	</brdf>
+
+    <brdf type="plastic" id="floor">
+		<rgb name="k_d" value="#FFFFF0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.4"/>
+
+        <ref type="texture" id="wood-floor"/>
+	</brdf>
+
+    <brdf type="plastic" id="wood-table">
+		<rgb name="k_d" value="#FFFFF0"/>
+		<rgb name="k_s" value="0.8"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.3"/>
+
+        <ref type="texture" id="wood-table"/>
+	</brdf>
+
+    <brdf type="plastic" id="wood-table-inner">
+		<rgb name="k_d" value="#FFFFF0"/>
+		<rgb name="k_s" value="0.8"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.3"/>
+
+        <ref type="texture" id="wood-table-inner"/>
+	</brdf>
+
+    <brdf type="plastic" id="table-top">
+		<rgb name="k_d" value="#ec2d01"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.2, 0.2, 0.2"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.4"/>
+
+        <ref type="texture" id="marble"/>
+	</brdf>
+
+    <brdf type="lambertian" id="fridge-led">
+		<rgb name="k_d" value="#F3E9D5"/>
+		<ref type="texture" id="fridge-led"/>
+	</brdf>
+
+    <brdf type="lambertian" id="fridge-sign">
+		<rgb name="k_d" value="#F3E9D5"/>
+		<ref type="texture" id="fridge-sign"/>
 	</brdf>
 
     <brdf type="plastic" id="book">
@@ -97,6 +205,7 @@
 		<rgb name="k_d" value="#F3E9D5"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
+        <ref type="texture" id="ceiling"/>
 	</brdf>
 
     <brdf type="plastic" id="varnish">
@@ -119,7 +228,7 @@
 
 	<brdf type="det-refraction" id="glass">
 		<rgb name="k_d" value="1.6"/>
-		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
+		<rgb name="k_s" value="0.98, 0.98, 0.98"/>
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
@@ -134,7 +243,43 @@
 		<rgb name="k_g" value="0.1"/>
 		<float name="roughness_x" value="0.05"/>
 		<float name="roughness_y" value="0.05"/>
+	</brdf>
+
+    <brdf type="conductor-ggx" id="lamp">
+		<string name="conductor" value="Na"/>
+		<rgb name="k_g" value="0.1"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+	</brdf>
+
+    <brdf type="conductor-ggx" id="seat-bone">
+		<string name="conductor" value="Al"/>
 		<rgb name="k_g" value="1"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+	</brdf>
+
+    <brdf type="conductor-ggx" id="sink">
+		<string name="conductor" value="Cr"/>
+		<rgb name="k_g" value="0.15"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+	</brdf>
+
+    <brdf type="conductor-ggx" id="seat">
+		<string name="conductor" value="Cu"/>
+		<rgb name="k_g" value="1"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+
+		<ref type="texture" id="leather"/>
+	</brdf>
+
+    <brdf type="conductor-ggx" id="white-shells">
+		<string name="conductor" value="Ir"/>
+		<rgb name="k_g" value="1"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
 	</brdf>
 
     <brdf type="conductor-ggx" id="bright-steel">
@@ -153,28 +298,34 @@
 	</brdf>
 
 	<emitter type="envmap" id="env">
-		<float name="scaler" value="2"/>		
-		<float name="azimuth" value="0"/>			
+		<float name="scaler" value="2.5"/>		
+		<float name="azimuth" value="12"/>			
 		<float name="zenith" value="90"/>			
 		<ref type="texture" id="envmap"/>
 	</emitter>
 
     <emitter type="area-spot" id="sunlight">
-		<float name="angle" value="45"/>
+		<float name="angle" value="30"/>
 		<rgb name="emission" value="#ffeeaa"/>
-		<rgb name="scaler" value="40.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="60.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
     <emitter type="area" id="lamp">
-		<rgb name="emission" value="#ffee50"/>
-		<rgb name="scaler" value="40.0"/>
+		<rgb name="emission" value="#ffee80"/>
+		<rgb name="scaler" value="200.0"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
-    <emitter type="area" id="area">
+    <emitter type="area" id="area1">
 		<rgb name="emission" value="#ffc330"/>
-		<rgb name="scaler" value="10.0"/>
+		<rgb name="scaler" value="8.0"/>
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+    <emitter type="area" id="area2">
+		<rgb name="emission" value="#ffc330"/>
+		<rgb name="scaler" value="6.0"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -185,7 +336,12 @@
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/area-emitter.obj"/>
         <ref type="material" id="white"/>
-        <ref type="emitter" id="area"/>
+        <ref type="emitter" id="area1"/>
+    </shape>
+    <shape type="obj">
+        <string name="filename" value="../meshes/kitchen/area-emitter-2.obj"/>
+        <ref type="material" id="white"/>
+        <ref type="emitter" id="area2"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/black-plastic.obj"/>
@@ -193,7 +349,7 @@
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/blinds.obj"/>
-        <ref type="material" id="white-plastic"/>
+        <ref type="material" id="blinds"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/book-note.obj"/>
@@ -222,6 +378,7 @@
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/closets.obj"/>
         <ref type="material" id="varnish"/>
+        <ref type="texture" id="closet"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/coffee-maker.obj"/>
@@ -232,16 +389,20 @@
         <ref type="material" id="dark-glass"/>
     </shape>
     <shape type="obj">
+        <string name="filename" value="../meshes/kitchen/mirror-bottles.obj"/>
+        <ref type="material" id="mirror"/>
+    </shape>
+    <shape type="obj">
         <string name="filename" value="../meshes/kitchen/dark-steel.obj"/>
         <ref type="material" id="dark-steel"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/dining-table-frame.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="wood-table"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/dining-table-inner.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="wood-table-inner"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/direction-emitter.obj"/>
@@ -250,11 +411,11 @@
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/fridge-sign-box.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="fridge-led"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/fridge-sign-plane.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="fridge-sign"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/glass-closet.obj"/>
@@ -266,69 +427,124 @@
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/green-apple-bars.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="branches"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/green-apples.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="green-apples"/>
     </shape>
     <shape type="obj">
-        <string name="filename" value="../meshes/kitchen/lamp-emitter.obj"/>
+        <string name="filename" value="../meshes/kitchen/new-lamp-emitter.obj"/>
         <ref type="material" id="white"/>
         <ref type="emitter" id="lamp"/>
     </shape>
     <shape type="obj">
-        <string name="filename" value="../meshes/kitchen/lamp.obj"/>
-        <ref type="material" id="white"/>
+        <string name="filename" value="../meshes/kitchen/new-lamp.obj"/>
+        <ref type="material" id="lamp"/>
     </shape>
     <shape type="obj">
-        <string name="filename" value="../meshes/kitchen/leaves.obj"/>
+        <string name="filename" value="../meshes/kitchen/leaves-new.obj"/>
         <ref type="material" id="leaf"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/pickles.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="pickle"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/seat-bones.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="seat-bone"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/seats.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="seat"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/sinks.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="sink"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/table-top.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="table-top"/>
     </shape>
     <shape type="obj">
-        <string name="filename" value="../meshes/kitchen/walls.obj"/>
+        <string name="filename" value="../meshes/kitchen/wall-new.obj"/>
         <ref type="material" id="white-plastic"/>
     </shape>
     <shape type="obj">
+        <string name="filename" value="../meshes/kitchen/abs-panel.obj"/>
+        <ref type="material" id="dark-abs"/>
+    </shape>
+    <shape type="obj">
         <string name="filename" value="../meshes/kitchen/white-shells.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="white-shells"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/white-signs.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="signs"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/wood-floor.obj"/>
-        <ref type="material" id="white"/>
+        <ref type="material" id="floor"/>
     </shape>
 
 	<texture id="envmap">
-		<string name="diffuse" value="../textures/envmaps/day-sky-city.jpg"/>
+		<string name="diffuse" value="../textures/envmaps/day-field.jpg"/>
 	</texture>
 
     <texture id="bright-steel">
 		<string name="glossy" value="../textures/leftright-polish-highres/Metal009_2K-JPG_Color.jpg"/>
 		<string name="rough1" value="../textures/leftright-polish-highres/Metal009_2K-JPG_Roughness_Scratched.jpg"/>
 		<string name="normal" value="../textures/chip2-highres/Chip005_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+    <texture id="wood-blind">
+		<string name="diffuse" value="../textures/woodfloor4-highres/WoodFloor052_2K-JPG_Color.jpg"/>
+		<string name="ior" value="../textures/woodfloor4-highres/WoodFloor052_2K-JPG_Roughness.jpg"/>
+	</texture>
+
+    <texture id="wood-table">
+		<string name="diffuse" value="../textures/woodfloor-highres/WoodFloor039_2K-JPG_Color.jpg"/>
+		<string name="ior" value="../textures/woodfloor-highres/WoodFloor039_2K-JPG_Roughness.jpg"/>
+		<string name="normal" value="../textures/woodfloor-highres/WoodFloor039_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+    <texture id="wood-table-inner">
+		<string name="diffuse" value="../textures/woodfloor-highres/WoodFloor039_2K-JPG_Color_Dark.jpg"/>
+		<string name="ior" value="../textures/woodfloor-highres/WoodFloor039_2K-JPG_Roughness.jpg"/>
+		<string name="normal" value="../textures/woodfloor-highres/WoodFloor039_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+    <texture id="wood-floor">
+		<string name="diffuse" value="../textures/woodfloor2-highres/WoodFloor040_2K-JPG_Color.jpg"/>
+		<string name="ior" value="../textures/woodfloor2-highres/WoodFloor040_2K-JPG_Roughness.jpg"/>
+		<string name="normal" value="../textures/woodfloor2-highres/WoodFloor040_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+    <texture id="marble">
+		<string name="diffuse" value="../textures/marble-highres/Travertine009_2K-JPG_Color.jpg"/>
+		<string name="ior" value="../textures/marble-highres/Travertine009_2K-JPG_Roughness.jpg"/>
+		<string name="normal" value="../textures/marble-highres/Travertine009_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+    <texture id="fridge-led">
+		<string name="diffuse" value="../textures/others/fridge-LED.png"/>
+	</texture>
+
+    <texture id="fridge-sign">
+		<string name="diffuse" value="../textures/others/fridge-energy-sign.jpg"/>
+	</texture>
+
+    <texture id="leather">
+		<string name="glossy" value="../textures/leather/Leather037_1K-JPG_Color.jpg"/>
+		<string name="rough1" value="../textures/leather/Leather037_1K-JPG_Roughness.jpg"/>
+		<string name="normal" value="../textures/leather/Leather037_1K-JPG_NormalGL.jpg"/>
+	</texture>
+
+    <texture id="closet">
+		<string name="normal" value="../textures/leftright-polish-highres/Metal009_2K-JPG_NormalGL.jpg"/>
+	</texture>
+
+    <texture id="ceiling">
+		<string name="normal" value="../textures/wood3-highres/Wood021_2K-JPG_NormalGL.jpg"/>
 	</texture>
 </scene>
