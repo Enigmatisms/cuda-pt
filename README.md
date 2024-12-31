@@ -1,15 +1,16 @@
 # CUDA-PT
 ---
 
-Unidirectional Path Tracing implemented in **CUDA**, together with **C++17 traits** and is **templated** whenever possible.
-
-This will definitely be benchmarked with AdaPT and, well CPU based renders like pbrt-v3 (generic accelerators) and tungsten (Intel Embree).
+Software Path Tracing renderer implemented in **CUDA**, **from scratch**.
 
 
 ![sports-cars](./assets/cars.jpg)
 
 ![Malorian-Arms-3516](./assets/Malorian-Arms-3516.jpg)
 
+![modern-kitchen](./assets/modern-kitchen.jpg)
+
+![dispersion](./assets/dispersion.jpg)
 
 ##### Compile & Run
 
@@ -42,14 +43,8 @@ The scalability of this repo might be worse than that of AdaPT, but it will impr
 - [x] Megakernel unidirectional path tracing. Two major ray-scene intersection schemes are employed: shared-memory based AABB culling, and GPU BVH (see below).
 - [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is not as fast as megakernel PT due to the simplicity of the test scenes (and maybe, coalesced GMEM access problems, being working on this).
 - [x] GPU BVH: A stackless GPU surface area heuristic BVH. The current implementation is not optimal (since the ordering of left-child and right child is left unaccounted for, and there is no 'look-back' op), but fast enough. Profiling for this part is not every complete. 1D CUDA texture is used to store the BVH nodes, for better cache performance.
+- [x] CUDA pitched textures for environment maps, normal, roughness, index of refraction and albedo.
 - [x] Online modification of the scene. Check out the video down below.
-
-|Unidirectional PT|Unidirectional PT|
-|:--:|:--:|
-|![](assets/depth-render.png)|![](assets/whiskey.png)|
-|![](assets/render-balls.png)|![](assets/render-bvh-50.png)|
-
-
 
 <div align="center">
   <video src="https://github.com/user-attachments/assets/d805af5b-179a-4730-bebe-9307d0afd262"/>
@@ -85,22 +80,3 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 ### Misc
 
 This repo originated from: [w3ntao/smallpt-megakernel](https://github.com/w3ntao/smallpt-megakernel), but now it is very different from it. I answered [his question on stackexchange computer graphics](https://computergraphics.stackexchange.com/questions/14000/why-is-my-ray-tracer-not-accelerated-by-cuda/14003#14003) and tweaked his code, so I thought to myself... why not base on this repo and try to make it better (though, I won't call it small-pt, since it definitely won't be small after I heavily optimize the code).
-
----
-
-#### Renderings
-
-Microfacet GGX metal BSDF for different conductors (there are 15 different conductors in this renderer):
-
-| Au                                | Al                               | Ag                              |
-| --------------------------------- | -------------------------------- | ------------------------------- |
-| ![Au](assets/microfacet/Au.png)   | ![Al](assets/microfacet/Al.png)  | ![Ag](assets/microfacet/Ag.png) |
-| Cr                                | SiC                              | Ir                              |
-| ![Cr](assets/microfacet/Cr.png)   | ![SiC](assets/microfacet/SiC.png) | ![Ir](assets/microfacet/Ir.png) |
-| TiO2                              | V                                | Cu                              |
-| ![TiO2](assets/microfacet/TiO2.png) | ![V](assets/microfacet/V.png)   | ![Cu](assets/microfacet/Cu.png) |
-| Ni                                | MgO                              | Na                              |
-| ![Ni](assets/microfacet/Ni.png)   | ![MgO](assets/microfacet/MgO.png) | ![Na](assets/microfacet/Na.png) |
-| CuO                               | Hg                               | W                               |
-| ![CuO](assets/microfacet/CuO.png)  | ![Hg](assets/microfacet/Hg.png)  | ![W](assets/microfacet/W.png)  |
-
