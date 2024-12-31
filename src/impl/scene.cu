@@ -333,6 +333,29 @@ void parseEmitter(
     }
     e_props.emplace_back(id, Vec4(emission.xyz(), scaler.x()));
 
+    cudaTextureObject_t tex_obj = 0;
+    element = emitter_elem->FirstChildElement("ref");
+    if (element) {
+        std::string name = element->Attribute("type");
+        if (!name.empty() && name == "texture") {
+            std::string value = element->Attribute("id");
+            auto it = tex_map.find(value);
+            if (it == tex_map.end()) {
+                std::cerr << "Texture named '" << value  << "' not found.\n";
+                throw std::runtime_error("Referenced Texture not found.");
+            } else {
+                if (!it->second.diff_path.empty()) {
+                    Texture<float4> tex(it->second.diff_path, TextureType::DIFFUSE_TEX);
+                    tex_obj = tex.object();
+                    host_texs.emplace_back(std::move(tex));
+                } else {
+                    std::cerr << "The texture for HDRI should be set for it's 'emission' element, but none is found.\n";
+                    throw std::runtime_error("Referenced Texture not found.");
+                }
+            }
+        }
+    }
+
     if (type == "point") {
         element = emitter_elem->FirstChildElement("point");
         Vec3 pos(0, 0, 0);
@@ -360,7 +383,7 @@ void parseEmitter(
             throw std::runtime_error("Bound primitive is not specified for area spot source");
         }
         bool spherical_bound = element->Attribute("value") == std::string("sphere");
-        create_area_spot_source<<<1, 1>>>(emitters[index], emission * scaler, cos_val, emitter_obj_map[id], spherical_bound);
+        create_area_spot_source<<<1, 1>>>(emitters[index], emission * scaler, cos_val, emitter_obj_map[id], spherical_bound, tex_obj);
     } else if (type == "area") {
         element = emitter_elem->FirstChildElement("string");
         std::string attr_name = element->Attribute("name");
@@ -369,7 +392,7 @@ void parseEmitter(
             throw std::runtime_error("Bound primitive is not specified for area source");
         }
         bool spherical_bound = element->Attribute("value") == std::string("sphere");
-        create_area_source<<<1, 1>>>(emitters[index], emission * scaler, emitter_obj_map[id], spherical_bound);
+        create_area_source<<<1, 1>>>(emitters[index], emission * scaler, emitter_obj_map[id], spherical_bound, tex_obj);
     } else if (type == "envmap") {
         envmap_id = index;
         element = emitter_elem->FirstChildElement("float");
@@ -390,26 +413,12 @@ void parseEmitter(
         }
         e_props.back().second = Vec4(-1, scaler, azimuth, zenith);
         element = emitter_elem->FirstChildElement("ref");
-        if (element) {
-            std::string name = element->Attribute("type");
-            if (!name.empty() && name == "texture") {
-                std::string value = element->Attribute("id");
-                auto it = tex_map.find(value);
-                if (it == tex_map.end()) {
-                    std::cerr << "Texture named '" << value  << "' not found.\n";
-                    throw std::runtime_error("Referenced Texture not found.");
-                } else {
-                    if (!it->second.diff_path.empty()) {
-                        Texture<float4> tex(it->second.diff_path, TextureType::DIFFUSE_TEX);
-                        create_envmap_source<<<1, 1>>>(emitters[index], 
-                                tex.object(), scaler, azimuth * DEG2RAD, zenith * DEG2RAD);
-                        host_texs.emplace_back(std::move(tex));
-                    } else {
-                        std::cerr << "The texture for HDRI should be set for it's 'emission' element, but none is found.\n";
-                        throw std::runtime_error("Referenced Texture not found.");
-                    }
-                }
-            }
+        if (tex_obj != 0) {
+            create_envmap_source<<<1, 1>>>(emitters[index], 
+                tex_obj, scaler, azimuth * DEG2RAD, zenith * DEG2RAD);
+        } else {
+            std::cerr << "Error: The texture for EnvMap is empty.\n";
+            throw std::runtime_error("Referenced Texture not available.");
         }
     }
 }
