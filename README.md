@@ -73,6 +73,15 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 
 ---
 
+## [![Repography logo](https://images.repography.com/logo.svg)](https://repography.com) / Recent activity [![Time period](https://images.repography.com/41004045/Enigmatisms/cuda-pt/recent-activity/PCRAuhoOLb462m9zy7DK0_TXi7BHFxtbLTr8ns5cYsU/WgJBNROSkTLP99iCkQblixeE9-J358Hpv8DgLCsRF88_badge.svg)](https://repography.com)
+[![Timeline graph](https://images.repography.com/41004045/Enigmatisms/cuda-pt/recent-activity/PCRAuhoOLb462m9zy7DK0_TXi7BHFxtbLTr8ns5cYsU/WgJBNROSkTLP99iCkQblixeE9-J358Hpv8DgLCsRF88_timeline.svg)](https://github.com/Enigmatisms/cuda-pt/commits)
+[![Pull request status graph](https://images.repography.com/41004045/Enigmatisms/cuda-pt/recent-activity/PCRAuhoOLb462m9zy7DK0_TXi7BHFxtbLTr8ns5cYsU/WgJBNROSkTLP99iCkQblixeE9-J358Hpv8DgLCsRF88_prs.svg)](https://github.com/Enigmatisms/cuda-pt/pulls)
+[![Trending topics](https://images.repography.com/41004045/Enigmatisms/cuda-pt/recent-activity/PCRAuhoOLb462m9zy7DK0_TXi7BHFxtbLTr8ns5cYsU/WgJBNROSkTLP99iCkQblixeE9-J358Hpv8DgLCsRF88_words.svg)](https://github.com/Enigmatisms/cuda-pt/commits)
+[![Top contributors](https://images.repography.com/41004045/Enigmatisms/cuda-pt/recent-activity/PCRAuhoOLb462m9zy7DK0_TXi7BHFxtbLTr8ns5cYsU/WgJBNROSkTLP99iCkQblixeE9-J358Hpv8DgLCsRF88_users.svg)](https://github.com/Enigmatisms/cuda-pt/graphs/contributors)
+
+## [![Repography logo](https://images.repography.com/logo.svg)](https://repography.com) / Structure
+[![Structure](https://images.repography.com/41004045/Enigmatisms/cuda-pt/structure/PCRAuhoOLb462m9zy7DK0_TXi7BHFxtbLTr8ns5cYsU/yXUCOxkcrALII6htQiUx1kOgztizb8C16BUZkmhu6wQ_table.svg)](https://github.com/Enigmatisms/cuda-pt)
+
 ### Visualizer Notes
 - [x] `imgui` has no CMakeLists.txt so we should write it ourselves.
 - [x] I think it is painful to use GLEW for windows: after compilation, `glew32.dll` should be manually copied to `Windows/System32`. Also, we should build GLEW manually.   
