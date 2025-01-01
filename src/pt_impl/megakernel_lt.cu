@@ -43,12 +43,12 @@ CPT_KERNEL void render_lt_kernel(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
@@ -71,7 +71,7 @@ CPT_KERNEL void render_lt_kernel(
         Vec2 extras = sampler.next2D();
         emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), le_pdf);
         emitter_id = emitter_prims[emitter_id];
-        throughput = emitter->sample_le(ray.o, ray.d, le_pdf, sampler.next2D(), verts, norms, emitter_id, extras.x(), extras.y());
+        throughput = emitter->sample_le(ray.o, ray.d, le_pdf, sampler.next2D(), verts, norms, uvs, emitter_id, extras.x(), extras.y());
         throughput *= 1.f / (emitter_sample_pdf * le_pdf);
     }
 
@@ -92,7 +92,7 @@ CPT_KERNEL void render_lt_kernel(
     int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
 #endif  // RENDERER_USE_BVH
-    for (int b = 0; b < max_depth; b++) {
+    for (int b = 0; b < md_params.max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
@@ -149,7 +149,7 @@ CPT_KERNEL void render_lt_kernel(
             occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
 #endif  // RENDERER_USE_BVH
             ) {
-                Vec4 direct_splat = throughput * c_material[material_id]->eval(it, shadow_ray.d, ray.d, false, false) * \
+                Vec4 direct_splat = throughput * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id, false, false) * \
                     (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
                 auto& to_write = image(pixel_x, pixel_y);
                 atomicAdd(&to_write.x(), direct_splat.x() * caustic_scale);
@@ -161,7 +161,7 @@ CPT_KERNEL void render_lt_kernel(
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
             BSDFFlag dummy_flag;
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, dummy_flag, false);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, dummy_flag, material_id, false);
             constraint_cnt += c_material[material_id]->require_lobe(BSDFFlag::BSDF_SPECULAR);
 
             if (throughput.numeric_err() || throughput < EPSILON) {
@@ -198,12 +198,12 @@ template CPT_KERNEL void render_lt_kernel<true>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
@@ -224,12 +224,12 @@ template CPT_KERNEL void render_lt_kernel<false>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,

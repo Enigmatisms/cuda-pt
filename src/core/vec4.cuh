@@ -18,16 +18,16 @@ public:
     CPT_CPU_GPU Vec4() {}
 
     CPT_CPU_GPU
-    explicit Vec4(float _v): 
-        _data(make_float4(_v, _v, _v, _v)) {}
+    constexpr explicit Vec4(float _v): 
+        _data({_v, _v, _v, _v}) {}
 
     CPT_CPU_GPU
-    explicit Vec4(float _v, float alpha): 
-        _data(make_float4(_v, _v, _v, alpha)) {}
+    constexpr explicit Vec4(float _v, float alpha): 
+        _data({_v, _v, _v, alpha}) {}
 
     CPT_CPU_GPU
-    Vec4(float _x, float _y, float _z, float _w = 1): 
-        _data(make_float4(_x, _y, _z, _w)) {}
+    constexpr Vec4(float _x, float _y, float _z, float _w = 1): 
+        _data({_x, _y, _z, _w}) {}
 
     CPT_CPU_GPU
     Vec4(float4&& v): _data(std::move(v)) {}
@@ -50,10 +50,10 @@ public:
     CPT_CPU_GPU_INLINE float& z() { return _data.z; }
     CPT_CPU_GPU_INLINE float& w() { return _data.w; }
 
-    CPT_CPU_GPU_INLINE const float& x() const { return _data.x; }
-    CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
-    CPT_CPU_GPU_INLINE const float& z() const { return _data.z; }
-    CPT_CPU_GPU_INLINE const float& w() const { return _data.w; }
+    constexpr CPT_CPU_GPU_INLINE const float& x() const { return _data.x; }
+    constexpr CPT_CPU_GPU_INLINE const float& y() const { return _data.y; }
+    constexpr CPT_CPU_GPU_INLINE const float& z() const { return _data.z; }
+    constexpr CPT_CPU_GPU_INLINE const float& w() const { return _data.w; }
     CPT_CPU_GPU_INLINE float3 xyz() const { return make_float3(_data.x, _data.y, _data.z); }
 
     CPT_CPU_GPU_INLINE
@@ -63,10 +63,10 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
-    Vec4 operator+(VecType&& b) const noexcept { return Vec4(_data.x + b.x(), _data.y + b.y(), _data.z + b.z(), _data.w + b.w()); }
+    constexpr Vec4 operator+(VecType&& b) const noexcept { return Vec4(_data.x + b.x(), _data.y + b.y(), _data.z + b.z(), _data.w + b.w()); }
 
     CPT_CPU_GPU_INLINE
-    Vec4 operator+(float b) const noexcept { return Vec4(_data.x + b, _data.y + b, _data.z + b, _data.w + b); }
+    constexpr Vec4 operator+(float b) const noexcept { return Vec4(_data.x + b, _data.y + b, _data.z + b, _data.w + b); }
 
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
@@ -88,12 +88,12 @@ public:
     }
 
     CPT_CPU_GPU_INLINE
-    Vec4 operator-() const noexcept {
+    constexpr Vec4 operator-() const noexcept {
         return Vec4(-_data.x, -_data.y, -_data.z, -_data.w);
     }
 
     CPT_CPU_GPU_INLINE
-    Vec4 operator-(float b) const noexcept { return Vec4(_data.x - b, _data.y - b, _data.z - b, _data.w - b); }
+    constexpr Vec4 operator-(float b) const noexcept { return Vec4(_data.x - b, _data.y - b, _data.z - b, _data.w - b); }
 
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
@@ -116,14 +116,14 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
-    Vec4 operator-(VecType&& b) const { return Vec4(_data.x - b.x(), _data.y - b.y(), _data.z - b.z(), _data.w - b.w()); }
+    constexpr Vec4 operator-(VecType&& b) const { return Vec4(_data.x - b.x(), _data.y - b.y(), _data.z - b.z(), _data.w - b.w()); }
 
     CPT_CPU_GPU_INLINE
-    Vec4 operator*(float b) const noexcept { return Vec4(_data.x * b, _data.y * b, _data.z * b, _data.w * b); }
+    constexpr Vec4 operator*(float b) const noexcept { return Vec4(_data.x * b, _data.y * b, _data.z * b, _data.w * b); }
 
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
-    Vec4 operator/(VecType&& b) const noexcept { return Vec4(_data.x / b.x(), _data.y / b.y(), _data.z / b.z(), _data.w / b.w()); }
+    constexpr Vec4 operator/(VecType&& b) const noexcept { return Vec4(_data.x / b.x(), _data.y / b.y(), _data.z / b.z(), _data.w / b.w()); }
 
     CPT_CPU_GPU_INLINE
     Vec4& operator*=(float b) noexcept {
@@ -144,7 +144,7 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
-    Vec4 operator*(VecType&& b) const noexcept { return Vec4(_data.x * b.x(), _data.y * b.y(), _data.z * b.z(), _data.w * b.w()); }
+    constexpr Vec4 operator*(VecType&& b) const noexcept { return Vec4(_data.x * b.x(), _data.y * b.y(), _data.z * b.z(), _data.w * b.w()); }
 
     CONDITION_TEMPLATE(VecType, Vec4)
     CPT_CPU_GPU_INLINE
@@ -156,7 +156,7 @@ public:
     }
 
     CPT_CPU_GPU_INLINE
-    bool operator<(float v) const noexcept {      // only compare the first 3
+    constexpr bool operator<(float v) const noexcept {      // only compare the first 3
         return _data.x < v && _data.y < v && _data.z < v;
     }
 
@@ -166,8 +166,8 @@ public:
 
     CPT_CPU_GPU_INLINE
     bool numeric_err() const noexcept {
-        return isnan(_data.x) || isnan(_data.y) || isnan(_data.z) || isnan(_data.w) || \
-               isinf(_data.x) || isinf(_data.y) || isinf(_data.z) || isinf(_data.w);
+        return isnan(_data.x) || isnan(_data.y) || isnan(_data.z) || \
+               isinf(_data.x) || isinf(_data.y) || isinf(_data.z);
     }
 
     CPT_CPU_GPU_INLINE

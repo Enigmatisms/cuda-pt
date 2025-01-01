@@ -31,10 +31,10 @@ struct AxisBins {
     }
 };
 
-static constexpr int num_bins = 12;
-static constexpr int max_node_prim = 4;
+static constexpr int num_bins = 16;
+static constexpr int max_node_prim = 2;
 static constexpr int sah_split_threshold = 8;
-static constexpr float traverse_cost = 0.3;
+static constexpr float traverse_cost = 0.2;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const {
     int _base = base(), _prim_num = prim_num();

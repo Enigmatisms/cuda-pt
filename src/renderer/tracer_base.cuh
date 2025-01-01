@@ -5,6 +5,7 @@
 */
 #pragma once
 #include "core/scene.cuh"
+#include "core/max_depth.h"
 #include "core/host_device.cuh"
 #include "renderer/base_pt.cuh"
 
@@ -75,8 +76,8 @@ public:
     CPT_CPU uint32_t& get_pbo_id()     noexcept { return this->pbo_id; }
 
     CPT_CPU virtual std::vector<uint8_t> render(
+        const MaxDepthParams& md,
         int num_iter  = 64,
-        int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
         bool gamma_correction = true
     ) {
         throw std::runtime_error("Not implemented.\n");
@@ -84,7 +85,7 @@ public:
     }
 
     CPT_CPU virtual void render_online(
-        int max_depth = 1, /* max depth, useless for depth renderer, 1 anyway */
+        const MaxDepthParams& md,
         bool gamma_corr = false     /* whether to enable gamma correction*/
     ) {
         throw std::runtime_error("Not implemented.\n");
@@ -116,25 +117,5 @@ public:
     CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         return image.export_cpu(1.f / accum_cnt, gamma_cor);
-    }
-
-    template <typename TexType>
-    static void createTexture1D(const TexType* tex_src, size_t size, TexType* tex_dst, cudaTextureObject_t& tex_obj) {
-        cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
-        CUDA_CHECK_RETURN(cudaMemcpy(tex_dst, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
-        cudaResourceDesc res_desc;
-        memset(&res_desc, 0, sizeof(res_desc));
-        res_desc.resType = cudaResourceTypeLinear;
-        res_desc.res.linear.devPtr = tex_dst;
-        res_desc.res.linear.desc   = channel_desc;
-        res_desc.res.linear.sizeInBytes = size * sizeof(TexType);
-
-        cudaTextureDesc tex_desc;
-        memset(&tex_desc, 0, sizeof(tex_desc));
-        tex_desc.addressMode[0] = cudaAddressModeClamp;
-        tex_desc.filterMode = cudaFilterModePoint;
-        tex_desc.readMode = cudaReadModeElementType;
-
-        CUDA_CHECK_RETURN(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
     }
 };

@@ -289,7 +289,7 @@ CPT_KERNEL void nee_shader(
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
         // use ray.o to avoid creating another shadow_int variable
         Vec4 direct_comp(0, 0, 0, 1);
-        shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sg.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+        shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sg.next2D(), verts, norms, uvs, emitter_id) - shadow_ray.o;
 
         float emit_len_mis = shadow_ray.d.length();
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
@@ -304,8 +304,8 @@ CPT_KERNEL void nee_shader(
         ) {
             // MIS for BSDF / light sampling, to achieve better rendering
             // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
-            emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
-            payloads.L(px, py) += thp * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
+            emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d, material_id) * emitter->non_delta();
+            payloads.L(px, py) += thp * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id) * \
                 (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
             // numerical guard, in case emit_len_mis is 0
         }
@@ -352,19 +352,19 @@ CPT_KERNEL void bsdf_local_shader(
 
         // emitter MIS
         float pdf = payloads.pdf(px, py), emission_weight = pdf / (pdf + 
-                objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, ray.hit_t) * 
+                objects[object_id].solid_angle_pdf(c_textures.eval_normal(it, material_id), ray.d, ray.hit_t) * 
                 hit_emitter * secondary_bounce * ray.non_delta());
         // (2) check if the ray hits an emitter
         Vec4 direct_comp = thp *\
-                    c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
+                    c_emitter[emitter_id]->eval_le(&ray.d, &it);
         payloads.L(px, py) += direct_comp * emission_weight;
         
         ray.o = ray.advance(ray.hit_t);
         BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;                            
         ray.d = c_material[material_id]->sample_dir(
-            ray.d, it, thp, pdf, sg, sampled_lobe
+            ray.d, it, thp, pdf, sg, sampled_lobe, material_id
         );
-        ray.set_delta((sampled_lobe | BSDFFlag::BSDF_SPECULAR) > 0);
+        ray.set_delta((sampled_lobe & BSDFFlag::BSDF_SPECULAR) > 0);
 
         payloads.set_sampler(px, py, sg);
         payloads.thp(px, py) = thp;
@@ -390,7 +390,8 @@ CPT_KERNEL void miss_shader(
     const IndexBuffer idx_buffer,
     const int bounce,
     int stream_offset,
-    int num_valid
+    int num_valid,
+    int envmap_id
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
@@ -399,7 +400,7 @@ CPT_KERNEL void miss_shader(
     if (block_index < num_valid) {
         uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
         py >>= 16;
-        Vec4 thp        = payloads.thp(px, py);
+        Vec4 thp        = payloads.thp(px, py), old_thp = thp;
         Sampler sampler = payloads.get_sampler(px, py);
         // using BVH enables the usage of RR, since there is no within-loop synchronization
         float max_value = thp.max_elem_3d();
@@ -408,8 +409,14 @@ CPT_KERNEL void miss_shader(
             max_value = (sampler.next1D() > max_value || max_value < THP_EPS) ? 0 : max_value;
             thp *= max_value == 0 ? 0 : (1.f / max_value);
         }
-        if ((!payloads.is_hit(px, py)) || max_value <= 1e-5f) {
-            // TODO: process no-hit ray, environment map lighting
+
+        Vec3 ray_d;
+        bool is_active = true;
+        payloads.get_ray_d(px, py, ray_d, is_active);
+        if (is_active && !payloads.is_hit(px, py)) {
+            payloads.L(px, py) += old_thp * c_emitter[envmap_id]->eval_le(&ray_d);
+            payloads.set_active(px, py, false);
+        } else if (max_value <= 1e-5f) {
             payloads.set_active(px, py, false);
         }
         payloads.thp(px, py) = thp;

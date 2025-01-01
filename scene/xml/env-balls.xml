@@ -4,7 +4,7 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.1">
-	<renderer type="pt"/>
+	<renderer type="wfpt"/>
 	<bool name="use_bvh" value="true"/>
 
 	<sensor type="perspective">
@@ -41,24 +41,6 @@
 
 	<brdf type="lambertian" id="white">
 		<rgb name="k_d" value="#BDBDBD"/>
-		<rgb name="k_g" value="1.0"/>
-		<rgb name="k_s" value="0.0"/>
-	</brdf>
-
-	<brdf type="lambertian" id="left_wall">
-		<rgb name="k_d" value="#DD2525"/>
-		<rgb name="k_g" value="1.0"/>
-		<rgb name="k_s" value="0.0"/>
-	</brdf>
-
-	<brdf type="lambertian" id="right_wall">
-		<rgb name="k_d" value="#25DD25"/>
-		<rgb name="k_g" value="1.0"/>
-		<rgb name="k_s" value="0.0"/>
-	</brdf>
-
-	<brdf type="lambertian" id="light">
-		<rgb name="k_d" value="#555555"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
@@ -101,41 +83,16 @@
 		<rgb name="k_g" value="1"/>
 	</brdf>
 
-	<emitter type="area" id="area">
-		<rgb name="emission" value="1, 1, 1"/>
-		<rgb name="scaler" value="48.0"/>			<!--1.5 for gamma correction, 5 for linear-->
-		<string name="bind_type" value="triangle"/>
+	<emitter type="envmap" id="area">
+		<float name="scaler" value="1.0"/>		
+		<float name="azimuth" value="0"/>			
+		<float name="zenith" value="90"/>			
+		<ref type="texture" id="envmap"/>
 	</emitter>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/right_wall.obj"/>
-		<ref type="material" id="right_wall"/>
-	</shape>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/back.obj"/>
-		<ref type="material" id="white"/>
-	</shape>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/ceiling.obj"/>
-		<ref type="material" id="white"/>
-	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/cbox/floor.obj"/>
 		<ref type="material" id="white"/>
-	</shape>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/left_wall.obj"/>
-		<ref type="material" id="left_wall"/>
-	</shape>
-
-	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/light.obj"/>
-		<ref type="material" id="light"/>
-		<ref type="emitter" id="area"/>
 	</shape>
 
 	<shape type="sphere">
@@ -173,4 +130,8 @@
 		<float name="radius" value="1.1"/>
 		<ref type="material" id="mirror"/>
 	</shape>
+
+	<texture id="envmap">
+		<string name="diffuse" value="../textures/envmaps/day-sky-city.jpg"/>
+	</texture>
 </scene>

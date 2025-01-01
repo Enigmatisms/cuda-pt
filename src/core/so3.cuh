@@ -251,6 +251,6 @@ CPT_GPU_INLINE Vec3 delocalize_rotate(VecType&& anchor, const Vec3& to, const Ve
 // Specialized, when the anchor is (0, 0, 1)
 CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
 CPT_GPU_INLINE Vec3 delocalize_rotate(VType1&& to, VType2&& input) {
-    return rotation_fixed_anchor(std::forward<VType1&&>(to))
-          .rotate(std::forward<VType1&&>(input));
+    return rotation_fixed_anchor(std::forward<VType1>(to))
+          .rotate(std::forward<VType1>(input));
 }   

@@ -45,8 +45,8 @@ CPT_CPU_GPU DeviceCamera::DeviceCamera(
 }
 
 CPT_CPU void DeviceCamera::rotate(float yaw, float pitch) {
-    auto quat_yaw = Quaternion::angleAxis(yaw, Vec3(0, signs.x(), 0)),
-            quat_pit = Quaternion::angleAxis(pitch, Vec3(-signs.y(), 0, 0));
+    auto quat_yaw = Quaternion::angleAxis_host(yaw, Vec3(0, signs.x(), 0)),
+            quat_pit = Quaternion::angleAxis_host(pitch, Vec3(-signs.y(), 0, 0));
     SO3 rot = SO3::from_quat(quat_yaw * quat_pit);
     R = R * rot;
     Vec3 forward = R.col(2).normalized_h(),

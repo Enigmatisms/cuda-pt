@@ -87,7 +87,6 @@ aux_source_directory(src/viewer_impl CPT_VIEWER_IMPL_SRC)
 set(EXEC1_NAME "depth")
 	add_executable(${EXEC1_NAME}
 	app/depth_renderer.cu
-	src/ext/lodepng/lodepng.cpp
 	${CPT_IMPL_SRC}
 )
 
@@ -112,7 +111,6 @@ target_compile_options(
 set(EXEC2_NAME "pt")
 add_executable(${EXEC2_NAME}
 	app/pt_renderer.cu
-	src/ext/lodepng/lodepng.cpp
 	${CPT_IMPL_SRC}
 	${CPT_PT_IMPL_SRC}
 )
@@ -138,7 +136,6 @@ target_compile_options(
 set(EXEC3_NAME "cpt")
 add_executable(${EXEC3_NAME}
 	app/viewer.cu
-	src/ext/lodepng/lodepng.cpp
 	${CPT_VIEWER_IMPL_SRC}
 	${CPT_IMPL_SRC}
 	${CPT_PT_IMPL_SRC}

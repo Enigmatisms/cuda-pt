@@ -2,17 +2,17 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <ext/imgui/imgui.h>
-#include <ext/lodepng/lodepng.h>
 #include <ext/imgui/backends/imgui_impl_glfw.h>
 #include <ext/imgui/backends/imgui_impl_opengl3.h>
 
+#include "core/xyz.cuh"
 #include "core/scene.cuh"
 #include "core/imgui_utils.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
 __constant__ Emitter* c_emitter[9];
-__constant__ BSDF*    c_material[32];
+__constant__ BSDF*    c_material[48];
 
 std::string get_current_time() {
     // Get the current time as a time_point
@@ -40,7 +40,9 @@ int main(int argc, char** argv) {
 
     std::cout << "[SCENE] Loading scenes from '" << xml_path << "'\n";
     Scene scene(xml_path);
-
+    
+    ColorSpaceXYZ xyz_host;
+    xyz_host.init();
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
 
@@ -78,17 +80,14 @@ int main(int argc, char** argv) {
     auto window = gui::create_window(scene.config.width, scene.config.height);
     renderer->graphics_resc_init(gui::init_texture_and_pbo);
     renderer->update_camera(scene.cam);
+    gui::GUIParams params;
+    params.gamma_corr   = scene.config.gamma_correction;
+    bool exit_main_loop = false;
 
-    float trans_speed = 0.1f, rot_speed = 0.5f;
-    bool show_main_settings  = true;
-    bool show_frame_rate_bar = true;
-    bool frame_capture       = false;
-    bool exit_main_loop      = false;
-    bool gamma_correct       = true;
     ImGuiIO& io = ImGui::GetIO();
 
     while (!glfwWindowShouldClose(window.get())) {
-        frame_capture = false;
+        params.capture = false;
         glfwPollEvents();
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -97,45 +96,44 @@ int main(int argc, char** argv) {
 
         gui::show_render_statistics(
             renderer->get_num_sample() + 1,
-            show_frame_rate_bar
+            params.show_fps
         );
-        bool cam_updated = gui::keyboard_camera_update(*scene.cam, trans_speed, frame_capture, exit_main_loop),
-            scene_updated = false, 
-            renderer_update = false,
-            material_update = false;
+        params.camera_update   = gui::keyboard_camera_update(*scene.cam, params.trans_speed, params.capture, exit_main_loop),
+        params.scene_update    = false, 
+        params.renderer_update = false,
+        params.material_update = false;
         if (exit_main_loop) {
             break;
         }
         gui::render_settings_interface(
-            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.max_depth, 
-            trans_speed, rot_speed, show_main_settings, show_frame_rate_bar, frame_capture, 
-            gamma_correct, cam_updated, scene_updated, material_update, renderer_update
+            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.md, params
         );
         if (!io.WantCaptureMouse) {        // no sub window (setting window or main menu) is focused
-            cam_updated |= gui::mouse_camera_update(*scene.cam, rot_speed);
+            params.camera_update |= gui::mouse_camera_update(*scene.cam, params.rot_sensitivity);
         }
-        if (scene_updated) {
+        if (params.scene_update) {
             scene.update_emitters();
             CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
         }
-        if (material_update) {
+        if (params.material_update) {
             scene.update_materials();
             CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
         }
-        if (cam_updated) {
+        if (params.camera_update) {
             renderer->update_camera(scene.cam);
         }
-        if (cam_updated || scene_updated || material_update || renderer_update)
+        if (params.buffer_flush_update())
             renderer->reset_out_buffer();
-        renderer->render_online(scene.config.max_depth, gamma_correct);
+        renderer->render_online(scene.config.md, params.gamma_corr);
         
-        if (frame_capture) {
-            auto fbuffer = renderer->get_image_buffer(gamma_correct);
-            std::string file_name = "render-" + get_current_time() + ".png";
-            if (unsigned error = lodepng::encode(file_name, fbuffer, scene.config.width, scene.config.height); error) {
-                std::cerr << "lodepng::encoder error " << error << ": " << lodepng_error_text(error)
-                        << std::endl;
-                throw std::runtime_error("lodepng::encode() fail");
+        if (params.capture) {
+            auto fbuffer = renderer->get_image_buffer(params.gamma_corr);
+            std::string format = params.output_png ? "png" : "jpg";
+            std::string file_name = "render-" + get_current_time() + "." + format;
+            
+            if (!save_image(file_name, fbuffer, scene.config.width, scene.config.height, format, params.compress_q)) {
+                std::cerr << "stb::save_image() failed to output image" << std::endl;
+                throw std::runtime_error("stb::save_image() fail");
             } else {
                 std::cout << "[Viewer] Image file saved to '" << file_name << "'\n";
             }
@@ -156,12 +154,12 @@ int main(int argc, char** argv) {
         glfwSwapBuffers(window.get());
     }
     scene.print();
-
     gui::clean_up(
         window.get(),
         renderer->get_pbo_id(),
         renderer->get_texture_id()
     );
+    xyz_host.destroy();
 
     return 0;
 }

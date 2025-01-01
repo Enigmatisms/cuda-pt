@@ -7,14 +7,15 @@
 #include <cuda/pipeline>
 #include "core/bvh.cuh"
 #include "core/bsdf.cuh"
-#include "core/primitives.cuh"
+#include "core/max_depth.h"
 #include "core/emitter.cuh"
+#include "core/primitives.cuh"
 #include "core/camera_model.cuh"
 
 #define RENDERER_USE_BVH
 
 extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
-extern __constant__ BSDF*    c_material[32];
+extern __constant__ BSDF*    c_material[48];
 
 using ConstNodePtr  = const LinearNode* const __restrict__;
 using ConstObjPtr   = const ObjInfo* const __restrict__;
@@ -72,25 +73,25 @@ CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sa
  * shared memory might not be easy to use, since the memory granularity will be
  * too difficult to control
  * 
- * @param objects       object encapsulation
- * @param verts         vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param norms         normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
- * @param uvs           uv coordinates, Packed 3 Half2 and 1 int for padding (sum up to 128 bits)
- * @param emitter_prims Primitive indices for emission objects
- * @param bvh_leaves    BVH leaf nodes (int texture, storing primitive to obj index map)
- * @param nodes         BVH nodes (32 Bytes)
- * @param cached_nodes  BVH cached nodes (in shared memory): first half: front float4, second half: back float4
- * @param image         GPU image buffer
- * @param output_buffer Possible visualization buffer
- * @param num_prims     number of primitives (to be intersected with)
- * @param num_objects   number of objects
- * @param num_emitter   number of emitters
- * @param seed_offset   offset to random seed (to create uncorrelated samples)
- * @param max_depth     maximum allowed bounce
- * @param node_num      number of nodes on a BVH tree
- * @param accum_cnt     Counter of iterations
- * @param cache_num     Number of cached BVH nodes
- * @param gamma_corr    For online rendering, whether to enable gamma correction on visualization
+ * @param objects        object encapsulation
+ * @param verts          vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param norms          normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
+ * @param uvs            uv coordinates, Packed 3 Half2 and 1 int for padding (sum up to 128 bits)
+ * @param emitter_prims  Primitive indices for emission objects
+ * @param bvh_leaves     BVH leaf nodes (int texture, storing primitive to obj index map)
+ * @param nodes          BVH nodes (32 Bytes)
+ * @param cached_nodes   BVH cached nodes (in shared memory): first half: front float4, second half: back float4
+ * @param image          GPU image buffer
+ * @param output_buffer  Possible visualization buffer
+ * @param num_prims      number of primitives (to be intersected with)
+ * @param num_objects    number of objects
+ * @param num_emitter    number of emitters
+ * @param seed_offset    offset to random seed (to create uncorrelated samples)
+ * @param md_params      maximum allowed bounces (total, diffuse, specular, transmission)
+ * @param node_num       number of nodes on a BVH tree
+ * @param accum_cnt      Counter of iterations
+ * @param cache_num      Number of cached BVH nodes
+ * @param gamma_corr     For online rendering, whether to enable gamma correction on visualization
 */
 template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
@@ -105,15 +106,16 @@ CPT_KERNEL void render_pt_kernel(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth = 1,
     int node_num  = -1,
     int accum_cnt = 1,
     int cache_num = 0,
+    int envmap_id = 0,
     bool gamma_corr = false
 );
 
@@ -138,12 +140,12 @@ CPT_KERNEL void render_lt_kernel(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth = 1,
     int node_num = -1,
     int accum_cnt = 1,
     int cache_num = 0,

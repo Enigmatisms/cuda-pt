@@ -92,16 +92,16 @@ public:
     }
 
     CPT_CPU std::vector<uint8_t> render(
+        const MaxDepthParams& md,
         int num_iter = 64,
-        int max_depth = 1,/* max depth, useless for depth renderer, 1 anyway */
         bool gamma_correction = true
     ) override {
-        printf("Depth tracing. Num primitives: %d, max_depth: %d\n", num_prims, max_depth);
+        printf("Depth tracing. Num primitives: %d, max_depth: %d\n", num_prims, md.max_depth);
         TicToc _timer("render_kernel()", num_iter);
         for (int i = 0; i < num_iter; i++) {
             // for more sophisticated renderer (like path tracer), shared_memory should be used
             render_depth_kernel<<<dim3(w >> 4, h >> 4), dim3(16, 16)>>>(
-                    *camera, verts, norms, uvs, aabbs, image, num_prims, max_depth); 
+                    *camera, verts, norms, uvs, aabbs, image, num_prims, md.max_depth); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         return image.export_cpu(1.f / (15.f * num_iter), gamma_correction);

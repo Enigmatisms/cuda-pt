@@ -277,8 +277,8 @@ CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
 CPT_GPU_INLINE
 Vec3 reflection(VType1&& ray, VType2&& normal) noexcept {
     return reflection(
-        std::forward<VType1&&>(ray),
-        std::forward<VType1&&>(normal),
+        std::forward<VType1>(ray),
+        std::forward<VType1>(normal),
         ray.dot(normal)
     );
 }

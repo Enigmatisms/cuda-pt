@@ -10,6 +10,8 @@
 #include "core/vec3.cuh"
 #include "core/vec4.cuh"
 #include "core/sampling.cuh"
+#include "core/quaternion.cuh"
+#include "core/interaction.cuh"
 
 CPT_CPU_GPU_INLINE float distance_attenuate(Vec3&& diff) {
     return min(1.f / max(diff.length2(), 1e-5f), 1.f);
@@ -34,7 +36,9 @@ public:
     CPT_GPU_INLINE virtual Vec4 sample_le(
         Vec3& ray_o, Vec3& ray_d, 
         float& pdf, Vec2&&, 
-        const PrecomputedArray&, const ArrayType<Vec3>&, 
+        const PrecomputedArray&, 
+        const ArrayType<Vec3>&, 
+        const ConstBuffer<PackedHalf2>&,
         int, float _eu = 0, float _ev = 0
     ) const {
         pdf = 1;
@@ -42,13 +46,19 @@ public:
         return Vec4(0, 0, 0, 1);
     }
 
-    CPT_GPU_INLINE virtual Vec3 sample(const Vec3& hit_pos, Vec4& le, float& pdf, Vec2&&, const PrecomputedArray&, const ArrayType<Vec3>&, int) const {
+    CPT_GPU_INLINE virtual Vec3 sample(
+        const Vec3& hit_pos, const Vec3&,
+        Vec4& le, float& pdf, Vec2&&, 
+        const PrecomputedArray&, 
+        const ArrayType<Vec3>&, 
+        const ConstBuffer<PackedHalf2>&, int
+    ) const {
         pdf = 1;
         le.fill(0);
         return Vec3(0, 0, 0);
     }
 
-    CPT_GPU_INLINE virtual Vec4 eval_le(const Vec3* const inci_dir = nullptr, const Vec3* const normal = nullptr) const {
+    CPT_GPU_INLINE virtual Vec4 eval_le(const Vec3* const inci_dir = nullptr, const Interaction* const it = nullptr) const {
         return Vec4(0, 0, 0, 1);
     }
 
@@ -62,12 +72,17 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_GPU_INLINE void set_le(VecType&& color, float scaler) noexcept {
-        Le = Vec4(color * scaler, 1.f);
+        Le = Vec4(color * scaler, scaler);
     }
 
     CPT_CPU_GPU int get_obj_ref() const noexcept {
         return obj_ref_id * (obj_ref_id >= 0);
     }
+
+    // reserved handle, can be used to set many things, like (pos in PointSource)
+    CPT_GPU_INLINE virtual void set_func1(float val) noexcept {}
+    CPT_GPU_INLINE virtual void set_func2(float val) noexcept {}
+    CPT_GPU_INLINE virtual void set_func3(float val) noexcept {}
 };
 
 class PointSource: public Emitter {
@@ -80,19 +95,31 @@ public:
     CPT_CPU_GPU PointSource(VType1&& le, VType2&& pos): 
         Emitter(std::forward<VType1>(le)), pos(std::forward<VType2>(pos)) {}
 
-    CPT_GPU_INLINE Vec3 sample(const Vec3& hit_pos, Vec4& le, float&, Vec2&&, const PrecomputedArray&, const ArrayType<Vec3>&, int) const override {
+    CPT_GPU_INLINE Vec3 sample(
+        const Vec3& hit_pos, 
+        const Vec3&, 
+        Vec4& le, float&, Vec2&&, 
+        const PrecomputedArray&, 
+        const ArrayType<Vec3>&, 
+        const ConstBuffer<PackedHalf2>&, int
+    ) const override {
         le = this->Le * distance_attenuate(pos - hit_pos);
         return this->pos;
     }
 
     CPT_GPU_INLINE Vec4 sample_le(
-        Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, const PrecomputedArray&, const ArrayType<Vec3>&, int, float, float) const override {
+        Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, 
+        const PrecomputedArray&, 
+        const ArrayType<Vec3>&, 
+        const ConstBuffer<PackedHalf2>&,
+        int, float, float
+    ) const override {
         ray_d = sample_uniform_sphere(uv, pdf);
         ray_o = pos;
         return Le;
     }
 
-    CPT_GPU_INLINE virtual Vec4 eval_le(const Vec3* const , const Vec3* const ) const override {
+    CPT_GPU_INLINE virtual Vec4 eval_le(const Vec3* const inci_dir, const Interaction* const it) const override {
         return Vec4(0, 0, 0, 1);
     }
 };
@@ -101,16 +128,26 @@ public:
  * TODO: Object <---> mesh relationship is not fully implemented
 */
 class AreaSource: public Emitter {
+private:
+    cudaTextureObject_t emission_tex;
 public:
     CPT_CPU_GPU AreaSource() {}
 
     CONDITION_TEMPLATE(VType, Vec4)
-    CPT_CPU_GPU AreaSource(VType&& le, int obj_ref, bool is_sphere = false): 
-        Emitter(std::forward<VType>(le), obj_ref, is_sphere) {}
+    CPT_CPU_GPU AreaSource(VType&& le, int obj_ref, bool is_sphere = false, cudaTextureObject_t _emission_tex = 0): 
+        Emitter(std::forward<VType>(le), obj_ref, is_sphere), emission_tex(_emission_tex) {}
+
+    CPT_GPU_INLINE Vec4 scaled_Le(float u, float v) const {
+        return Vec4(tex2D<float4>(emission_tex, u, v)) * Le.w();
+    }
 
     CPT_GPU_INLINE Vec3 sample(
-        const Vec3& hit_pos, Vec4& le, float& pdf, 
-        Vec2&& uv, const PrecomputedArray& prims, const ArrayType<Vec3>& norms, int sampled_index
+        const Vec3& hit_pos, const Vec3& hit_n, 
+        Vec4& le, float& pdf, Vec2&& uv, 
+        const PrecomputedArray& prims, 
+        const ArrayType<Vec3>& norms,
+        const ConstBuffer<PackedHalf2>& uvs,
+        int sampled_index
     ) const override {
         float sample_sum = uv.x() + uv.y();
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
@@ -132,13 +169,17 @@ public:
         sphere_normal.normalize();
         sample_sum = normal.dot(sphere_normal);           // dot_light
         pdf *= float(sample_sum > 0) / sample_sum;
-        le = Le * float(sample_sum > 0);
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
+        le = (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * float(sample_sum > 0);
         return sampled;
     }
 
     CPT_GPU_INLINE Vec4 sample_le(
-        Vec3& ray_o, Vec3& ray_d, float& pdf, 
-        Vec2&& uv, const PrecomputedArray& prims, const ArrayType<Vec3>& norms, int sampled_index,
+        Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, 
+        const PrecomputedArray& prims, 
+        const ArrayType<Vec3>& norms, 
+        const ConstBuffer<PackedHalf2>& uvs,
+        int sampled_index,
         float extra_u, float extra_v
     ) const override {
         float sample_sum = uv.x() + uv.y();
@@ -159,10 +200,146 @@ public:
         ray_d  = delocalize_rotate(normal, ray_d);
         // input pdf is already the pdf of position (1 / area)
         pdf   *= pdf_dir;
-        return Le * fabsf(normal.dot(ray_d));
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
+        return (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * fabsf(normal.dot(ray_d));
     }
 
-    CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Vec3* const normal) const override {
-        return select(this->Le, Vec4(0, 0, 0, 1), inci_dir->dot(*normal) < 0);
+    CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Interaction* const it) const override {
+        return select(emission_tex == 0 ? Le : scaled_Le(it->uv_coord.x_float(), it->uv_coord.y_float()), 
+            Vec4(0, 0, 0, 1), inci_dir->dot(it->shading_norm) < 0);
+    }
+};
+
+// directed sources, shoots onl
+class AreaSpotSource: public Emitter {
+public:
+    cudaTextureObject_t emission_tex;
+    float cos_val;
+public:
+    CPT_CPU_GPU AreaSpotSource() {}
+
+    CONDITION_TEMPLATE(VType, Vec4)
+    CPT_CPU_GPU AreaSpotSource(VType&& le, float _cos_val, int obj_ref, bool is_sphere = false, cudaTextureObject_t _emission_tex = 0): 
+        Emitter(std::forward<VType>(le), obj_ref, is_sphere), cos_val(_cos_val), emission_tex(_emission_tex) {}
+
+    CPT_GPU_INLINE Vec4 scaled_Le(float u, float v) const {
+        return Vec4(tex2D<float4>(emission_tex, u, v)) * Le.w();
+    }
+
+    // Can reduce the code length by reusing, the code in this class comes from AreaSource
+    CPT_GPU_INLINE Vec3 sample(
+        const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, 
+        float& pdf, Vec2&& uv, 
+        const PrecomputedArray& prims, 
+        const ArrayType<Vec3>& norms, 
+        const ConstBuffer<PackedHalf2>& uvs,
+        int sampled_index
+    ) const override {
+        float sample_sum = uv.x() + uv.y();
+        uv = select(uv, -uv + 1.f, sample_sum < 1.f);
+        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y();
+        Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
+        Vec3 normal = \
+            (norms.x(sampled_index) * diff_x * diff_y + \
+             norms.y(sampled_index) * uv.x() * diff_y + \
+             norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
+        sampled = select(
+            sampled, prims.get_sphere_point(sphere_normal, sampled_index),
+            is_sphere == false
+        );
+        normal = select(normal, sphere_normal, is_sphere == false);
+        // normal needs special calculation
+        sphere_normal = hit_pos - sampled;
+        pdf *= sphere_normal.length2();
+        sphere_normal.normalize();
+        sample_sum = normal.dot(sphere_normal);           // dot_light
+        pdf *= float(sample_sum > 0) / sample_sum;
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
+        le = (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * (sample_sum > cos_val);
+        return sampled;
+    }
+
+    CPT_GPU_INLINE Vec4 sample_le(
+        Vec3& ray_o, Vec3& ray_d, 
+        float& pdf, Vec2&& uv, 
+        const PrecomputedArray& prims, 
+        const ArrayType<Vec3>& norms, 
+        const ConstBuffer<PackedHalf2>& uvs,
+        int sampled_index, float extra_u, float extra_v
+    ) const override {
+        float sample_sum = uv.x() + uv.y();
+        uv = select(uv, -uv + 1.f, sample_sum < 1.f);
+        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y(), pdf_dir = 1;
+        Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
+        Vec3 normal = \
+           (norms.x(sampled_index) * diff_x * diff_y + \
+            norms.y(sampled_index) * uv.x() * diff_y + \
+            norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
+        normal = select(normal, sphere_normal, is_sphere == false);
+        ray_o = select(
+            sampled, prims.get_sphere_point(sphere_normal, sampled_index),
+            is_sphere == false
+        ) + normal * EPSILON;
+        ray_d  = sample_uniform_cone(Vec2(extra_u, extra_v), cos_val, pdf_dir);
+        ray_d  = delocalize_rotate(normal, ray_d);
+        // input pdf is already the pdf of position (1 / area)
+        pdf   *= pdf_dir;
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
+        return (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * fabsf(normal.dot(ray_d));
+    }
+
+    CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Interaction* const it) const override {
+        return select(emission_tex == 0 ? Le : scaled_Le(it->uv_coord.x_float(), it->uv_coord.y_float()), 
+            Vec4(0, 0, 0, 1), inci_dir->dot(it->shading_norm) < -cos_val);
+    }
+};
+
+class EnvMapEmitter: public Emitter {
+private:
+    float azimuth;
+    float zenith;
+    float scale;
+    cudaTextureObject_t env;
+    Quaternion rot;
+public:
+    CPT_CPU_GPU EnvMapEmitter() {}
+
+    // Allow to rotate the HDRI env map online
+    CPT_GPU EnvMapEmitter(cudaTextureObject_t _env, float _scale = 1, float _azimuth = 0, float _zenith = 0): 
+        Emitter(Vec4(0, 1), -1, false), env(_env), scale(_scale), azimuth(_azimuth), zenith(_zenith) 
+    {
+        update_rot();
+    }
+    
+    CPT_GPU Vec3 sample(
+        const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, Vec2&& uv, 
+        const PrecomputedArray& prims, const ArrayType<Vec3>& norms, const ConstBuffer<PackedHalf2>&, int sampled_index
+    ) const override;
+
+    CPT_GPU Vec4 sample_le(
+        Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, 
+        const PrecomputedArray& prims, const ArrayType<Vec3>& norms, const ConstBuffer<PackedHalf2>&,
+        int sampled_index, float extra_u, float extra_v
+    ) const override;
+
+    CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Interaction* const) const override;
+
+    CPT_GPU_INLINE virtual void set_func1(float val) noexcept { 
+        scale = val;
+    }
+    CPT_GPU_INLINE virtual void set_func2(float val) noexcept { 
+        azimuth = val;
+    }
+    CPT_GPU_INLINE virtual void set_func3(float val) noexcept { 
+        zenith  = val;
+        update_rot();       // only call once
+    }
+
+    CPT_GPU_INLINE void update_rot() {
+        auto quat_yaw = Quaternion::angleAxis(azimuth, Vec3(0, 0, 1)),
+             quat_pit = Quaternion::angleAxis(zenith, Vec3(1, 0, 0)); 
+        rot = quat_yaw * quat_pit;
     }
 };

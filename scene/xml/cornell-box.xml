@@ -22,12 +22,12 @@
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
-			<bool name="gamma_correction" value="false"/>
+			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>
 
 	<brdf type="conductor-ggx" id="large-box">
-		<string name="metal-type" value="Au"/>
+		<string name="conductor" value="Au"/>
 		<float name="roughness_x" value="0.001"/>
 		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="1"/>
@@ -64,9 +64,12 @@
 	</brdf>
 
 	<emitter type="area" id="area">
+		<!-- <float name="angle" value="10"/> -->
 		<rgb name="emission" value="1, 1, 1"/>
 		<rgb name="scaler" value="48.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
+
+		<!-- <ref type="texture" id="emitter"/> -->
 	</emitter>
 
 	<shape type="obj">
@@ -109,4 +112,8 @@
 		<ref type="material" id="light"/>
 		<ref type="emitter" id="area"/>
 	</shape>
+
+	<texture id="emitter">
+		<string name="emission" value="../textures/others/rgb-emitter.png"/>
+	</texture>
 </scene>

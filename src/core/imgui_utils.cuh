@@ -5,6 +5,7 @@
 
 #include <driver_types.h>
 #include <GLFW/glfw3.h>
+#include "core/max_depth.h"
 
 class DeviceCamera;
 class BSDFInfo;
@@ -12,6 +13,28 @@ class BSDFInfo;
 namespace gui {
 
 using gl_uint = unsigned int;
+
+struct GUIParams {
+    int compress_q = 90;
+
+    float trans_speed = 0.1f;
+    float rot_sensitivity = 0.5f;
+    
+    bool show_window = true; 
+    bool show_fps = true; 
+    bool capture = false;
+    bool gamma_corr = true;
+    
+    bool camera_update = false;
+    bool scene_update = false;
+    bool material_update = false;
+    bool renderer_update = false;
+    bool output_png = true;
+
+    inline bool buffer_flush_update() const noexcept {
+        return camera_update || scene_update || material_update || renderer_update;
+    }
+};
 
 // initialize GL texture and PBO (pixel buffer object)
 void init_texture_and_pbo(
@@ -69,18 +92,8 @@ void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
-    int& max_depth,
-    float& trans_speed,
-    float& rot_sensitivity,
-    bool& show_window, 
-    bool& show_fps, 
-    bool& capture,
-    bool& gamma_corr,
-    
-    bool& camera_update,
-    bool& scene_update,
-    bool& material_update,
-    bool& renderer_update
+    MaxDepthParams& md_params,
+    GUIParams& params
 );
 
 }   // namespace gui

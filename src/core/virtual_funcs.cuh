@@ -9,14 +9,12 @@
 #include "core/emitter.cuh"
 
 template <typename BSDFType>
-CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int kd_tex_id = 0, int ex_tex_id = 0, int flags = BSDFFlag::BSDF_DIFFUSE) {
+CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int flags = BSDFFlag::BSDF_DIFFUSE) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         *dst = new BSDFType();
         (*dst)->set_kd(std::move(k_d));
         (*dst)->set_ks(std::move(k_s));
         (*dst)->set_kg(std::move(k_g));
-        (*dst)->set_kd_id(kd_tex_id);
-        (*dst)->set_ex_id(ex_tex_id);
         (*dst)->set_lobe(flags);
     }
 }
@@ -32,21 +30,29 @@ CPT_KERNEL void load_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g) {
 }
 
 CPT_KERNEL void create_metal_bsdf(
-    BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y, int ks_tex_id = 0, int ex_tex_id = 0
+    BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y
 );
 
 CPT_KERNEL void load_metal_bsdf(
     BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y
 );
 
+CPT_KERNEL void load_dispersion_bsdf(
+    BSDF** dst, Vec4 k_s, float index_a, float index_b
+);
+
+CPT_KERNEL void create_dispersion_bsdf(
+    BSDF** dst, Vec4 k_s, float index_a, float index_b
+);
+
 template <typename PlasticType>
 CPT_KERNEL void create_plastic_bsdf(
     BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 
     float ior, float trans_scaler = 1.f, 
-    float thickness = 0, int kd_tex_id = 0, int ks_tex_id = 0
+    float thickness = 0
 ) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *dst = new PlasticType(k_d, k_s, sigma_a, ior, trans_scaler, thickness, kd_tex_id, ks_tex_id);
+        *dst = new PlasticType(k_d, k_s, sigma_a, ior, trans_scaler, thickness);
         (*dst)->set_kd(std::move(k_d));
         (*dst)->set_ks(std::move(k_s));
         (*dst)->set_kg(std::move(sigma_a));
@@ -78,6 +84,10 @@ CPT_KERNEL void destroy_gpu_alloc(Ty** dst) {
 }
 
 CPT_KERNEL void create_point_source(Emitter* &dst, Vec4 le, Vec3 pos);
-CPT_KERNEL void create_area_source(Emitter* &dst, Vec4 le, int obj_ref, bool is_sphere);
+CPT_KERNEL void create_area_source(Emitter* &dst, Vec4 le, int obj_ref, bool is_sphere, cudaTextureObject_t obj = NULL);
+CPT_KERNEL void create_area_spot_source(Emitter* &dst, Vec4 le, float cos_val, int obj_ref, bool is_sphere, cudaTextureObject_t obj = NULL);
+CPT_KERNEL void create_envmap_source(Emitter* &dst, cudaTextureObject_t obj, float scaler = 1, float azimuth = 0, float zenith = 0);
 CPT_KERNEL void create_abstract_source(Emitter* &dst);
 CPT_KERNEL void set_emission(Emitter* &dst, Vec3 color, float scaler = 1.f);
+
+CPT_KERNEL void call_setter(Emitter* &dst, float v1, float v2, float v3);

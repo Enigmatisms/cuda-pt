@@ -26,3 +26,14 @@ CPT_CPU_GPU_INLINE Vec3 sample_uniform_sphere(VecType&& uv, float& pdf) {
     sincospif(2.f * uv.y(), &sin_phi, &cos_phi);
     return Vec3(cos_phi * sin_theta, sin_phi * sin_theta, cos_theta);
 }
+
+CONDITION_TEMPLATE(VecType, Vec2)
+CPT_CPU_GPU_INLINE Vec3 sample_uniform_cone(VecType&& uv, float cos_val, float& pdf) {
+    float cos_theta = cos_val + (1.f - cos_val) * uv.x();  // uniform in [cos_val, 1]
+    float sin_theta = sqrtf(1.f - cos_theta * cos_theta);
+    pdf = 1.f / (2.f * M_Pi * (1.f - cos_val));
+    float sin_phi = 0, cos_phi = 0;
+    sincospif(2.f * uv.y(), &sin_phi, &cos_phi);
+
+    return Vec3(cos_phi * sin_theta, sin_phi * sin_theta, cos_theta);
+}

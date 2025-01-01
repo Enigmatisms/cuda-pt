@@ -46,6 +46,15 @@ void BSDFInfo::copy_to_gpu(BSDF*& to_store) const {
             bsdf.roughness_x(), 
             bsdf.roughness_y()
         );
+    } else if (type == BSDFType::Dispersion) {
+        Vec2 dis_params = DISPERSION_PARAMS[std::min(bsdf.mtype, 
+                (uint8_t)DispersionType::NumDispersionType)];
+        load_dispersion_bsdf<<<1, 1>>>(
+            &to_store,
+            bsdf.k_s,
+            dis_params.x(),
+            dis_params.y()
+        );
     }
     updated = false;
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -83,20 +92,16 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) {
             bsdf.k_g, 
             1.5, 
             1.f, 
-            0.5f, 
-            bsdf.kd_tex_id, 
-            bsdf.ex_tex_id
+            0.5f
         );
     } else if (type == BSDFType::PlasticForward) {
-            create_plastic_bsdf<PlasticForwardBSDF><<<1, 1>>>(&to_store, 
+        create_plastic_bsdf<PlasticForwardBSDF><<<1, 1>>>(&to_store, 
             bsdf.k_d, 
             bsdf.k_s, 
             bsdf.k_g, 
             1.5, 
             1.f, 
-            0.5f,
-            bsdf.kd_tex_id, 
-            bsdf.ex_tex_id
+            0.5f
         );
     } else if (type == BSDFType::GGXConductor) {
         create_metal_bsdf<<<1, 1>>>(&to_store, 
@@ -104,8 +109,15 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) {
             METAL_KS[bsdf.mtype], 
             bsdf.k_g, 
             0.003f,
-            0.003f,
-            bsdf.kd_tex_id, bsdf.ex_tex_id
+            0.003f
+        );
+    } else if (type == BSDFType::Dispersion) {
+        Vec2 dis_params = DISPERSION_PARAMS[std::min(bsdf.mtype, 
+                (uint8_t)DispersionType::NumDispersionType)];
+        create_dispersion_bsdf<<<1, 1>>>(&to_store, 
+            bsdf.k_s, 
+            dis_params.x(),
+            dis_params.y()
         );
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());

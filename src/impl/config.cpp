@@ -14,7 +14,13 @@ RenderingConfig RenderingConfig::from_xml(const tinyxml2::XMLElement *sensor_nod
         if (name == "sample_count")
             node->QueryIntAttribute("value", &config.spp);
         else if (name == "max_bounce")
-            node->QueryIntAttribute("value", &config.max_depth);
+            node->QueryIntAttribute("value", &config.md.max_depth);
+        else if (name == "max_diffuse")
+            node->QueryIntAttribute("value", &config.md.max_diffuse);
+        else if (name == "max_specular")
+            node->QueryIntAttribute("value", &config.md.max_specular);
+        else if (name == "max_transmit")
+            node->QueryIntAttribute("value", &config.md.max_tranmit);
         else if (name == "cache_level") {
             int cache_level = 0;
             node->QueryIntAttribute("value", &cache_level);

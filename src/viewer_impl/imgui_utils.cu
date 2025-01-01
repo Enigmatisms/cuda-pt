@@ -197,8 +197,8 @@ bool mouse_camera_update(DeviceCamera& cam, float sensitivity) {
             float deltaX = io.MouseDelta.x;
             float deltaY = io.MouseDelta.y;
 
-            float yaw = deltaX * sensitivity * M_Pi / 180.0f;
-            float pitch = deltaY * sensitivity * M_Pi / 180.0f;
+            float yaw = deltaX * sensitivity * DEG2RAD;
+            float pitch = deltaY * sensitivity * DEG2RAD;
 
             cam.rotate(yaw, pitch);
             return true;
@@ -229,10 +229,21 @@ static bool draw_coupled_slider_input(std::string id, std::string name, float& v
 
     ImGui::PushItemWidth(120.0f);
     std::string label = "##ScalerSlider-" + id;
-    updated |= ImGui::SliderFloat(label.c_str(), &val, 0.0f, max_val, "%.3f"); ImGui::SameLine();
+    updated |= ImGui::SliderFloat(label.c_str(), &val, min_val, max_val, "%.3f"); ImGui::SameLine();
     label = "##ScalerInput-" + id;
-    updated |= ImGui::InputFloat(label.c_str(), &val, 0.0f, max_val, "%.3f");
+    updated |= ImGui::InputFloat(label.c_str(), &val, min_val, max_val, "%.3f");
     ImGui::PopItemWidth();
+    return updated;
+}
+
+static bool draw_integer_input(std::string id, std::string name, int& val, int min_val = 1, int max_val = 64, float width = 100.f) {
+    bool updated = false;
+    ImGui::Text(name.c_str());
+    ImGui::SameLine();
+    ImGui::PushItemWidth(width);
+    updated |= ImGui::InputInt(("##" + id).c_str(), &val, min_val, max_val);
+    ImGui::PopItemWidth();
+    ImGui::Separator();
     return updated;
 }
 
@@ -269,11 +280,16 @@ static bool emitter_widget(std::string description, Vec4& c_scaler, bool add_rul
     bool updated = false;
     if (add_rule)
         ImGui::Separator();
-
-    ImGui::Text("Emission for '%s'", description.c_str());
-    
-    updated |= draw_color_picker(description, "Color", &c_scaler.x());
-    updated |= draw_coupled_slider_input(description, "Scaler", c_scaler.w(), 0.f, 100.f);
+    if (c_scaler.x() < 0) {
+        ImGui::Text("Environment Map '%s'", description.c_str());
+        updated |= draw_coupled_slider_input(description + "-scale", "Scaler", c_scaler.y(), 0.f, 100.f);
+        updated |= draw_coupled_slider_input(description + "-azimuth", "Azimuth", c_scaler.z(), -180.f, 180.f);
+        updated |= draw_coupled_slider_input(description + "-zenith", "Zenith", c_scaler.w(), 0.f, 180.f);
+    } else {
+        ImGui::Text("Emission for '%s'", description.c_str());
+        updated |= draw_color_picker(description, "Color", &c_scaler.x());
+        updated |= draw_coupled_slider_input(description, "Scaler", c_scaler.w(), 0.f, 100.f);
+    }
     return updated;
 }
 
@@ -307,7 +323,7 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
             }
             if (info.type == BSDFType::GGXConductor) {
                 local_update |= draw_color_picker(info.name + "-kd", "Albedo", &info.bsdf.k_g.x());
-                local_update |= draw_selection_menu(METAL_NAMES, "##" + info.name + "-type", "Metal Type", reinterpret_cast<uint8_t&>(info.bsdf.mtype));
+                local_update |= draw_selection_menu(METAL_NAMES, "##" + info.name + "-type", "Metal Type", info.bsdf.mtype);
                 local_update |= draw_coupled_slider_input(info.name + "rx", "roughness X", info.bsdf.roughness_x());
                 local_update |= draw_coupled_slider_input(info.name + "ry", "roughness Y", info.bsdf.roughness_y());
             } else if (info.type == BSDFType::Plastic || info.type == BSDFType::PlasticForward) {
@@ -324,6 +340,9 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
                 local_update |= draw_color_picker(info.name + "-kd", "Diffuse", &info.bsdf.k_d.x());
             } else if (info.type == BSDFType::Specular){
                 local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
+            } else if (info.type == BSDFType::Dispersion) {
+                local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
+                local_update |= draw_selection_menu(DISPERSION_NAMES, "##" + info.name + "-type", "Dispersion Type", info.bsdf.mtype);
             }
             info.updated = local_update;
             updated |= local_update;
@@ -337,71 +356,65 @@ void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
-    int& max_depth,
-    float& trans_speed,
-    float& rot_sensitivity,
-    bool& show_window, 
-    bool& show_fps, 
-    bool& capture,
-    bool& gamma_corr,
-
-    bool& camera_update,
-    bool& scene_update,
-    bool& material_update,
-    bool& renderer_update
+    MaxDepthParams& md_params,
+    GUIParams& params
 ) {
     // Begin the main menu bar at the top of the window
     if (ImGui::BeginMainMenuBar()) {
         // Create a menu item called "Options" in the main menu bar
         if (ImGui::BeginMenu("Options")) {
             // Add a checkbox in the menu to toggle the visibility of the collapsible window
-            ImGui::MenuItem("Show Settings Window", NULL, &show_window);
-            ImGui::MenuItem("Show Frame Rate Bar", NULL, &show_fps);
+            ImGui::MenuItem("Show Settings Window", NULL, &params.show_window);
+            ImGui::MenuItem("Show Frame Rate Bar", NULL, &params.show_fps);
             ImGui::EndMenu(); // End the "Options" menu
         }
         ImGui::EndMainMenuBar(); // End the main menu bar
     }
 
     // Check if the collapsible window should be shown
-    scene_update    = false;
-    renderer_update = false;
-    material_update = false;
-    if (show_window) {
+    params.scene_update    = false;
+    params.renderer_update = false;
+    params.material_update = false;
+    if (params.show_window) {
         // Begin the collapsible window
-        if (ImGui::Begin("Settings", &show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::Begin("Settings", &params.show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
             // Collapsible group for Camera Settings
             if (ImGui::CollapsingHeader("Camera Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                camera_update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
+                params.camera_update |= ImGui::Checkbox("orthogonal camera", &cam.use_orthogonal); // Toggles camera_bool_value on or off
 
                 float value = focal2fov(cam.inv_focal, cam._hw);
-                camera_update |= draw_coupled_slider_input("Fov", "Camera FoV", value, 1.0f, 150.f);
+                params.camera_update |= draw_coupled_slider_input("Fov", "Camera FoV", value, 1.0f, 150.f);
                 cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
 
-                ImGui::Checkbox("Gamma Correction", &gamma_corr);
-                draw_coupled_slider_input("cam-speed", "Camera Speed", trans_speed, 0.01f, 2.f);
-                draw_coupled_slider_input("rot-speed", "Rotation Speed", rot_sensitivity, 0.1f, 2.f);
+                ImGui::Checkbox("Gamma Correction", &params.gamma_corr);
+                draw_coupled_slider_input("cam-speed", "Camera Speed", params.trans_speed, 0.01f, 2.f);
+                draw_coupled_slider_input("rot-speed", "Rotation Speed", params.rot_sensitivity, 0.1f, 2.f);
             }
 
             if (ImGui::CollapsingHeader("Scene Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::Text("Scene emitter settings");
                 for (auto& [name, e_val]: emitters) {
-                    scene_update |= emitter_widget(name, e_val);
+                    params.scene_update |= emitter_widget(name, e_val);
                 }
             }
 
             if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                ImGui::Text("Max bounces");
-                ImGui::SameLine();
-                ImGui::PushItemWidth(100.0f);
-                renderer_update |= ImGui::InputInt("##max_depth", &max_depth, 1, 128); ImGui::SameLine();
-                ImGui::PopItemWidth();
-                ImGui::Separator();
+                params.renderer_update |= draw_integer_input("max_depth", "Max Depth", md_params.max_depth);
+                params.renderer_update |= draw_integer_input("max_diff",  "Max Diffuse", md_params.max_diffuse);
+                params.renderer_update |= draw_integer_input("max_spec",  "Max Specular", md_params.max_specular);
+                params.renderer_update |= draw_integer_input("max_trans", "Max Transmit", md_params.max_tranmit);
+                ImGui::Checkbox("Output PNG", &params.output_png);
+                if (!params.output_png) {
+                    ImGui::PushItemWidth(120.0f);
+                    ImGui::InputInt("Compression Quality", &params.compress_q, 1, 100);
+                    ImGui::PopItemWidth();
+                }
             }
             if (ImGui::CollapsingHeader("Material Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
-                material_update |= material_widget(bsdf_infos);
+                params.material_update |= material_widget(bsdf_infos);
             }
             if (ImGui::CollapsingHeader("Screen Capture", ImGuiWindowFlags_AlwaysAutoResize)) {
-                capture = ImGui::Button("Capture Frame");
+                params.capture = ImGui::Button("Capture Frame");
             }
             ImGui::End();
         }

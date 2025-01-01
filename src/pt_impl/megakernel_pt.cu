@@ -3,6 +3,7 @@
  * @date: 9.15.2024
  * @author: Qianyue He
 */
+#include "core/textures.cuh"
 #include "renderer/base_pt.cuh"
 #include "renderer/megakernel_pt.cuh"
 
@@ -211,15 +212,16 @@ CPT_KERNEL void render_pt_kernel(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
+    int envmap_id,
     bool gamma_corr
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -228,7 +230,7 @@ CPT_KERNEL void render_pt_kernel(
     // step 1: generate ray
 
     // step 2: bouncing around the scene until the max depth is reached
-    int min_index = -1, object_id = 0;
+    int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
     extern __shared__ float4 s_cached[];
 #ifdef RENDERER_USE_BVH
@@ -250,7 +252,7 @@ CPT_KERNEL void render_pt_kernel(
     float emission_weight = 1.f;
     bool hit_emitter = false;
     
-    for (int b = 0; b < max_depth; b++) {
+    for (int b = 0; b < md_params.max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
@@ -293,13 +295,12 @@ CPT_KERNEL void render_pt_kernel(
 
             // emitter MIS
             emission_weight = emission_weight / (emission_weight + 
-                    objects[object_id].solid_angle_pdf(it.shading_norm, ray.d, min_dist) * 
+                    objects[object_id].solid_angle_pdf(c_textures.eval_normal(it, material_id), ray.d, min_dist) * 
                     hit_emitter * (b > 0) * ray.non_delta());
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
-            Vec4 direct_comp = throughput *\
-                        c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
+            Vec4 direct_comp = throughput * c_emitter[emitter_id]->eval_le(&ray.d, &it);
             radiance += direct_comp * emission_weight;
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
@@ -308,7 +309,9 @@ CPT_KERNEL void render_pt_kernel(
             emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
             Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
-            shadow_ray.d = emitter->sample(shadow_ray.o, direct_comp, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+            shadow_ray.d = emitter->sample(
+                shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sampler.next2D(), verts, norms, uvs, emitter_id
+            ) - shadow_ray.o;
             
             float emit_len_mis = shadow_ray.d.length();
             shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
@@ -324,8 +327,8 @@ CPT_KERNEL void render_pt_kernel(
             ) {
                 // MIS for BSDF / light sampling, to achieve better rendering
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
-                emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d) * emitter->non_delta();
-                radiance += throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d) * \
+                emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d, material_id) * emitter->non_delta();
+                radiance += throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id) * \
                     (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
                 // numerical guard, in case emit_len_mis is 0
             }
@@ -333,19 +336,34 @@ CPT_KERNEL void render_pt_kernel(
             // step 4: sample a new ray direction, bounce the 
             BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;
             ray.o = std::move(shadow_ray.o);
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe, material_id);
             ray.set_delta((BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0);
+
 
             if (radiance.numeric_err())
                 radiance.fill(0);
             
 #ifdef RENDERER_USE_BVH
-            // using BVH enables the usage of RR, since there is no within-loop synchronization
+            // using BVH enables breaking, since there is no within-loop synchronization
+            diff_b  += (BSDFFlag::BSDF_DIFFUSE  & sampled_lobe) > 0;
+            spec_b  += (BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0;
+            trans_b += (BSDFFlag::BSDF_TRANSMIT & sampled_lobe) > 0;
+            if (diff_b  >= md_params.max_diffuse  || 
+                spec_b  >= md_params.max_specular || 
+                trans_b >= md_params.max_tranmit
+            ) break;
             float max_value = throughput.max_elem_3d();
             if (b >= RR_BOUNCE && max_value < RR_THRESHOLD) {
                 if (sampler.next1D() > max_value || max_value < THP_EPS) break;
                 throughput *= 1. / max_value;
             }
+#endif // RENDERER_USE_BVH
+        } else {
+            radiance += throughput * c_emitter[envmap_id]->eval_le(&ray.d);
+#ifdef RENDERER_USE_BVH
+            break;
+#else 
+            throughput *= 0;
 #endif // RENDERER_USE_BVH
         }
     }
@@ -373,15 +391,16 @@ template CPT_KERNEL void render_pt_kernel<true>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
+    int envmap_index,
     bool gamma_corr
 );
 
@@ -397,14 +416,15 @@ template CPT_KERNEL void render_pt_kernel<false>(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     DeviceImage image,
+    const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
     int seed_offset,
-    int max_depth,
     int node_num,
     int accum_cnt,
     int cache_num,
+    int envmap_index,
     bool gamma_corr
 );

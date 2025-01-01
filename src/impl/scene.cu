@@ -7,7 +7,7 @@
 #include <numeric>
 #include "core/scene.cuh"
 
-const std::unordered_map<std::string, MetalType> material_mapping = {
+const std::unordered_map<std::string, MetalType> conductor_mapping = {
     {"Au", MetalType::Au},
     {"Cr", MetalType::Cr},
     {"Cu", MetalType::Cu},
@@ -23,6 +23,17 @@ const std::unordered_map<std::string, MetalType> material_mapping = {
     {"CuO", MetalType::CuO},
     {"Hg",  MetalType::Hg},
     {"Ir",  MetalType::Ir},
+};
+
+const std::unordered_map<std::string, DispersionType> dielectric_mapping = {
+    {"Diamond",     DispersionType::Diamond},
+    {"DiamondHigh", DispersionType::DiamondHigh},
+    {"Silica",      DispersionType::Silica},
+    {"Glass_BK7",   DispersionType::Glass_BK7},
+    {"Glass_BaF10", DispersionType::Glass_BaF10},
+    {"Glass_SF10",  DispersionType::Glass_SF10},
+    {"Sapphire",    DispersionType::Sapphire},
+    {"Water",       DispersionType::Water}
 };
 
 std::string getFolderPath(std::string filePath) {
@@ -97,8 +108,12 @@ Vec3 parsePoint(const tinyxml2::XMLElement* element) {
 
 void parseBSDF(
     const tinyxml2::XMLElement* bsdf_elem, 
+    const std::unordered_map<std::string, TextureInfo>& tex_map,
     std::unordered_map<std::string, int>& bsdf_map, 
     std::vector<BSDFInfo>& bsdf_infos,
+    std::vector<Texture<float4>>& host_4d,
+    std::vector<Texture<float2>>& host_2d,
+    Textures& textures,
     BSDF** bsdfs, 
     int index
 ) {
@@ -107,7 +122,6 @@ void parseBSDF(
 
     bsdf_map[id] = index;
     Vec4 k_d, k_s, k_g;
-    int kd_tex_id = -1, ex_tex_id = -1;
 
     const tinyxml2::XMLElement* element = bsdf_elem->FirstChildElement("rgb");
     while (element) {
@@ -124,29 +138,60 @@ void parseBSDF(
         element = element->NextSiblingElement("rgb");
     }
 
-    element = bsdf_elem->FirstChildElement("integer");
-
-    while (element) {
-        std::string name = element->Attribute("name");
-        std::string value = element->Attribute("value");
-        int ref_id = -1;            // TODO: map texture with niteger index
-        if (name == "kd_tex_id") {
-            kd_tex_id = ref_id;
-        } else if (name == "ex_tex_id") {
-            ex_tex_id = ref_id;
+    // reference to the texture
+    element = bsdf_elem->FirstChildElement("ref");
+    if (element) {
+        std::string name = element->Attribute("type");
+        if (!name.empty() && name == "texture") {
+            std::string value = element->Attribute("id");
+            auto it = tex_map.find(value);
+            if (it == tex_map.end()) {
+                std::cerr << "Texture named '" << value  << "' not found.\n";
+                throw std::runtime_error("Referenced Texture not found.");
+            } else {
+                if (!it->second.diff_path.empty()) {
+                    Texture<float4> tex(it->second.diff_path, TextureType::DIFFUSE_TEX);
+                    textures.enqueue(tex, index);
+                    host_4d.emplace_back(std::move(tex));
+                }
+                if (!it->second.spec_path.empty()) {
+                    Texture<float4> tex(it->second.spec_path, TextureType::SPECULAR_TEX);
+                    textures.enqueue(tex, index);
+                    host_4d.emplace_back(std::move(tex));
+                }
+                if (!it->second.glos_path.empty()) {
+                    Texture<float4> tex(it->second.glos_path, TextureType::GLOSSY_TEX);
+                    textures.enqueue(tex, index);
+                    host_4d.emplace_back(std::move(tex));
+                }
+                if (!it->second.rough_path1.empty()) {
+                    Texture<float2> tex(
+                        it->second.rough_path1, 
+                        TextureType::ROUGHNESS_TEX, 
+                        it->second.rough_path2, 
+                        it->second.is_rough_ior
+                    );
+                    textures.enqueue(tex, index);
+                    host_2d.emplace_back(std::move(tex));
+                }
+                if (!it->second.normal_path.empty()) {
+                    Texture<float4> tex(it->second.normal_path, TextureType::NORMAL_TEX, "", false, true);
+                    textures.enqueue(tex, index);
+                    host_4d.emplace_back(std::move(tex));
+                }
+            }   
         }
-        element = element->NextSiblingElement("rgb");
     }
 
     BSDFInfo info(id);
-    info.bsdf = BSDFInfo::BSDFParams(k_d, k_s, k_g, kd_tex_id, ex_tex_id);
+    info.bsdf = BSDFInfo::BSDFParams(k_d, k_s, k_g);
     if (type == "lambertian") {
-        create_bsdf<LambertianBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT);
+        create_bsdf<LambertianBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT);
     } else if (type == "specular") {
-        create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT);
+        create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT);
         info.type = BSDFType::Specular;
     } else if (type == "det-refraction") {
-        create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, kd_tex_id, ex_tex_id, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
+        create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
         info.type = BSDFType::Translucent;
     } else if (type == "conductor-ggx") {
         float roughness_x = 0.1f, roughness_y = 0.1f;
@@ -156,12 +201,12 @@ void parseBSDF(
         if (element) {
             std::string name = element->Attribute("name");
             std::string value = element->Attribute("value");
-            if (name == "type" || name == "metal" || name == "metal-type" || name == "metal_type") {
+            if (name == "type" || name == "metal" || name == "conductor") {
                 std::string metal_type = element->Attribute("value");
-                auto it = material_mapping.find(metal_type);
-                if (it == material_mapping.end()) {
-                    std::cout << "BSDF[" << id << "]" << ": Only 8 types of metals are supported: ";
-                    for (const auto [k, v]: material_mapping)
+                auto it = conductor_mapping.find(metal_type);
+                if (it == conductor_mapping.end()) {
+                    std::cout << "BSDF[" << id << "]" << ": Only << " << int(NumMetalType) << " types of metals are supported: ";
+                    for (const auto [k, v]: conductor_mapping)
                         std::cout << k << ", ";
                     std::cout << std::endl;
                     std::cout << "Current type '" << metal_type << "' is not supported. Setting to 'Cu'\n";
@@ -186,16 +231,15 @@ void parseBSDF(
                 throw std::runtime_error("Error parsing 'roughness' attribute");
             element = element->NextSiblingElement("float");
         }
-        info.bsdf.store_ggx_params(mtype, k_g, roughness_x, roughness_y, kd_tex_id);
+        info.bsdf.store_ggx_params(mtype, k_g, roughness_x, roughness_y);
         create_metal_bsdf<<<1, 1>>>(bsdfs + index, METAL_ETA_TS[mtype], 
-                    METAL_KS[mtype], k_g, roughness_x, roughness_y, kd_tex_id, ex_tex_id);
+                    METAL_KS[mtype], k_g, roughness_x, roughness_y);
     } else if (type == "plastic" || type == "plastic-forward") {
         k_g = Vec4(0, 1);
         element = bsdf_elem->FirstChildElement("float");
         float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
         while (element) {
             std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
             tinyxml2::XMLError eResult;
             if (name == "trans_scaler") {
                 eResult = element->QueryFloatAttribute("value", &trans_scaler);
@@ -211,13 +255,36 @@ void parseBSDF(
         if (type == "plastic") {
             info.type = BSDFType::Plastic;
             create_plastic_bsdf<PlasticBSDF><<<1, 1>>>(bsdfs + index, 
-                k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
+                    k_d, k_s, k_g, ior, trans_scaler, thickness);
         } else {
             info.type = BSDFType::PlasticForward;
             create_plastic_bsdf<PlasticForwardBSDF><<<1, 1>>>(bsdfs + index, 
-                k_d, k_s, k_g, ior, trans_scaler, thickness, kd_tex_id, ex_tex_id);
+                    k_d, k_s, k_g, ior, trans_scaler, thickness);
         }
         info.bsdf.store_plastic_params(ior, trans_scaler, thickness);
+    } else if (type == "dispersion") {
+        element = bsdf_elem->FirstChildElement("string");
+        DispersionType dtype = DispersionType::Diamond;
+        if (element) {
+            std::string name = element->Attribute("name");
+            if (name == "type" || name == "dielectric") {
+                std::string dielec_type = element->Attribute("value");
+                auto it = dielectric_mapping.find(dielec_type);
+                if (it == dielectric_mapping.end()) {
+                    std::cout << "BSDF[" << id << "]" << ": Only 8 types of metals are supported: ";
+                    for (const auto [k, v]: dielectric_mapping)
+                        std::cout << k << ", ";
+                    std::cout << std::endl;
+                    std::cout << "Current type '" << dielec_type << "' is not supported. Setting to 'Diamond'\n";
+                } else {
+                    dtype = it->second;
+                }
+            }
+        }
+        Vec2 dis_params = DISPERSION_PARAMS[dtype];
+        info.type = BSDFType::Dispersion;
+        info.bsdf.store_dispersion_params(dtype, k_s);
+        create_dispersion_bsdf<<<1, 1>>>(bsdfs + index, k_s, dis_params.x(), dis_params.y());
     }
     bsdf_infos.emplace_back(std::move(info));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -238,9 +305,13 @@ void parseEmitterNames(
 void parseEmitter(
     const tinyxml2::XMLElement* emitter_elem, 
     std::unordered_map<std::string, int>& emitter_obj_map,      // key emitter name, value object_id,
+    const std::unordered_map<std::string, TextureInfo>& tex_map,
     std::vector<std::pair<std::string, Vec4>>& e_props,
     std::vector<std::string> obj_ref_names,
-    Emitter** emitters, int index
+    std::vector<Texture<float4>>& host_texs,
+    Emitter** emitters, 
+    int& envmap_id,
+    int index
 ) {
     std::string type = emitter_elem->Attribute("type");
     std::string id = emitter_elem->Attribute("id");
@@ -260,7 +331,31 @@ void parseEmitter(
         }
         element = element->NextSiblingElement("rgb");
     }
+    scaler.w() = scaler.x();
     e_props.emplace_back(id, Vec4(emission.xyz(), scaler.x()));
+
+    cudaTextureObject_t tex_obj = 0;
+    element = emitter_elem->FirstChildElement("ref");
+    if (element) {
+        std::string name = element->Attribute("type");
+        if (!name.empty() && name == "texture") {
+            std::string value = element->Attribute("id");
+            auto it = tex_map.find(value);
+            if (it == tex_map.end()) {
+                std::cerr << "Texture named '" << value  << "' not found.\n";
+                throw std::runtime_error("Referenced Texture not found.");
+            } else {
+                if (!it->second.diff_path.empty()) {
+                    Texture<float4> tex(it->second.diff_path, TextureType::DIFFUSE_TEX);
+                    tex_obj = tex.object();
+                    host_texs.emplace_back(std::move(tex));
+                } else {
+                    std::cerr << "The texture for HDRI should be set for it's 'emission' element, but none is found.\n";
+                    throw std::runtime_error("Referenced Texture not found.");
+                }
+            }
+        }
+    }
 
     if (type == "point") {
         element = emitter_elem->FirstChildElement("point");
@@ -269,20 +364,27 @@ void parseEmitter(
         if (name == "center" || name == "pos")
             pos = parsePoint(element);
         create_point_source<<<1, 1>>>(emitters[index], emission * scaler, pos);
-    } else if (type == "spot") {
-        element = emitter_elem->FirstChildElement("point");
-        Vec3 pos(0, 0, 0), dir(0, 0, 1);
-        while (element) {
+    } else if (type == "area-spot") {
+        element = emitter_elem->FirstChildElement("float");
+        float cos_val = 0.99;
+        if (element) {
             std::string name = element->Attribute("name");
-            if (name == "pos") {
-                pos = parsePoint(element);
-            } else if (name == "dir") {
-                dir = parsePoint(element);
+            tinyxml2::XMLError eResult;
+            if (name == "half-angle" || name == "angle") {
+                eResult = element->QueryFloatAttribute("value", &cos_val);
+                cos_val = cosf(cos_val * DEG2RAD);
             }
-            element = element->NextSiblingElement("point");
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'Area Spot Emitter' attribute");
         }
-        // create Spot source
-        printf("Spot source created at: [%f, %f, %f], [%f, %f, %f]\n", pos.x(), pos.y(), pos.z(), dir.x(), dir.y(), dir.z());
+        element = emitter_elem->FirstChildElement("string");
+        std::string attr_name = element->Attribute("name");
+        if (!element || attr_name != "bind_type") {
+            std::cerr << "Bound primitive is not specified for area spot source '" << id << "', name: "<< element->Attribute("name") << std::endl;
+            throw std::runtime_error("Bound primitive is not specified for area spot source");
+        }
+        bool spherical_bound = element->Attribute("value") == std::string("sphere");
+        create_area_spot_source<<<1, 1>>>(emitters[index], emission * scaler, cos_val, emitter_obj_map[id], spherical_bound, tex_obj);
     } else if (type == "area") {
         element = emitter_elem->FirstChildElement("string");
         std::string attr_name = element->Attribute("name");
@@ -291,7 +393,34 @@ void parseEmitter(
             throw std::runtime_error("Bound primitive is not specified for area source");
         }
         bool spherical_bound = element->Attribute("value") == std::string("sphere");
-        create_area_source<<<1, 1>>>(emitters[index], emission * scaler, emitter_obj_map[id], spherical_bound);
+        create_area_source<<<1, 1>>>(emitters[index], emission * scaler, emitter_obj_map[id], spherical_bound, tex_obj);
+    } else if (type == "envmap") {
+        envmap_id = index;
+        element = emitter_elem->FirstChildElement("float");
+        float scaler = 1.f, azimuth = 0.f, zenith = 0.f;
+        while (element) {
+            std::string name = element->Attribute("name");
+            tinyxml2::XMLError eResult;
+            if (name == "scaler") {
+                eResult = element->QueryFloatAttribute("value", &scaler);
+            } else if (name == "azimuth") {
+                eResult = element->QueryFloatAttribute("value", &azimuth);
+            } else if (name == "zenith") {
+                eResult = element->QueryFloatAttribute("value", &zenith);
+            }
+            if (eResult != tinyxml2::XML_SUCCESS)
+                throw std::runtime_error("Error parsing 'EnvMap Emitter' attribute");
+            element = element->NextSiblingElement("float");
+        }
+        e_props.back().second = Vec4(-1, scaler, azimuth, zenith);
+        element = emitter_elem->FirstChildElement("ref");
+        if (tex_obj != 0) {
+            create_envmap_source<<<1, 1>>>(emitters[index], 
+                tex_obj, scaler, azimuth * DEG2RAD, zenith * DEG2RAD);
+        } else {
+            std::cerr << "Error: The texture for EnvMap is empty.\n";
+            throw std::runtime_error("Referenced Texture not available.");
+        }
     }
 }
 
@@ -466,9 +595,45 @@ void parseObjShape(
     objects.push_back(object);
 }
 
+void parseTexture(
+    const tinyxml2::XMLElement* tex_elem, 
+    std::unordered_map<std::string, TextureInfo>& texs,
+    std::string folder_prefix
+) {
+    while (tex_elem) {
+        std::string id = tex_elem->Attribute("id");
+        TextureInfo info;
+        const tinyxml2::XMLElement* element = tex_elem->FirstChildElement("string");
+        while (element) {
+            std::string name = element->Attribute("name");
+            if (name == "diffuse" || name == "emission") {
+                info.diff_path = folder_prefix + element->Attribute("value");
+            } else if (name == "specular") {
+                info.spec_path = folder_prefix + element->Attribute("value");
+            } else if (name == "glossy" || name == "sigma_a") {
+                info.glos_path = folder_prefix + element->Attribute("value");
+            } else if (name == "rough1" || name == "roughness_1" || name == "ior") {
+                info.rough_path1 = folder_prefix + element->Attribute("value");
+                info.is_rough_ior = name == "ior";
+            } else if (name == "rough2" || name == "roughness_2") {
+                info.is_rough_ior = false;
+                info.rough_path2 = folder_prefix + element->Attribute("value");
+            } else if (name == "normal") {
+                info.normal_path = folder_prefix + element->Attribute("value");
+            } else {
+                std::cerr << "Unsupported texture type '" << name << "'\n";
+                throw std::runtime_error("Unexpected texture type.");
+            }
+            element = element->NextSiblingElement("string");
+        }
+        texs.emplace(id, std::move(info));
+        tex_elem = tex_elem->NextSiblingElement("texture");
+    }
+}
+
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "Voxel-SDF-PT"};
 
-Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), use_bvh(false) {
+Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0), use_bvh(false) {
     tinyxml2::XMLDocument doc;
     if (doc.LoadFile(path.c_str()) != tinyxml2::XML_SUCCESS) {
         std::cerr << "Failed to load file" << std::endl;
@@ -481,6 +646,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
                                 *emitter_elem = scene_elem->FirstChildElement("emitter"),
                                 *sensor_elem  = scene_elem->FirstChildElement("sensor"), 
                                 *render_elem  = scene_elem->FirstChildElement("renderer"), 
+                                *texture_elem = scene_elem->FirstChildElement("texture"), 
                                 *bool_elem    = scene_elem->FirstChildElement("bool"), *ptr = nullptr;
 
     std::unordered_map<std::string, int> bsdf_map, emitter_map, emitter_obj_map;
@@ -512,18 +678,24 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     }
     }       // local field ends
 
-    // ------------------------- (1) parse all the BSDF -------------------------
+    // ------------------------- (1) parse all the textures and BSDF -------------------------
     
+    std::unordered_map<std::string, TextureInfo> tex_map;
+    parseTexture(texture_elem, tex_map, folder_prefix);
+
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
         ptr = ptr->NextSiblingElement("brdf");
     CUDA_CHECK_RETURN(cudaMalloc(&bsdfs, sizeof(BSDF*) * num_bsdfs));
+
+    textures.init(num_bsdfs);
     for (int i = 0; i < num_bsdfs; i++) {
-        parseBSDF(bsdf_elem, bsdf_map, bsdf_infos, bsdfs, i);
+        parseBSDF(bsdf_elem, tex_map, bsdf_map, bsdf_infos, host_tex_4d, host_tex_2d, textures, bsdfs, i);
         bsdf_elem = bsdf_elem->NextSiblingElement("brdf");
     }
+    textures.to_gpu();
+    CUDA_CHECK_RETURN(cudaMemcpyToSymbolAsync(c_textures, &textures, sizeof(Textures), 0, cudaMemcpyHostToDevice));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
 
     // ------------------------- (2) parse emitter names -------------------------
     parseEmitterNames(emitter_elem, emitter_map);
@@ -564,7 +736,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     CUDA_CHECK_RETURN(cudaMalloc(&emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(emitters[0]);
     for (int i = 1; i <= num_emitters; i++) {
-        parseEmitter(emitter_elem, emitter_obj_map, emitter_props, emitter_names, emitters, i);
+        parseEmitter(emitter_elem, emitter_obj_map, tex_map, emitter_props, emitter_names, host_tex_4d, emitters, envmap_id, i);
         emitter_elem = emitter_elem->NextSiblingElement("emitter");
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -713,7 +885,9 @@ Scene::~Scene() {
     CUDA_CHECK_RETURN(cudaFree(bsdfs));
     CUDA_CHECK_RETURN(cudaFree(emitters));
     CUDA_CHECK_RETURN(cudaFreeHost(cam));
-
+    for (auto& tex: host_tex_4d) tex.destroy();
+    for (auto& tex: host_tex_2d) tex.destroy();
+    textures.destroy();
 }
 
 CPT_KERNEL static void vec2_to_packed_half_kernel(const Vec2* src1, const Vec2* src2, const Vec2* src3, PackedHalf2* dst, size_t count) {
@@ -726,7 +900,11 @@ CPT_KERNEL static void vec2_to_packed_half_kernel(const Vec2* src1, const Vec2* 
 void Scene::update_emitters() {
     for (int index = 1; index <= num_emitters; index++) {
         Vec4 color = emitter_props[index - 1].second;
-        set_emission<<<1, 1>>>(emitters[index], color.xyz(), color.w());
+        if (color.x() < 0) {
+            call_setter<<<1, 1>>>(emitters[index], color.y(), color.z() * DEG2RAD, color.w() * DEG2RAD);
+        } else {
+            set_emission<<<1, 1>>>(emitters[index], color.xyz(), color.w());
+        }
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
@@ -769,7 +947,10 @@ void Scene::print() const noexcept {
     std::cout << std::endl;
     std::cout << "\tConfig: width:\t\t" << config.width << std::endl;
     std::cout << "\tConfig: height:\t\t" << config.height << std::endl;
-    std::cout << "\tConfig: max depth:\t" << config.max_depth << std::endl;
+    std::cout << "\tConfig: max depth:\t" << config.md.max_depth << std::endl;
+    std::cout << "\tConfig: max diffuse:\t" << config.md.max_diffuse << std::endl;
+    std::cout << "\tConfig: max specular:\t" << config.md.max_specular << std::endl;
+    std::cout << "\tConfig: max transmit:\t" << config.md.max_tranmit << std::endl;
     std::cout << "\tConfig: SPP:\t\t" << config.spp << std::endl;
     std::cout << "\tConfig: Gamma corr:\t" << config.gamma_correction << std::endl;
     std::cout << "\tConfig: Spec Cons:\t" << config.spec_constraint << std::endl;

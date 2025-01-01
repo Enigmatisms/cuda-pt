@@ -29,7 +29,7 @@
 		<film type="film">
 			<integer name="width" value="960"/>
 			<integer name="height" value="540"/>
-			<bool name="gamma_correction" value="false"/>
+			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>
 
@@ -101,7 +101,7 @@
 	</brdf>
 
 	<brdf type="conductor-ggx" id="gold">
-		<string name="metal-type" value="Au"/>
+		<string name="conductor" value="Au"/>
 		<float name="roughness_x" value="0.003"/>
 		<float name="roughness_y" value="0.003"/>
 		<rgb name="k_g" value="#FFFFFF"/>
@@ -264,28 +264,28 @@
 	<!-- Starting here is the Blue Sports Car -->
 
 	<brdf type="conductor-ggx" id="shell">
-		<string name="metal-type" value="Cr"/>
+		<string name="conductor" value="Cr"/>
 		<float name="roughness_x" value="0.003"/>
 		<float name="roughness_y" value="0.003"/>
 		<rgb name="k_g" value="#0022EE"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="engine">
-		<string name="metal-type" value="Ir"/>
+		<string name="conductor" value="Ir"/>
 		<float name="roughness_x" value="0.001"/>
 		<float name="roughness_y" value="0.001"/>
 		<rgb name="k_g" value="#EAEAEA"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="wheel">
-		<string name="metal-type" value="Na"/>
+		<string name="conductor" value="Na"/>
 		<float name="roughness_x" value="0.01"/>
 		<float name="roughness_y" value="0.01"/>
 		<rgb name="k_g" value="#FAFAFA"/>
 	</brdf>
 
 	<brdf type="conductor-ggx" id="base">
-		<string name="metal-type" value="TiO2"/>
+		<string name="conductor" value="TiO2"/>
 		<float name="roughness_x" value="0.005"/>
 		<float name="roughness_y" value="0.005"/>
 		<rgb name="k_g" value="#444444"/>

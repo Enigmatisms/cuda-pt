@@ -1,7 +1,7 @@
 #pragma once
 #include "core/bsdf.cuh"
 #include "core/virtual_funcs.cuh"
-#include "core/metal_params.cuh"
+#include "core/preset_params.cuh"
 
 class BSDFInfo {
 public:
@@ -13,24 +13,27 @@ public:
         Vec4 k_s;
         Vec4 k_g;
         Vec3 extras;
-        int kd_tex_id;
-        int ex_tex_id;
-        MetalType mtype;
+        uint8_t mtype;
 
         BSDFParams() {}
         CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec4, Vec4, Vec4)
-        BSDFParams(VType1&& _k_d, VType2&& _k_s, VType3&& _k_g, int _kd_id = -1, int _ex_id = -1):
-            k_d(std::forward<VType1&&>(_k_d)), k_s(std::forward<VType2&&>(_k_s)), k_g(std::forward<VType3&&>(_k_g)),
-            extras(1.5, 1, 0), kd_tex_id(_kd_id), ex_tex_id(_ex_id), mtype(MetalType::Al)
+        BSDFParams(VType1&& _k_d, VType2&& _k_s, VType3&& _k_g):
+            k_d(std::forward<VType1>(_k_d)), k_s(std::forward<VType2>(_k_s)), 
+            k_g(std::forward<VType3>(_k_g)), extras(1.5, 1, 0), mtype(MetalType::Au)
         {}
 
         CONDITION_TEMPLATE(VecType, Vec4)
-        void store_ggx_params(MetalType mt, VecType&& _k_g, float rx, float ry, int kd_id) {
-            k_g = std::forward<VecType&&>(_k_g);
+        void store_ggx_params(MetalType mt, VecType&& _k_g, float rx, float ry) {
+            k_g = std::forward<VecType>(_k_g);
             mtype = mt;
             roughness_x() = rx;
             roughness_y() = ry;
-            kd_tex_id     = kd_id;
+        }
+
+        CONDITION_TEMPLATE(VecType, Vec4)
+        void store_dispersion_params(DispersionType mt, VecType&& _k_s) {
+            k_s = std::forward<VecType>(_k_s);
+            mtype = mt;
         }
 
         void store_plastic_params(
@@ -69,8 +72,6 @@ public:
             data.k_d, 
             data.k_s, 
             data.k_g, 
-            data.kd_tex_id, 
-            data.ex_tex_id, 
             flag
         );
     }
