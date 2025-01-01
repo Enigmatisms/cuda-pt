@@ -73,7 +73,7 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE Vec3 rotate(VecType&& v) const {
-        Quaternion v_quat = Quaternion::from_vector(std::forward<VecType&&>(v));
+        Quaternion v_quat = Quaternion::from_vector(std::forward<VecType>(v));
         Quaternion qv = (*this) * v_quat;
         Quaternion rotated_quat = qv * this->conjugate();
         return Vec3(rotated_quat.x, rotated_quat.y, rotated_quat.z);
@@ -81,7 +81,7 @@ public:
 
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_CPU_GPU_INLINE Vec3 inverse_rotate(VecType&& v) const {
-        Quaternion v_quat = Quaternion::from_vector(std::forward<VecType&&>(v));
+        Quaternion v_quat = Quaternion::from_vector(std::forward<VecType>(v));
         Quaternion qv = this->conjugate() * v_quat;
         Quaternion rotated_quat = qv * (*this);
         return Vec3(rotated_quat.x, rotated_quat.y, rotated_quat.z);

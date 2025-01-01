@@ -17,8 +17,8 @@ public:
 
     CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
     CPT_GPU FresnelTerms(VType1&& _eta_t, VType2&& _k): 
-        eta_t(std::forward<VType1&&>(_eta_t)),
-        k(std::forward<VType1&&>(_k)) {}
+        eta_t(std::forward<VType1>(_eta_t)),
+        k(std::forward<VType1>(_k)) {}
 
     CPT_GPU_INLINE static bool is_total_reflection(float dot_normal, float ni, float nr) {
         return (1.f - (ni * ni) / (nr * nr) * (1.f - dot_normal * dot_normal)) < 0.f;

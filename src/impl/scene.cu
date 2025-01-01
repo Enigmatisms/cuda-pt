@@ -331,6 +331,7 @@ void parseEmitter(
         }
         element = element->NextSiblingElement("rgb");
     }
+    scaler.w() = scaler.x();
     e_props.emplace_back(id, Vec4(emission.xyz(), scaler.x()));
 
     cudaTextureObject_t tex_obj = 0;

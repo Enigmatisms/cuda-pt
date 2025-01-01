@@ -30,7 +30,7 @@ class GGX {
 private:
     CONDITION_TEMPLATE(VecType, Vec3)
     CPT_GPU_INLINE static float get_lambda(VecType&& local, float alphax, float alphay) {
-        float e = GGX::e_func(std::forward<VecType&&>(local), alphax, alphay);
+        float e = GGX::e_func(std::forward<VecType>(local), alphax, alphay);
         return e == 0 ? 0 : (-1.f + sqrtf(1.f + e)) * 0.5f;
     }
 
@@ -137,7 +137,7 @@ public:
         auto D_e = D(local_wh, alphax, alphay);
         // can be 0 for the denominator
         float cos_ratio = fabsf(local_in.dot(local_wh)) / fabsf(local_in.z());
-        return D_e * G1(std::forward<VType2&&>(local_in), alphax, alphay) * cos_ratio;
+        return D_e * G1(std::forward<VType2>(local_in), alphax, alphay) * cos_ratio;
     }
 
     CONDITION_TEMPLATE(VecType, Vec3)
@@ -148,8 +148,8 @@ public:
     // indir points towards the incident point, outdir points away from it
     CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec3, Vec3, Vec3)
     CPT_GPU static Vec4 eval(VType1&& n_s, VType2&& indir, VType3&& outdir, SO3&& R_w2l, const FresnelTerms& fres, float alphax, float alphay) {
-        Vec3 local_in  = -R_w2l.rotate(std::forward<VType2&&>(indir)),
-             local_out = R_w2l.rotate(std::forward<VType3&&>(outdir));
+        Vec3 local_in  = -R_w2l.rotate(std::forward<VType2>(indir)),
+             local_out = R_w2l.rotate(std::forward<VType3>(outdir));
         // Get fresnel term
         Vec3 wh = (local_out + local_in).normalized().face_forward();
         // note that indir points inwards, hence we need negative sign to flip the indir direction

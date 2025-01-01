@@ -18,13 +18,13 @@ public:
         BSDFParams() {}
         CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec4, Vec4, Vec4)
         BSDFParams(VType1&& _k_d, VType2&& _k_s, VType3&& _k_g):
-            k_d(std::forward<VType1&&>(_k_d)), k_s(std::forward<VType2&&>(_k_s)), 
-            k_g(std::forward<VType3&&>(_k_g)), extras(1.5, 1, 0), mtype(MetalType::Au)
+            k_d(std::forward<VType1>(_k_d)), k_s(std::forward<VType2>(_k_s)), 
+            k_g(std::forward<VType3>(_k_g)), extras(1.5, 1, 0), mtype(MetalType::Au)
         {}
 
         CONDITION_TEMPLATE(VecType, Vec4)
         void store_ggx_params(MetalType mt, VecType&& _k_g, float rx, float ry) {
-            k_g = std::forward<VecType&&>(_k_g);
+            k_g = std::forward<VecType>(_k_g);
             mtype = mt;
             roughness_x() = rx;
             roughness_y() = ry;
@@ -32,7 +32,7 @@ public:
 
         CONDITION_TEMPLATE(VecType, Vec4)
         void store_dispersion_params(DispersionType mt, VecType&& _k_s) {
-            k_s = std::forward<VecType&&>(_k_s);
+            k_s = std::forward<VecType>(_k_s);
             mtype = mt;
         }
 

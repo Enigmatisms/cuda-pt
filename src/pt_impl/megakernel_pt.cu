@@ -300,8 +300,7 @@ CPT_KERNEL void render_pt_kernel(
 
             float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
             // (2) check if the ray hits an emitter
-            Vec4 direct_comp = throughput *\
-                        c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
+            Vec4 direct_comp = throughput * c_emitter[emitter_id]->eval_le(&ray.d, &it);
             radiance += direct_comp * emission_weight;
 
             Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, emitter_id);
@@ -310,7 +309,9 @@ CPT_KERNEL void render_pt_kernel(
             emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
             Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
             // use ray.o to avoid creating another shadow_int variable
-            shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sampler.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+            shadow_ray.d = emitter->sample(
+                shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sampler.next2D(), verts, norms, uvs, emitter_id
+            ) - shadow_ray.o;
             
             float emit_len_mis = shadow_ray.d.length();
             shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction

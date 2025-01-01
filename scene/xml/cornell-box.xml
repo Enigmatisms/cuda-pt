@@ -68,6 +68,8 @@
 		<rgb name="emission" value="1, 1, 1"/>
 		<rgb name="scaler" value="48.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
+
+		<!-- <ref type="texture" id="emitter"/> -->
 	</emitter>
 
 	<shape type="obj">
@@ -110,4 +112,8 @@
 		<ref type="material" id="light"/>
 		<ref type="emitter" id="area"/>
 	</shape>
+
+	<texture id="emitter">
+		<string name="emission" value="../textures/others/rgb-emitter.png"/>
+	</texture>
 </scene>

@@ -289,7 +289,7 @@ CPT_KERNEL void nee_shader(
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
         // use ray.o to avoid creating another shadow_int variable
         Vec4 direct_comp(0, 0, 0, 1);
-        shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sg.next2D(), verts, norms, emitter_id) - shadow_ray.o;
+        shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sg.next2D(), verts, norms, uvs, emitter_id) - shadow_ray.o;
 
         float emit_len_mis = shadow_ray.d.length();
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
@@ -356,7 +356,7 @@ CPT_KERNEL void bsdf_local_shader(
                 hit_emitter * secondary_bounce * ray.non_delta());
         // (2) check if the ray hits an emitter
         Vec4 direct_comp = thp *\
-                    c_emitter[emitter_id]->eval_le(&ray.d, &it.shading_norm);
+                    c_emitter[emitter_id]->eval_le(&ray.d, &it);
         payloads.L(px, py) += direct_comp * emission_weight;
         
         ray.o = ray.advance(ray.hit_t);
