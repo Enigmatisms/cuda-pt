@@ -8,6 +8,76 @@
 #include "core/stats.h"
 #include "renderer/tracer_base.cuh"
 
+// #define CP_BASE_6
+#ifdef CP_BASE_6
+constexpr int BASE_SHFL = 6;
+using BitMask = long long;
+CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffsll(bits); } 
+#else
+constexpr int BASE_SHFL = 5;
+using BitMask = int;
+CPT_GPU_INLINE int __count_bit(BitMask bits) { return __ffs(bits); } 
+#endif
+constexpr int BASE_ADDR = 1 << BASE_SHFL;
+
+/**
+ * Perform ray-intersection test on shared memory primitives
+ * @param s_verts:      vertices stored in shared memory
+ * @param ray:          the ray for intersection test
+ * @param s_aabbs:      scene primitives
+ * @param remain_prims: number of primitives to be tested (32 at most)
+ * @param min_index:    closest hit primitive index
+ * @param min_obj_idx:  closest hit object index
+ * @param prim_u:       intersection barycentric coord u
+ * @param prim_v:       intersection barycentric coord v
+ * @param min_dist:     current minimal distance
+ *
+ * @return minimum intersection distance
+ * 
+ * compare to the ray_intersect_old, this API almost double the speed
+ * To check how I improve the naive ray intersection, see Commit: a6602786f9b1a4e70036288a6778c7fcb0b0f75b 
+*/
+CPT_GPU float ray_intersect(
+    const PrecomputedArray& s_verts, 
+    const Ray& ray,
+    ConstAABBWPtr s_aabbs,
+    const int remain_prims,
+    const int cp_base,
+    int& min_index,
+    int& min_obj_idx,
+    float& prim_u,
+    float& prim_v,
+    float min_dist
+) {
+    float aabb_tmin = 0;
+    BitMask tasks = 0;
+
+#pragma unroll
+    for (int idx = 0; idx < remain_prims; idx ++) {
+        // if current ray intersects primitive at [idx], tasks will store it
+        BitMask valid_intr = s_aabbs[idx].aabb.intersect(ray, aabb_tmin) && aabb_tmin < min_dist;
+        tasks |= valid_intr << (BitMask)idx;
+    }
+#pragma unroll
+    while (tasks) {
+        BitMask idx = __count_bit(tasks) - 1; // find the first bit that is set to 1, note that __ffs is 
+        tasks &= ~((BitMask)1 << idx); // clear bit in case it is found again
+        int obj_idx = s_aabbs[idx].aabb.obj_idx();
+#ifdef TRIANGLE_ONLY
+        float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, true);
+#else
+        float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, s_verts, idx, it_u, it_v, obj_idx >= 0);
+#endif
+        bool valid = dist > EPSILON && dist < min_dist;
+        min_dist = valid ? dist : min_dist;
+        prim_u   = valid ? it_u : prim_u;
+        prim_v   = valid ? it_v : prim_v;
+        min_index = valid ? cp_base + idx : min_index;
+        min_obj_idx = valid ? obj_idx : min_obj_idx;
+    }
+    return min_dist;
+}
+
 /**
  * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
  * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)

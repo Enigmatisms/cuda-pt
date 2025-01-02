@@ -27,8 +27,8 @@
 		</transform>
 
 		<film type="film">
-			<integer name="width" value="1920"/>
-			<integer name="height" value="1280"/>
+			<integer name="width" value="960"/>
+			<integer name="height" value="540"/>
 			<bool name="gamma_correction" value="true"/>
 			<integer name="specular_constraint" value="-1"/>
 		</film>

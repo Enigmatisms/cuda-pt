@@ -3,7 +3,6 @@
  * @date: 9.15.2024
  * @author: Qianyue He
 */
-#include "renderer/base_pt.cuh"
 #include "renderer/wavefront_pt.cuh"
 
 namespace {
@@ -63,7 +62,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
 
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
-#ifdef RENDERER_USE_BVH 
         // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
@@ -74,38 +72,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
                     s_cached, verts, min_index, min_object_id, 
                     prim_u, prim_v, node_num, cache_num, MAX_DIST);
-#else   // RENDERER_USE_BVH
-    const int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
-    __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
 
-    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
-    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
-
-    // ============= step 1: ray intersection =================
-    #pragma unroll
-    for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
-        // memory copy to shared memory
-        int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
-        cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
-        if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-            // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
-            // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
-            // since our step is Vec3, this will lead to uncoalesced access
-            // shared memory is enough. Though padding is not easy to implement
-            cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
-            // This memory op is not fully coalesced, since AABB container is not a complete SOA
-            s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
-        }
-        pipe.producer_commit();
-        pipe.consumer_wait();
-        __syncthreads();
-        // this might not be a good solution
-        ray.hit_t = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
-                cp_base << BASE_SHFL, min_index, min_object_id, prim_u, prim_v, ray.hit_t);
-        __syncthreads();
-    }
-#endif  // RENDERER_USE_BVH
     // ============= step 2: local shading for indirect bounces ================
     payloads.L(px + buffer_xoffset, py)   = Vec4(0, 0, 0, 1);
     payloads.set_sampler(px + buffer_xoffset, py, sg);
@@ -169,7 +136,6 @@ CPT_KERNEL void closesthit_shader(
     int min_index = -1, min_object_id = 0;   // round up
     ray.hit_t = MAX_DIST;
 
-#ifdef RENDERER_USE_BVH 
     // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
@@ -180,39 +146,6 @@ CPT_KERNEL void closesthit_shader(
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
                     s_cached, verts, min_index, min_object_id, 
                     prim_u, prim_v, node_num, cache_num, MAX_DIST);
-#else   // RENDERER_USE_BVH
-    const int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];                // vertex info
-    __shared__ AABBWrapper s_aabbs[BASE_ADDR];                  // aabb
-
-    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
-    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;
-
-    // ============= step 1: ray intersection =================
-    #pragma unroll
-    for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
-        // memory copy to shared memory
-        int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
-        cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
-        if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-    
-            // we should pad this, for every 3 Vec3, we pad one more vec3, then copy can be made
-            // without branch (memcpy_async): TODO, this is the bottle neck. L2 Global excessive here
-            // since our step is Vec3, this will lead to uncoalesced access
-            // shared memory is enough. Though padding is not easy to implement
-            cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
-            // This memory op is not fully coalesced, since AABB container is not a complete SOA
-            s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
-        }
-        pipe.producer_commit();
-        pipe.consumer_wait();
-        __syncthreads();
-        // this might not be a good solution
-       ray.hit_t = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
-                cp_base << BASE_SHFL, min_index, min_object_id, prim_u, prim_v, ray.hit_t);
-        __syncthreads();
-    }
-#endif  // RENDERER_USE_BVH
 
     // ============= step 2: local shading for indirect bounces ================
     if (block_index < num_valid && min_index >= 0) {
@@ -257,7 +190,6 @@ CPT_KERNEL void nee_shader(
     const int block_index = (threadIdx.y + blockIdx.y * blockDim.y) *           // py
                             blockDim.x * gridDim.x +                            // cols
                             threadIdx.x + blockIdx.x * blockDim.x;              // px
-#ifdef RENDERER_USE_BVH
     // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
@@ -265,7 +197,6 @@ CPT_KERNEL void nee_shader(
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
-#endif  // RENDERER_USE_BVH
     
     if (block_index < num_valid) {
         uint32_t py = idx_buffer[block_index + stream_offset], px = py & 0x0000ffff;
@@ -295,12 +226,8 @@ CPT_KERNEL void nee_shader(
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
         // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
         if (emitter != c_emitter[0] && 
-#ifdef RENDERER_USE_BVH
             occlusion_test_bvh(shadow_ray, bvh_leaves, nodes, 
                     s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
-#else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
-#endif  // RENDERER_USE_BVH
         ) {
             // MIS for BSDF / light sampling, to achieve better rendering
             // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf

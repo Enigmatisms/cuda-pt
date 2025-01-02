@@ -294,7 +294,8 @@ void bvh_build(
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
     create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos);
-    printf("[BVH] Traversed BVH SAH cost: %.7f\n", calculate_cost(root_node, traverse_cost));
+    float total_cost = calculate_cost(root_node, traverse_cost);
+    printf("[BVH] Traversed BVH SAH cost: %.7f, AVG: %.7f\n", total_cost, total_cost / static_cast<float>(bvh_infos.size()));
     cache_max_level = std::min((int)std::floor(std::log2(node_num)), cache_max_level);
     nodes.reserve(node_num << 1);
     cached_fronts.reserve(1 << cache_max_level);

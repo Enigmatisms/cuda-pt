@@ -6,8 +6,8 @@
 #pragma once
 #include "core/scene.cuh"
 #include "core/max_depth.h"
+#include "core/primitives.cuh"
 #include "core/host_device.cuh"
-#include "renderer/base_pt.cuh"
 
 class TracerBase {
 protected:

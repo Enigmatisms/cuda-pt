@@ -17,7 +17,6 @@ PathTracer::PathTracer(
 ): TracerBase(scene), 
     num_objs(scene.objects.size()), num_nodes(-1), num_emitter(scene.num_emitters), envmap_id(scene.envmap_id)
 {
-#ifdef RENDERER_USE_BVH
     if (scene.bvh_available()) {
         size_t num_bvh  = scene.obj_idxs.size();
         // Comment in case I forget: scene.nodes combines nodes_front and nodes_back
@@ -35,7 +34,6 @@ PathTracer::PathTracer(
     } else {
         throw std::runtime_error("BVH not available in scene. Abort.");
     }
-#endif  // RENDERER_USE_BVH
     /**
      * Explanation: For envmap and point source, there is no attached object, therefore, for scene that contains solely these emitters
      * We can have a zero emitter_prim_size, which is troublesome. We therefore needs to 'pad' it, to at least the size of
@@ -59,13 +57,11 @@ PathTracer::~PathTracer() {
     CUDA_CHECK_RETURN(cudaFree(obj_info));
     CUDA_CHECK_RETURN(cudaFree(camera));
     CUDA_CHECK_RETURN(cudaFree(emitter_prims));
-#ifdef RENDERER_USE_BVH
     CUDA_CHECK_RETURN(cudaDestroyTextureObject(bvh_leaves));
     CUDA_CHECK_RETURN(cudaDestroyTextureObject(nodes));
     CUDA_CHECK_RETURN(cudaFree(_obj_idxs));
     CUDA_CHECK_RETURN(cudaFree(_nodes));
     CUDA_CHECK_RETURN(cudaFree(_cached_nodes));
-#endif  // RENDERER_USE_BVH
     printf("[Renderer] Path Tracer Object destroyed.\n");
 }
 

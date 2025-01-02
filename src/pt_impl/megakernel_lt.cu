@@ -9,7 +9,6 @@
  * @date: 9.28.2024
  * @author: Qianyue He
 */
-#include "renderer/base_pt.cuh"
 #include "renderer/megakernel_pt.cuh"
 
 static constexpr int RR_BOUNCE = 2;
@@ -76,8 +75,8 @@ CPT_KERNEL void render_lt_kernel(
     }
 
     // step 2: bouncing around the scene until the max depth is reached
-    int min_index = -1, object_id = 0;
-#ifdef RENDERER_USE_BVH
+    int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
+
     // cache near root level BVH nodes for faster traversal
     extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
@@ -85,44 +84,16 @@ CPT_KERNEL void render_lt_kernel(
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
-#else
-    __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
-    __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
-    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
-    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
-    int tid = threadIdx.x + threadIdx.y * blockDim.x;
-#endif  // RENDERER_USE_BVH
+
     for (int b = 0; b < md_params.max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
-#ifdef RENDERER_USE_BVH
         min_dist = ray_intersect_bvh(
             ray, bvh_leaves, nodes, 
             s_cached, verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
-#else   // RENDERER_USE_BVH
-        #pragma unroll
-        for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
-            // memory copy to shared memory
-            int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
-            cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
-
-            // huge bug
-            if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
-                s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
-            }
-            pipe.producer_commit();
-            pipe.consumer_wait();
-            __syncthreads();
-            // this might not be a good solution
-            min_dist = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
-                cp_base << BASE_SHFL, min_index, object_id, prim_u, prim_v, min_dist);
-            __syncthreads();
-        }
-#endif  // RENDERER_USE_BVH
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
             auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
@@ -142,12 +113,8 @@ CPT_KERNEL void render_lt_kernel(
             int pixel_x = -2, pixel_y = -2;
             if (constraint_cnt > specular_constraints &&
                 dev_cam.get_splat_pixel(shadow_ray.d, pixel_x, pixel_y) && 
-#ifdef RENDERER_USE_BVH
-            occlusion_test_bvh(shadow_ray, bvh_leaves, nodes, s_cached, 
+                occlusion_test_bvh(shadow_ray, bvh_leaves, nodes, s_cached, 
                         verts, node_num, cache_num, emit_len_mis - EPSILON)
-#else   // RENDERER_USE_BVH
-            occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
-#endif  // RENDERER_USE_BVH
             ) {
                 Vec4 direct_splat = throughput * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id, false, false) * \
                     (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
@@ -160,20 +127,24 @@ CPT_KERNEL void render_lt_kernel(
 
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
-            BSDFFlag dummy_flag;
+            BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;
             ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, dummy_flag, material_id, false);
             constraint_cnt += c_material[material_id]->require_lobe(BSDFFlag::BSDF_SPECULAR);
 
-            if (throughput.numeric_err() || throughput < EPSILON) {
-                break;
-            }
-
             // step 5: russian roulette
+            diff_b  += (BSDFFlag::BSDF_DIFFUSE  & sampled_lobe) > 0;
+            spec_b  += (BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0;
+            trans_b += (BSDFFlag::BSDF_TRANSMIT & sampled_lobe) > 0;
+            if (diff_b  >= md_params.max_diffuse  || 
+                spec_b  >= md_params.max_specular || 
+                trans_b >= md_params.max_tranmit
+            ) break;
             float max_value = throughput.max_elem_3d();
             if (b >= RR_BOUNCE && max_value < RR_THRESHOLD) {
                 if (sampler.next1D() > max_value || max_value < THP_EPS) break;
                 throughput *= 1. / max_value;
             }
+            // using BVH enables breaking, since there is no within-loop synchronization
         }
     }
     __syncthreads();

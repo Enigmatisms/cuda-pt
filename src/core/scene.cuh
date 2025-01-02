@@ -13,7 +13,6 @@
 #include <cuda_runtime.h>
 #include <tiny_obj_loader.h>
 #include "core/config.h"
-#include "core/aos.cuh"
 #include "core/bsdf.cuh"
 #include "core/shapes.cuh"
 #include "core/object.cuh"

@@ -4,42 +4,10 @@
  * @author: Qianyue He
 */
 #include "core/textures.cuh"
-#include "renderer/base_pt.cuh"
 #include "renderer/megakernel_pt.cuh"
 
 static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
-
-/**
- * Occlusion test, computation is done on global memory
-*/
-CPT_GPU bool occlusion_test(
-    const Ray& ray,
-    ConstObjPtr objects,
-    ConstAABBPtr aabbs,
-    const PrecomputedArray& verts,
-    int num_objects,
-    float max_dist
-) {
-    float aabb_tmin = 0;
-    int prim_id = 0, num_prim = 0;
-    for (int obj_id = 0; obj_id < num_objects; obj_id ++) {
-        num_prim = prim_id + objects[obj_id].prim_num;
-        if (objects[obj_id].intersect(ray, aabb_tmin) && aabb_tmin < max_dist) {
-            // ray intersects the object
-            for (; prim_id < num_prim; prim_id ++) {
-                auto aabb = aabbs[prim_id];
-                if (aabb.intersect(ray, aabb_tmin) && aabb_tmin < max_dist) {
-                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, prim_id, it_u, it_v, aabb.obj_idx() >= 0);
-                    if (dist < max_dist && dist > EPSILON)
-                        return false;
-                }
-            }
-        }
-        prim_id = num_prim;
-    }
-    return true;
-}
 
 // occlusion test is any hit shader
 CPT_GPU bool occlusion_test_bvh(
@@ -86,7 +54,6 @@ CPT_GPU bool occlusion_test_bvh(
             if (intersect_node && end_idx > 0) {
                 end_idx += beg_idx;
                 for (int idx = beg_idx; idx < end_idx; idx ++) {
-                    // if current ray intersects primitive at [idx], tasks will store it
                     int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
                     float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
                     if (dist > EPSILON && dist < max_dist)
@@ -233,20 +200,12 @@ CPT_KERNEL void render_pt_kernel(
     int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
     extern __shared__ float4 s_cached[];
-#ifdef RENDERER_USE_BVH
     // cache near root level BVH nodes for faster traversal
     if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
     Ray ray = dev_cam.generate_ray(px, py, sampler);
     __syncthreads();
-#else
-    Ray ray = dev_cam.generate_ray(px, py, sampler);
-    __shared__ Vec4 s_verts[TRI_IDX(BASE_ADDR)];         // vertex info
-    __shared__ AABBWrapper s_aabbs[BASE_ADDR];            // aabb
-    PrecomputedArray s_verts_arr(reinterpret_cast<Vec4*>(&s_verts[0]), BASE_ADDR);
-    int num_copy = (num_prims + BASE_ADDR - 1) / BASE_ADDR;   // round up
-#endif  // RENDERER_USE_BVH
 
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
@@ -256,32 +215,12 @@ CPT_KERNEL void render_pt_kernel(
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
-#ifdef RENDERER_USE_BVH
         min_dist = ray_intersect_bvh(
             ray, bvh_leaves, nodes, s_cached, 
             verts, min_index, object_id, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
-#else   // RENDERER_USE_BVH
-        #pragma unroll
-        for (int cp_base = 0; cp_base < num_copy; ++cp_base) {
-            // memory copy to shared memory
-            int cur_idx = (cp_base << BASE_SHFL) + tid, remain_prims = min(num_prims - (cp_base << BASE_SHFL), BASE_ADDR);
-            cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
 
-            if (tid < BASE_ADDR && cur_idx < num_prims) {        // copy from gmem to smem
-                cuda::memcpy_async(&s_verts[TRI_IDX(tid)], &verts.data[TRI_IDX(cur_idx)], sizeof(Vec4) * 3, pipe);
-                s_aabbs[tid].aabb.copy_from(aabbs[cur_idx]);
-            }
-            pipe.producer_commit();
-            pipe.consumer_wait();
-            __syncthreads();
-            // this might not be a good solution
-            min_dist = ray_intersect(s_verts_arr, ray, s_aabbs, remain_prims, 
-                cp_base << BASE_SHFL, min_index, object_id, prim_u, prim_v, min_dist);
-            __syncthreads();
-        }
-#endif  // RENDERER_USE_BVH
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
             auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
@@ -318,12 +257,8 @@ CPT_KERNEL void render_pt_kernel(
 
             // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
             if (emitter != c_emitter[0] &&
-#ifdef RENDERER_USE_BVH
                 occlusion_test_bvh(shadow_ray, bvh_leaves, nodes, s_cached, 
                             verts, node_num, cache_num, emit_len_mis - EPSILON)
-#else   // RENDERER_USE_BVH
-                occlusion_test(shadow_ray, objects, aabbs, verts, num_objects, emit_len_mis - EPSILON)
-#endif  // RENDERER_USE_BVH
             ) {
                 // MIS for BSDF / light sampling, to achieve better rendering
                 // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
@@ -343,7 +278,6 @@ CPT_KERNEL void render_pt_kernel(
             if (radiance.numeric_err())
                 radiance.fill(0);
             
-#ifdef RENDERER_USE_BVH
             // using BVH enables breaking, since there is no within-loop synchronization
             diff_b  += (BSDFFlag::BSDF_DIFFUSE  & sampled_lobe) > 0;
             spec_b  += (BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0;
@@ -357,14 +291,9 @@ CPT_KERNEL void render_pt_kernel(
                 if (sampler.next1D() > max_value || max_value < THP_EPS) break;
                 throughput *= 1. / max_value;
             }
-#endif // RENDERER_USE_BVH
         } else {
             radiance += throughput * c_emitter[envmap_id]->eval_le(&ray.d);
-#ifdef RENDERER_USE_BVH
             break;
-#else 
-            throughput *= 0;
-#endif // RENDERER_USE_BVH
         }
     }
     if constexpr (render_once) {
