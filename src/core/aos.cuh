@@ -177,13 +177,9 @@ public:
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
 
-    CPT_CPU_GPU_INLINE const Vec4& x(int index) const { return data[INDEX_X(index, size)]; }
-    CPT_CPU_GPU_INLINE const Vec4& y(int index) const { return data[INDEX_Y(index, size)]; }
-    CPT_CPU_GPU_INLINE const Vec4& z(int index) const { return data[INDEX_Z(index, size)]; }
-
-    CPT_CPU_GPU_INLINE Vec4& x(int index) { return data[INDEX_X(index, size)]; }
-    CPT_CPU_GPU_INLINE Vec4& y(int index) { return data[INDEX_Y(index, size)]; }
-    CPT_CPU_GPU_INLINE Vec4& z(int index) { return data[INDEX_Z(index, size)]; }
+    CPT_CPU_GPU_INLINE Vec4 x(int index) const { return data[INDEX_X(index, size)]; }
+    CPT_CPU_GPU_INLINE Vec4 y(int index) const { return data[INDEX_Y(index, size)]; }
+    CPT_CPU_GPU_INLINE Vec4 z(int index) const { return data[INDEX_Z(index, size)]; }
 
     CPT_CPU_GPU_INLINE Vec3 x_clipped(int index) const { 
         auto v = data[INDEX_X(index, size)]; 

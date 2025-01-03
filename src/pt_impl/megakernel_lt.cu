@@ -36,7 +36,6 @@ CPT_KERNEL void render_lt_kernel(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
@@ -101,7 +100,8 @@ CPT_KERNEL void render_lt_kernel(
 
             // ============= step 3: next event estimation ================
             // (1) randomly pick one emitter
-            int material_id = objects[object_id].bsdf_id;
+            int material_id = 0, dummy = -1;
+            objects[object_id].unpack(material_id, dummy);
 
             // deterministically connect to the camera
             Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 1));
@@ -128,7 +128,7 @@ CPT_KERNEL void render_lt_kernel(
             // step 4: sample a new ray direction, bounce the 
             ray.o = std::move(shadow_ray.o);
             BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;
-            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, dummy_flag, material_id, false);
+            ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emit_len_mis, sampler, sampled_lobe, material_id, false);
             constraint_cnt += c_material[material_id]->require_lobe(BSDFFlag::BSDF_SPECULAR);
 
             // step 5: russian roulette
@@ -163,7 +163,6 @@ template CPT_KERNEL void render_lt_kernel<true>(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
@@ -189,7 +188,6 @@ template CPT_KERNEL void render_lt_kernel<false>(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,

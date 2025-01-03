@@ -41,13 +41,13 @@ PathTracer::PathTracer(
      */
     size_t emitter_prim_size = sizeof(int) * std::max(scene.emitter_prims.size(), (size_t)scene.objects.front().prim_num),
            actual_prim_size  = sizeof(int) * scene.emitter_prims.size();
-    CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(ObjInfo)));
+    CUDA_CHECK_RETURN(cudaMallocManaged(&obj_info, num_objs * sizeof(CompactedObjInfo)));
     CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
     CUDA_CHECK_RETURN(cudaMalloc(&emitter_prims, emitter_prim_size));
     CUDA_CHECK_RETURN(cudaMemcpy(camera, &scene.cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
     CUDA_CHECK_RETURN(cudaMemcpy(emitter_prims, scene.emitter_prims.data(), actual_prim_size, cudaMemcpyHostToDevice));
     for (int i = 0; i < num_objs; i++)
-        obj_info[i] = scene.objects[i];
+        obj_info[i] = scene.objects[i].export_gpu();
 #ifdef TRIANGLE_ONLY
     printf("[ATTENTION] Note that TRIANGLE_ONLY macro is defined. Please make sure there is no sphere primitive in the scene.\n");
 #endif
@@ -76,7 +76,7 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-            *camera, verts, norms, uvs, obj_info, aabbs, 
+            *camera, verts, norms, uvs, obj_info, 
             emitter_prims, bvh_leaves, nodes, _cached_nodes,
             image, md, output_buffer, num_prims, num_objs, num_emitter, 
             i * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id
@@ -100,7 +100,7 @@ CPT_CPU void PathTracer::render_online(
 
     accum_cnt ++;
     render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-        *camera, verts, norms, uvs, obj_info, aabbs, 
+        *camera, verts, norms, uvs, obj_info, 
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, md, output_buffer, num_prims, num_objs, num_emitter, 
         accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr

@@ -20,47 +20,39 @@ CPT_GPU bool occlusion_test_bvh(
     const int cache_num,
     float max_dist
 ) {
-    bool valid_cache = false;
-    int node_idx     = 0;
+    int node_idx     = node_num;
     float aabb_tmin  = 0;
     Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
     // There can be much control flow divergence, not good
-    while (node_idx < cache_num && !valid_cache) {
+    for (int i = 0; i < cache_num;) {
         const LinearNode node(
-            cached_nodes[node_idx],
-            cached_nodes[node_idx + cache_num]
+            cached_nodes[i],
+            cached_nodes[i + cache_num]
         );
         bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < max_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
-        node_idx += increment;
-
-        if (intersect_node && all_offset == 1) {
-            valid_cache = true;
-            node_idx = gmem_index;
-        }
+        // reuse
+        intersect_node = intersect_node && all_offset == 1;
+        i = intersect_node ? cache_num : (i + increment);
+        node_idx = intersect_node ? gmem_index : node_idx;
     }
     // no intersected nodes, for the near root level, meaning that the path is not occluded
-    if (valid_cache) {
-        while (node_idx < node_num) {
-            const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
-                            tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
+    while (node_idx < node_num) {
+        const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
+                        tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
 
-            bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < max_dist;
-            int beg_idx = 0, end_idx = 0;
-            node.get_range(beg_idx, end_idx);
-            // Strange `increment`, huh? See the comments in function `ray_intersect_bvh`
-            int increment = (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
-            if (intersect_node && end_idx > 0) {
-                end_idx += beg_idx;
-                for (int idx = beg_idx; idx < end_idx; idx ++) {
-                    int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
-                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
-                    if (dist > EPSILON && dist < max_dist)
-                        return false;
-                }
-            }
-            node_idx += increment;
+        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < max_dist;
+        int beg_idx = 0, end_idx = 0;
+        node.get_range(beg_idx, end_idx);
+        // Strange `increment`, huh? See the comments in function `ray_intersect_bvh`
+        node_idx += (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
+        end_idx = intersect_node ? end_idx + beg_idx : 0;
+        for (int idx = beg_idx; idx < end_idx; idx ++) {
+            int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0, EPSILON, max_dist);
+            if (dist > EPSILON)
+                return false;
         }
     }
     return true;
@@ -96,56 +88,46 @@ CPT_GPU float ray_intersect_bvh(
     const int cache_num,
     float min_dist
 ) {
-    bool valid_cache = false;
     int node_idx     = 0;
     float aabb_tmin  = 0;
     // There can be much control flow divergence, not good
     Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
-    while (node_idx < cache_num && !valid_cache) {
+    for (int i = 0; i < cache_num;) {
         const LinearNode node(
-            cached_nodes[node_idx],
-            cached_nodes[node_idx + cache_num]
+            cached_nodes[i],
+            cached_nodes[i + cache_num]
         );
         bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
         int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
-        int increment = (!intersect_node) * all_offset + (intersect_node && all_offset != 1) * 1;
-
-        node_idx += increment;
-
-        if (intersect_node && all_offset == 1) {
-            valid_cache = true;
-            node_idx = gmem_index;
-        }
+        int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
+        // reuse
+        intersect_node = intersect_node && all_offset == 1;
+        i = intersect_node ? cache_num : (i + increment);
+        node_idx = intersect_node ? gmem_index : node_idx;
     }
-    if (valid_cache) {
-        // There can be much control flow divergence, not good
-        while (node_idx < node_num) {
-            const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
-                            tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
-            bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
-            int beg_idx = 0, end_idx = 0;
-            node.get_range(beg_idx, end_idx);
-            // The logic here: end_idx is reuse, if end_idx < 0, meaning that the current node is
-            // non-leaf, non-leaf node stores (-all_offset) as end_idx, so to skip the node and its children
-            // -end_idx will be the offset. While for leaf node, 1 will be the increment offset, and `POSITIVE` end_idx
-            // is stored. So the following for loop can naturally run (while for non-leaf, naturally skip)
-            int increment = (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
-            if (intersect_node && end_idx > 0) {
-                end_idx += beg_idx;
-                for (int idx = beg_idx; idx < end_idx; idx ++) {
-                    // if current ray intersects primitive at [idx], tasks will store it
-                    bool valid  = false;
-                    int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
-                    float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
-                    valid = dist > EPSILON && dist < min_dist;
-                    min_dist = valid ? dist : min_dist;
-                    prim_u   = valid ? it_u : prim_u;
-                    prim_v   = valid ? it_v : prim_v;
-                    min_index = valid ? idx : min_index;
-                    min_obj_idx = valid ? obj_idx : min_obj_idx;
-                }
-            }
-            node_idx += increment;
+    // There can be much control flow divergence, not good
+    while (node_idx < node_num) {
+        const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
+                        tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
+        int beg_idx = 0, end_idx = 0;
+        node.get_range(beg_idx, end_idx);
+        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
+        // The logic here: end_idx is reuse, if end_idx < 0, meaning that the current node is
+        // non-leaf, non-leaf node stores (-all_offset) as end_idx, so to skip the node and its children
+        // -end_idx will be the offset. While for leaf node, 1 will be the increment offset, and `POSITIVE` end_idx
+        // is stored. So the following for loop can naturally run (while for non-leaf, naturally skip)
+        node_idx += (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
+        end_idx = intersect_node ? end_idx + beg_idx : 0;
+        for (int idx = beg_idx; idx < end_idx; idx ++) {
+            // if current ray intersects primitive at [idx], tasks will store it
+            int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
+            bool valid = dist > EPSILON && dist < min_dist;
+            min_dist = valid ? dist : min_dist;
+            prim_u   = valid ? it_u : prim_u;
+            prim_v   = valid ? it_v : prim_v;
+            min_index = valid ? idx : min_index;
+            min_obj_idx = valid ? obj_idx : min_obj_idx;
         }
     }
     return min_dist;
@@ -173,7 +155,6 @@ CPT_KERNEL void render_pt_kernel(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
@@ -228,8 +209,8 @@ CPT_KERNEL void render_pt_kernel(
 
             // ============= step 3: next event estimation ================
             // (1) randomly pick one emitter
-            int material_id = objects[object_id].bsdf_id,
-                emitter_id  = objects[object_id].emitter_id;
+            int material_id = 0, emitter_id = -1;
+            objects[object_id].unpack(material_id, emitter_id);
             hit_emitter = emitter_id > 0;
 
             // emitter MIS
@@ -314,7 +295,6 @@ template CPT_KERNEL void render_pt_kernel<true>(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
@@ -339,7 +319,6 @@ template CPT_KERNEL void render_pt_kernel<false>(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,

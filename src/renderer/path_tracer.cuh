@@ -17,7 +17,7 @@ private:
     int* _obj_idxs;
     float4* _nodes;
 protected:
-    ObjInfo* obj_info;
+    CompactedObjInfo* obj_info;
     int num_objs;
     int num_nodes;
     int num_cache;                  // number of cached BVH nodes

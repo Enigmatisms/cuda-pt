@@ -19,15 +19,15 @@ private:
     CPT_GPU_INLINE static float intersect_sphere(
         const Ray& ray,
         const PrecomputedArray& verts, 
-        int index,
+        const int index,
         float& solved_u,
         float& solved_v,
-        float min_range = EPSILON, 
-        float max_range = std::numeric_limits<float>::infinity()
+        const float min_range = EPSILON, 
+        const float max_range = std::numeric_limits<float>::infinity()
     ) {
-        Vec4 center_r = verts.x(index);
-        auto op = Vec3(center_r.x(), center_r.y(), center_r.z()) - ray.o; 
-        float b = op.dot(ray.d);
+        const Vec4 center_r = verts.x(index);
+        const auto op = Vec3(center_r.x(), center_r.y(), center_r.z()) - ray.o; 
+        const float b = op.dot(ray.d);
         float determinant = b * b - op.dot(op) + center_r.w() * center_r.w(), result = 0;
         if (determinant >= 0) {
             determinant = sqrtf(determinant);
@@ -43,35 +43,44 @@ private:
     CPT_GPU_INLINE static float intersect_triangle(
         const Ray& ray,
         const PrecomputedArray& verts, 
-        int index,
+        const int index,
         float& solved_u,
         float& solved_v,
-        float min_range = EPSILON, 
-        float max_range = std::numeric_limits<float>::infinity()
+        const float min_range = EPSILON, 
+        const float max_range = std::numeric_limits<float>::infinity()
     ) {
         // solve a linear equation, the current solution is inlined
-        auto v1 = verts.y(index), v2 = verts.z(index), anchor = verts.x(index);
-        // use precomputed 
-        Vec3 v = ray.o - Vec3(anchor.x(), anchor.y(), anchor.z()), 
-        temp1(
-            fmaf(v2.y(), -ray.d.z(), ray.d.y() * v2.z()),
-            fmaf(-ray.d.x(), v2.z(), v2.x() * ray.d.z()),
-            fmaf(v2.x(), -ray.d.y(), ray.d.x() * v2.y())
-        ),
-        temp2(
-            fmaf(-ray.d.y(), v1.z(), v1.y() * ray.d.z()),
-            fmaf(v1.x(), -ray.d.z(), ray.d.x() * v1.z()),
-            fmaf(-ray.d.x(), v1.y(), v1.x() * ray.d.y())
-        );
+        Vec4 temp;
+        Vec3 v, temp1, temp2;
+        float anchor_w = 0;
+        {
+            const auto v1 = verts.y(index), v2 = verts.z(index);
+            temp = verts.x(index);
+            anchor_w = temp.w();
+            v = ray.o - Vec3(temp.x(), temp.y(), temp.z());
+            temp1 = Vec3(
+                fmaf(v2.y(), -ray.d.z(), ray.d.y() * v2.z()),
+                fmaf(-ray.d.x(), v2.z(), v2.x() * ray.d.z()),
+                fmaf(v2.x(), -ray.d.y(), ray.d.x() * v2.y())
+            );
+            temp2 = Vec3(
+                fmaf(-ray.d.y(), v1.z(), v1.y() * ray.d.z()),
+                fmaf(v1.x(), -ray.d.z(), ray.d.x() * v1.z()),
+                fmaf(-ray.d.x(), v1.y(), v1.x() * ray.d.y())
+            );
+            temp = Vec4(
+                v1.x() * temp1.x() + v2.x() * temp2.x(),
+                anchor_w * ray.d.x(), v1.w(), v2.w()
+            );
+        }
 
-        float inv_det = __frcp_rn(temp1.x() * v1.x() + temp2.x() * v2.x() - anchor.w() * ray.d.x());
-        Vec3 solution(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (anchor.w() * v.x() + v1.w() * v.y() + v2.w() * v.z()) * inv_det);
+        const float inv_det = 1.f / (temp.x() - temp.y());
+        v = Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (anchor_w * v.x() + temp.z() * v.y() + temp.w() * v.z()) * inv_det);
 
-        bool valid    = (solution.x() > 0 && solution.y() > 0 && solution.x() + solution.y() < 1 &&
-                            solution.z() > EPSILON && solution.z() < max_range);
-        solved_u = solution.x();
-        solved_v = solution.y();
-        return solution.z() * valid;
+        solved_u = v.x();
+        solved_v = v.y();
+        return v.z() * (v.x() > 0 && v.y() > 0 && v.x() + v.y() < 1 &&
+                            v.z() > EPSILON && v.z() < max_range);
     }
 public:
     CPT_GPU static float intersect(

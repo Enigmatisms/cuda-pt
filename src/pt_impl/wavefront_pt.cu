@@ -30,7 +30,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
@@ -111,7 +110,6 @@ CPT_KERNEL void closesthit_shader(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
@@ -173,7 +171,6 @@ CPT_KERNEL void nee_shader(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
@@ -206,11 +203,10 @@ CPT_KERNEL void nee_shader(
         Sampler sg = payloads.get_sampler(px, py);
         const Interaction it = payloads.interaction(px, py);
 
-        auto aabb_front = CONST_FLOAT4(aabbs[ray.hit_id()].mini);       // hope to have coalesced access
-        int object_id   = __float_as_int(aabb_front.w);
+        int object_id = tex1Dfetch<int>(bvh_leaves, ray.hit_id());
         object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
-        int material_id = objects[object_id].bsdf_id,
-            emitter_id  = objects[object_id].emitter_id;
+        int material_id = 0, emitter_id = -1;
+            objects[object_id].unpack(material_id, emitter_id);
 
         float direct_pdf = 1;
 
@@ -246,9 +242,8 @@ CPT_KERNEL void nee_shader(
 */
 CPT_KERNEL void bsdf_local_shader(
     PayLoadBufferSoA payloads,
-    const ConstBuffer<PackedHalf2>,
+    const cudaTextureObject_t bvh_leaves,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims, 
@@ -269,11 +264,10 @@ CPT_KERNEL void bsdf_local_shader(
         Interaction it = payloads.interaction(px, py);
 
         // this is incorrect, since AABB should be reordered, too
-        auto aabb_front = CONST_FLOAT4(aabbs[ray.hit_id()].mini);       // hope to have coalesced access
-        int object_id   = __float_as_int(aabb_front.w);
+        int object_id = tex1Dfetch<int>(bvh_leaves, ray.hit_id());
         object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
-        int emitter_id  = objects[object_id].emitter_id,
-            material_id = objects[object_id].bsdf_id;
+        int material_id = 0, emitter_id = -1;
+            objects[object_id].unpack(material_id, emitter_id);
         
         bool hit_emitter = emitter_id > 0;
 

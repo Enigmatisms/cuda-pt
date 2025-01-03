@@ -16,21 +16,9 @@ extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy e
 extern __constant__ BSDF*    c_material[48];
 
 using ConstNodePtr  = const LinearNode* const __restrict__;
-using ConstObjPtr   = const ObjInfo* const __restrict__;
+using ConstObjPtr   = const CompactedObjInfo* const __restrict__;
 using ConstBSDFPtr  = const BSDF* const __restrict__;
 using ConstIndexPtr = const int* const __restrict__;
-
-/**
- * Occlusion test, computation is done on global memory
-*/
-CPT_GPU bool occlusion_test(
-    const Ray& ray,
-    ConstObjPtr objects,
-    ConstAABBPtr aabbs,
-    const PrecomputedArray& verts,
-    int num_objects,
-    float max_dist
-);
 
 // occlusion test is any hit shader
 CPT_GPU bool occlusion_test_bvh(
@@ -98,7 +86,6 @@ CPT_KERNEL void render_pt_kernel(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
@@ -132,7 +119,6 @@ CPT_KERNEL void render_lt_kernel(
     const ArrayType<Vec3> norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
-    ConstAABBPtr aabbs,
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,

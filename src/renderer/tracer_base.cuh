@@ -11,7 +11,6 @@
 
 class TracerBase {
 protected:
-    AABB* aabbs;
     PrecomputedArray verts;
     ArrayType<Vec3> norms; 
     ConstBuffer<PackedHalf2> uvs;
@@ -51,21 +50,9 @@ public:
     {
         // TODO: shapes is so fucking useless
         scene.export_prims(verts, norms, uvs);
-        if (skip_vertex_loading) {
-            aabbs = nullptr;
-        } else {
-            CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
-            ShapeAABBVisitor aabb_visitor(verts, aabbs);
-            // calculate AABB for each primitive
-            for (int i = 0; i < num_prims; i++) {
-                aabb_visitor.set_index(i);
-                std::visit(aabb_visitor, scene.shapes[i]);
-            }
-        }
     }
 
     virtual ~TracerBase() {
-        CUDA_CHECK_RETURN(cudaFree(aabbs));     // free nullptr is legal
         image.destroy();
         verts.destroy();
         norms.destroy();

@@ -184,12 +184,30 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
         cur_node->axis = max_axis;
         // Step 7: start recursive splitting for the children
         int node_num = 1;
-        if (cur_node->lchild->prim_num() > max_node_prim)
-            node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
-        else node_num ++;
-        if (cur_node->rchild->prim_num() > max_node_prim)
-            node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
-        else node_num ++;
+        if (depth == 0) {
+            #pragma omp parallel sections reduction(+: node_num)
+            {
+                #pragma omp section 
+                {
+                    if (cur_node->lchild->prim_num() > max_node_prim)
+                        node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
+                    else node_num ++;
+                }
+                #pragma omp section 
+                {
+                    if (cur_node->rchild->prim_num() > max_node_prim)
+                        node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
+                    else node_num ++;
+                }
+            }
+        } else {
+            if (cur_node->lchild->prim_num() > max_node_prim)
+                node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1);
+            else node_num ++;
+            if (cur_node->rchild->prim_num() > max_node_prim)
+                node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1);
+            else node_num ++;
+        }
         return node_num;
     } else {
         // This is a leaf node, yet this is the only way that a leaf node contains more than one primitive

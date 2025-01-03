@@ -20,6 +20,7 @@ WavefrontPathTracer::WavefrontPathTracer(const Scene& scene):
     payload_buffer.init(NUM_STREAM * PATCH_X, PATCH_Y);
     index_buffer.resize(NUM_STREAM * TOTAL_RAY);
     ray_idx_buffer = thrust::raw_pointer_cast(index_buffer.data());
+    omp_set_num_threads(NUM_STREAM);
 }
 
 CPT_CPU void WavefrontPathTracer::render_online(
@@ -41,7 +42,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
         // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
         raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
             *camera, payload_buffer, verts, norms, uvs,
-            obj_info, aabbs, bvh_leaves, nodes, _cached_nodes, 
+            obj_info, bvh_leaves, nodes, _cached_nodes, 
             ray_idx_buffer, stream_offset, num_prims, patch_x, 
             patch_y, accum_cnt, stream_id, image.w(), num_nodes, num_cache);
         int num_valid_ray = TOTAL_RAY;
@@ -81,21 +82,21 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
             // step5: NEE shader
             nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                payload_buffer, verts, norms, uvs, obj_info, aabbs, emitter_prims,
+                payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
                 bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, stream_offset, 
                 num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
             );
 
             // step6: emission shader + ray update shader
             bsdf_local_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, uvs, obj_info, aabbs, ray_idx_buffer,
+                payload_buffer, bvh_leaves, obj_info, ray_idx_buffer,
                 stream_offset, num_prims, num_valid_ray, bounce > 0
             );
 
             // step2: closesthit shader
             if (bounce + 1 >= md.max_depth) break;
             closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                payload_buffer, verts, norms, uvs, obj_info, aabbs, 
+                payload_buffer, verts, norms, uvs, obj_info, 
                 bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, 
                 stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
             );
@@ -138,7 +139,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
             raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
                 *camera, payload_buffer, verts, norms, uvs,
-                obj_info, aabbs, bvh_leaves, nodes, _cached_nodes, 
+                obj_info, bvh_leaves, nodes, _cached_nodes, 
                 ray_idx_buffer, stream_offset, num_prims, patch_x, 
                 patch_y, i, stream_id, image.w(), num_nodes, num_cache);
             int num_valid_ray = TOTAL_RAY;
@@ -178,21 +179,21 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
 
                 // step5: NEE shader
                 nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                    payload_buffer, verts, norms, uvs, obj_info, aabbs, emitter_prims,
+                    payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
                     bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, stream_offset, 
                     num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
                 );
 
                 // step6: emission shader + ray update shader
                 bsdf_local_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer, uvs, obj_info, aabbs, ray_idx_buffer,
+                    payload_buffer, bvh_leaves, obj_info, ray_idx_buffer,
                     stream_offset, num_prims, num_valid_ray, bounce > 0
                 );
 
                 // step2: closesthit shader
                 if (bounce + 1 >= md.max_depth) break;
                 closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                    payload_buffer, verts, norms, uvs, obj_info, aabbs, 
+                    payload_buffer, verts, norms, uvs, obj_info, 
                     bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, 
                     stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
                 );

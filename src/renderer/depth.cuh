@@ -141,7 +141,6 @@ CPT_KERNEL static void render_depth_kernel(
 }
 
 class DepthTracer: public TracerBase {
-using TracerBase::aabbs;
 using TracerBase::verts;
 using TracerBase::norms; 
 using TracerBase::uvs;
@@ -151,10 +150,18 @@ using TracerBase::w;
 using TracerBase::h;
 
 DeviceCamera* camera;
+AABB* aabbs;
 public:
     DepthTracer(const Scene& scene): TracerBase(scene) {
         CUDA_CHECK_RETURN(cudaMalloc(&camera, sizeof(DeviceCamera)));
         CUDA_CHECK_RETURN(cudaMemcpy(camera, &scene.cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMallocManaged(&aabbs, num_prims * sizeof(AABB)));
+        ShapeAABBVisitor aabb_visitor(verts, aabbs);
+        // calculate AABB for each primitive
+        for (int i = 0; i < num_prims; i++) {
+            aabb_visitor.set_index(i);
+            std::visit(aabb_visitor, scene.shapes[i]);
+        }
     }
 
     ~DepthTracer() {
