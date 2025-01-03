@@ -1,7 +1,7 @@
 # CUDA-PT
 ---
 
-Software Path Tracing renderer implemented in **CUDA**, **from scratch**.
+**Software** Path Tracing renderer implemented in **CUDA**, **from scratch**.
 
 
 ![sports-cars](./assets/cars.jpg)
