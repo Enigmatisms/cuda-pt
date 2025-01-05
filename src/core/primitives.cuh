@@ -50,32 +50,29 @@ private:
         const float max_range = std::numeric_limits<float>::infinity()
     ) {
         // solve a linear equation, the current solution is inlined
-        Vec4 temp;
+        float4 temp;
         Vec3 v, temp1, temp2;
-        float anchor_w = 0;
         {
-            const auto v1 = verts.y(index), v2 = verts.z(index);
+            const float4 v1 = verts.y(index), v2 = verts.z(index);
             temp = verts.x(index);
-            anchor_w = temp.w();
-            v = ray.o - Vec3(temp.x(), temp.y(), temp.z());
+            v = ray.o - Vec3(temp.x, temp.y, temp.z);
             temp1 = Vec3(
-                fmaf(v2.y(), -ray.d.z(), ray.d.y() * v2.z()),
-                fmaf(-ray.d.x(), v2.z(), v2.x() * ray.d.z()),
-                fmaf(v2.x(), -ray.d.y(), ray.d.x() * v2.y())
+                fmaf(v2.y, -ray.d.z(), ray.d.y() * v2.z),
+                fmaf(-ray.d.x(), v2.z, v2.x * ray.d.z()),
+                fmaf(v2.x, -ray.d.y(), ray.d.x() * v2.y)
             );
             temp2 = Vec3(
-                fmaf(-ray.d.y(), v1.z(), v1.y() * ray.d.z()),
-                fmaf(v1.x(), -ray.d.z(), ray.d.x() * v1.z()),
-                fmaf(-ray.d.x(), v1.y(), v1.x() * ray.d.y())
+                fmaf(-ray.d.y(), v1.z, v1.y * ray.d.z()),
+                fmaf(v1.x, -ray.d.z(), ray.d.x() * v1.z),
+                fmaf(-ray.d.x(), v1.y, v1.x * ray.d.y())
             );
-            temp = Vec4(
-                v1.x() * temp1.x() + v2.x() * temp2.x(),
-                anchor_w * ray.d.x(), v1.w(), v2.w()
-            );
+            temp.x = v1.x * temp1.x() + v2.x * temp2.x() - temp.w * ray.d.x(),
+            temp.y = v1.w;
+            temp.z = v2.w;
         }
 
-        const float inv_det = 1.f / (temp.x() - temp.y());
-        v = Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (anchor_w * v.x() + temp.z() * v.y() + temp.w() * v.z()) * inv_det);
+        const float inv_det = 1.f / temp.x;
+        v = Vec3(temp1.dot(v) * inv_det, temp2.dot(v) * inv_det, (temp.w * v.x() + temp.y * v.y() + temp.z * v.z()) * inv_det);
 
         solved_u = v.x();
         solved_v = v.y();
@@ -106,7 +103,7 @@ public:
 
     CPT_GPU_INLINE static Interaction get_interaction(
         const PrecomputedArray& verts, 
-        const ArrayType<Vec3>& norms, 
+        const NormalArray& norms, 
         const ConstBuffer<PackedHalf2>& uvs, 
         Vec3&& hit_pos,
         float u,
@@ -123,10 +120,8 @@ public:
         );
 #else
         if (is_mesh) {
-            return Interaction((
-                norms.x(index) * (1.f - u - v) + \
-                norms.y(index) * u + \
-                norms.z(index) * v).normalized(),
+            return Interaction(
+                norms.eval(index, u, v),
                 uvs[index].lerp(u, v)
             );
         } else {

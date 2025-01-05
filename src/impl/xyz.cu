@@ -322,20 +322,17 @@ const float D65_SPD[ColorSpaceXYZ::D65_samples] = {
 template <typename TexType>
 static cudaTextureObject_t createArrayTexture1D(
     const TexType* tex_src, 
-    size_t size, 
-    TexType* tex_dst
+    cudaArray_t& arr_t,
+    size_t size 
 ) {
     cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
-    CUDA_CHECK_RETURN(cudaMemcpy(tex_dst, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
-
-    cudaArray_t d_array;
-    cudaMallocArray(&d_array, &channel_desc, size);
-    CUDA_CHECK_RETURN(cudaMemcpyToArray(d_array, 0, 0, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMallocArray(&arr_t, &channel_desc, size));
+    CUDA_CHECK_RETURN(cudaMemcpyToArray(arr_t, 0, 0, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
 
     cudaResourceDesc res_desc;
     memset(&res_desc, 0, sizeof(res_desc));
     res_desc.resType = cudaResourceTypeArray;
-    res_desc.res.array.array = d_array;
+    res_desc.res.array.array = arr_t;
 
     cudaTextureDesc tex_desc;
     memset(&tex_desc, 0, sizeof(tex_desc));
@@ -350,23 +347,21 @@ static cudaTextureObject_t createArrayTexture1D(
 }
 
 void ColorSpaceXYZ::init() {
-    CUDA_CHECK_RETURN(cudaMalloc(&_D65_data, ColorSpaceXYZ::D65_samples * sizeof(float)));
-    CUDA_CHECK_RETURN(cudaMalloc(&_CIE_data, ColorSpaceXYZ::CIE_samples * sizeof(float4)));
     std::vector<float4> CIE_host;
     CIE_host.reserve(ColorSpaceXYZ::CIE_samples);
     for (int i = 0; i < ColorSpaceXYZ::CIE_samples; i++) {
         CIE_host.emplace_back(make_float4(CIE_X_entries[i], CIE_Y_entries[i], CIE_Z_entries[i], 1));
     }
-    D65 = createArrayTexture1D<float>(D65_SPD, ColorSpaceXYZ::D65_samples, _D65_data);
-    CIE = createArrayTexture1D<float4>(CIE_host.data(), ColorSpaceXYZ::CIE_samples, _CIE_data);
+    D65 = createArrayTexture1D<float>(D65_SPD, _D65_data, ColorSpaceXYZ::D65_samples);
+    CIE = createArrayTexture1D<float4>(CIE_host.data(), _CIE_data, ColorSpaceXYZ::CIE_samples);
     to_gpu();
 }
 
 void ColorSpaceXYZ::destroy() {
     CUDA_CHECK_RETURN(cudaDestroyTextureObject(D65));
     CUDA_CHECK_RETURN(cudaDestroyTextureObject(CIE));
-    CUDA_CHECK_RETURN(cudaFree(_D65_data));
-    CUDA_CHECK_RETURN(cudaFree(_CIE_data));
+    CUDA_CHECK_RETURN(cudaFreeArray(_D65_data));
+    CUDA_CHECK_RETURN(cudaFreeArray(_CIE_data));
 }
 
 void ColorSpaceXYZ::to_gpu() const {

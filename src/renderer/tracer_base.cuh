@@ -12,7 +12,7 @@
 class TracerBase {
 protected:
     PrecomputedArray verts;
-    ArrayType<Vec3> norms; 
+    NormalArray norms; 
     ConstBuffer<PackedHalf2> uvs;
     DeviceImage image;
     int num_prims;

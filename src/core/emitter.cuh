@@ -37,7 +37,7 @@ public:
         Vec3& ray_o, Vec3& ray_d, 
         float& pdf, Vec2&&, 
         const PrecomputedArray&, 
-        const ArrayType<Vec3>&, 
+        const NormalArray&, 
         const ConstBuffer<PackedHalf2>&,
         int, float _eu = 0, float _ev = 0
     ) const {
@@ -50,7 +50,7 @@ public:
         const Vec3& hit_pos, const Vec3&,
         Vec4& le, float& pdf, Vec2&&, 
         const PrecomputedArray&, 
-        const ArrayType<Vec3>&, 
+        const NormalArray&, 
         const ConstBuffer<PackedHalf2>&, int
     ) const {
         pdf = 1;
@@ -100,7 +100,7 @@ public:
         const Vec3&, 
         Vec4& le, float&, Vec2&&, 
         const PrecomputedArray&, 
-        const ArrayType<Vec3>&, 
+        const NormalArray&, 
         const ConstBuffer<PackedHalf2>&, int
     ) const override {
         le = this->Le * distance_attenuate(pos - hit_pos);
@@ -110,7 +110,7 @@ public:
     CPT_GPU_INLINE Vec4 sample_le(
         Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, 
         const PrecomputedArray&, 
-        const ArrayType<Vec3>&, 
+        const NormalArray&, 
         const ConstBuffer<PackedHalf2>&,
         int, float, float
     ) const override {
@@ -145,18 +145,14 @@ public:
         const Vec3& hit_pos, const Vec3& hit_n, 
         Vec4& le, float& pdf, Vec2&& uv, 
         const PrecomputedArray& prims, 
-        const ArrayType<Vec3>& norms,
+        const NormalArray& norms,
         const ConstBuffer<PackedHalf2>& uvs,
         int sampled_index
     ) const override {
         float sample_sum = uv.x() + uv.y();
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
-        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y();
         Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
-        Vec3 normal = \
-            (norms.x(sampled_index) * diff_x * diff_y + \
-             norms.y(sampled_index) * uv.x() * diff_y + \
-             norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 normal = norms.eval(sampled_index, uv.x(), uv.y());
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
         sampled = select(
             sampled, prims.get_sphere_point(sphere_normal, sampled_index),
@@ -177,19 +173,15 @@ public:
     CPT_GPU_INLINE Vec4 sample_le(
         Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, 
         const PrecomputedArray& prims, 
-        const ArrayType<Vec3>& norms, 
+        const NormalArray& norms, 
         const ConstBuffer<PackedHalf2>& uvs,
         int sampled_index,
         float extra_u, float extra_v
     ) const override {
-        float sample_sum = uv.x() + uv.y();
+        float sample_sum = uv.x() + uv.y(), pdf_dir = 1;
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
-        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y(), pdf_dir = 1;
         Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
-        Vec3 normal = \
-           (norms.x(sampled_index) * diff_x * diff_y + \
-            norms.y(sampled_index) * uv.x() * diff_y + \
-            norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 normal = norms.eval(sampled_index, uv.x(), uv.y());
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
         normal = select(normal, sphere_normal, is_sphere == false);
         ray_o = select(
@@ -231,18 +223,14 @@ public:
         const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, 
         float& pdf, Vec2&& uv, 
         const PrecomputedArray& prims, 
-        const ArrayType<Vec3>& norms, 
+        const NormalArray& norms, 
         const ConstBuffer<PackedHalf2>& uvs,
         int sampled_index
     ) const override {
         float sample_sum = uv.x() + uv.y();
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
-        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y();
         Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
-        Vec3 normal = \
-            (norms.x(sampled_index) * diff_x * diff_y + \
-             norms.y(sampled_index) * uv.x() * diff_y + \
-             norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 normal = norms.eval(sampled_index, uv.x(), uv.y());
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
         sampled = select(
             sampled, prims.get_sphere_point(sphere_normal, sampled_index),
@@ -264,18 +252,14 @@ public:
         Vec3& ray_o, Vec3& ray_d, 
         float& pdf, Vec2&& uv, 
         const PrecomputedArray& prims, 
-        const ArrayType<Vec3>& norms, 
+        const NormalArray& norms, 
         const ConstBuffer<PackedHalf2>& uvs,
         int sampled_index, float extra_u, float extra_v
     ) const override {
-        float sample_sum = uv.x() + uv.y();
+        float sample_sum = uv.x() + uv.y(), pdf_dir = 1;
         uv = select(uv, -uv + 1.f, sample_sum < 1.f);
-        float diff_x = 1.f - uv.x(), diff_y = 1.f - uv.y(), pdf_dir = 1;
         Vec3 sampled = uv.x() * prims.y_clipped(sampled_index) + uv.y() * prims.z_clipped(sampled_index) + prims.x_clipped(sampled_index);
-        Vec3 normal = \
-           (norms.x(sampled_index) * diff_x * diff_y + \
-            norms.y(sampled_index) * uv.x() * diff_y + \
-            norms.z(sampled_index) * uv.y() * diff_x).normalized();
+        Vec3 normal = norms.eval(sampled_index, uv.x(), uv.y());
         Vec3 sphere_normal = sample_uniform_sphere(select(uv, -uv + 1.f, sample_sum < 1.f), sample_sum);
         normal = select(normal, sphere_normal, is_sphere == false);
         ray_o = select(
@@ -315,12 +299,12 @@ public:
     
     CPT_GPU Vec3 sample(
         const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, Vec2&& uv, 
-        const PrecomputedArray& prims, const ArrayType<Vec3>& norms, const ConstBuffer<PackedHalf2>&, int sampled_index
+        const PrecomputedArray& prims, const NormalArray& norms, const ConstBuffer<PackedHalf2>&, int sampled_index
     ) const override;
 
     CPT_GPU Vec4 sample_le(
         Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, 
-        const PrecomputedArray& prims, const ArrayType<Vec3>& norms, const ConstBuffer<PackedHalf2>&,
+        const PrecomputedArray& prims, const NormalArray& norms, const ConstBuffer<PackedHalf2>&,
         int sampled_index, float extra_u, float extra_v
     ) const override;
 

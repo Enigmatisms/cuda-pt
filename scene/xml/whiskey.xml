@@ -11,6 +11,9 @@
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
         <integer name="max_bounce" value="16"/>
+		<integer name="max_diffuse" value="16"/>
+        <integer name="max_specular" value="16"/>
+        <integer name="max_transmit" value="16"/>
 		<integer name="cache_level" value="4"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
@@ -26,7 +29,7 @@
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
 			<integer name="specular_constraint" value="0"/>
-			<bool name="gamma_correction" value="true"/>
+			<bool name="gamma_correction" value="false"/>
 			<bool name="bidirectional" value="false"/>
 			<float name="caustic_scaling" value="1.5"/>
 		</film>

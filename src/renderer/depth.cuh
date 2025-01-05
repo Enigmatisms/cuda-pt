@@ -90,7 +90,7 @@ CPT_GPU float ray_intersect(
 CPT_KERNEL static void render_depth_kernel(
     const DeviceCamera& dev_cam,
     const PrecomputedArray verts,
-    const ArrayType<Vec3> norms, 
+    const NormalArray norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstAABBPtr aabbs,
     DeviceImage image,

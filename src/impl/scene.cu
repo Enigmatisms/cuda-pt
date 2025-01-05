@@ -922,10 +922,10 @@ void Scene::update_materials() {
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
-void Scene::export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ConstBuffer<PackedHalf2>& uvs) const {
+void Scene::export_prims(PrecomputedArray& verts, NormalArray& norms, ConstBuffer<PackedHalf2>& uvs) const {
     verts.from_vectors(verts_list[0], verts_list[1], verts_list[2], &sphere_flags);
     norms.from_vectors(norms_list[0], norms_list[1], norms_list[2]);
-    ArrayType<Vec2> uvs_float(num_prims);
+    SoA3<Vec2> uvs_float(num_prims);
     uvs_float.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
 
     constexpr size_t block_size = 256;

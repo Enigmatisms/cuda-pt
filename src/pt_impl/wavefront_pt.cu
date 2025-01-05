@@ -27,7 +27,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
     PayLoadBufferSoA payloads,
     const PrecomputedArray verts,
-    const ArrayType<Vec3> norms, 
+    const NormalArray norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     const cudaTextureObject_t bvh_leaves,
@@ -107,7 +107,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
 CPT_KERNEL void closesthit_shader(
     PayLoadBufferSoA payloads,
     const PrecomputedArray verts,
-    const ArrayType<Vec3> norms, 
+    const NormalArray norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     const cudaTextureObject_t bvh_leaves,
@@ -168,7 +168,7 @@ CPT_KERNEL void closesthit_shader(
 CPT_KERNEL void nee_shader(
     PayLoadBufferSoA payloads,
     const PrecomputedArray verts,
-    const ArrayType<Vec3> norms, 
+    const NormalArray norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstIndexPtr emitter_prims,

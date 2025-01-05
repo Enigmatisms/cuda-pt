@@ -3,7 +3,7 @@
 
 CPT_GPU Vec3 EnvMapEmitter::sample(
     const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, Vec2&& uv, 
-    const PrecomputedArray& prims, const ArrayType<Vec3>& norms, const ConstBuffer<PackedHalf2>&, int sampled_index
+    const PrecomputedArray& prims, const NormalArray& norms, const ConstBuffer<PackedHalf2>&, int sampled_index
 ) const {
     Vec3 direction = delocalize_rotate(hit_n, sample_cosine_hemisphere(uv, pdf)),
          sample_pos = hit_pos + ENVMAP_DIST * direction;
@@ -16,7 +16,7 @@ CPT_GPU Vec3 EnvMapEmitter::sample(
 
 CPT_GPU Vec4 EnvMapEmitter::sample_le(
     Vec3& ray_o, Vec3& ray_d, float& pdf, Vec2&& uv, 
-    const PrecomputedArray& prims, const ArrayType<Vec3>& norms, const ConstBuffer<PackedHalf2>&,
+    const PrecomputedArray& prims, const NormalArray& norms, const ConstBuffer<PackedHalf2>&,
     int sampled_index, float extra_u, float extra_v
 ) const {
     Vec3 local_sample = sample_uniform_sphere(std::move(uv), pdf);

@@ -11,8 +11,8 @@
 
 class ColorSpaceXYZ {
 private:
-    float4* _CIE_data;
-    float*  _D65_data;
+    cudaArray_t _CIE_data;
+    cudaArray_t _D65_data;
 
     void to_gpu() const;
 public:

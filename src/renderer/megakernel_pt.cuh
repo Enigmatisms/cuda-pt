@@ -83,7 +83,7 @@ template <bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera& dev_cam, 
     const PrecomputedArray verts,
-    const ArrayType<Vec3> norms, 
+    const NormalArray norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstIndexPtr emitter_prims,
@@ -116,7 +116,7 @@ template <bool render_once>
 CPT_KERNEL void render_lt_kernel(
     const DeviceCamera& dev_cam, 
     const PrecomputedArray verts,
-    const ArrayType<Vec3> norms, 
+    const NormalArray norms, 
     const ConstBuffer<PackedHalf2> uvs,
     ConstObjPtr objects,
     ConstIndexPtr emitter_prims,

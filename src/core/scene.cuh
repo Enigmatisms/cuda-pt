@@ -78,7 +78,7 @@ public:
     Scene(std::string path);
     ~Scene();
 
-    void export_prims(PrecomputedArray& verts, ArrayType<Vec3>& norms, ConstBuffer<PackedHalf2>& uvs) const;
+    void export_prims(PrecomputedArray& verts, NormalArray& norms, ConstBuffer<PackedHalf2>& uvs) const;
 
     bool bvh_available() const noexcept {
         return !nodes.empty();
