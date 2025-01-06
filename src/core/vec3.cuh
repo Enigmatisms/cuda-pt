@@ -171,13 +171,13 @@ public:
     CPT_CPU_GPU_INLINE
     float length2() const { return fmaf(_data.x, _data.x, fmaf(_data.y, _data.y, _data.z * _data.z)); }
 
-    CPT_CPU_GPU_INLINE
+    CPT_CPU_INLINE
     Vec3 normalized_h() const { return *this * rsqrtf(length2()); }
 
-    CPT_CPU_GPU_INLINE
+    CPT_CPU_INLINE
     void normalize_h() { this->operator*=(rsqrtf(length2())); }
     
-    CPT_CPU_GPU_INLINE
+    CPT_CPU_INLINE
     float length_h() const { return sqrtf(length2()); }
 
     CONDITION_TEMPLATE(VecType, Vec3)

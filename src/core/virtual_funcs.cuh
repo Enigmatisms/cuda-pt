@@ -5,7 +5,7 @@
 */
 
 #pragma once
-#include "core/bsdf.cuh"
+#include "bsdf/bsdf.cuh"
 #include "core/emitter.cuh"
 
 template <typename BSDFType>

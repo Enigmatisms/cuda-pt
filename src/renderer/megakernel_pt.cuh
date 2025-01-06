@@ -6,7 +6,7 @@
 #pragma once
 #include <cuda/pipeline>
 #include "core/bvh.cuh"
-#include "core/bsdf.cuh"
+#include "bsdf/bsdf.cuh"
 #include "core/max_depth.h"
 #include "core/emitter.cuh"
 #include "core/primitives.cuh"

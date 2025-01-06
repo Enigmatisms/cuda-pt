@@ -13,7 +13,7 @@
 #include <cuda_runtime.h>
 #include <tiny_obj_loader.h>
 #include "core/config.h"
-#include "core/bsdf.cuh"
+#include "bsdf/bsdf.cuh"
 #include "core/shapes.cuh"
 #include "core/object.cuh"
 #include "core/emitter.cuh"
@@ -79,6 +79,7 @@ public:
     ~Scene();
 
     void export_prims(PrecomputedArray& verts, NormalArray& norms, ConstBuffer<PackedHalf2>& uvs) const;
+    void free_resources();
 
     bool bvh_available() const noexcept {
         return !nodes.empty();

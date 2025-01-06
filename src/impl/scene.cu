@@ -36,7 +36,7 @@ const std::unordered_map<std::string, DispersionType> dielectric_mapping = {
     {"Water",       DispersionType::Water}
 };
 
-std::string getFolderPath(std::string filePath) {
+static std::string get_folder_path(std::string filePath) {
     size_t pos = filePath.find_last_of("/\\");
     if (pos != std::string::npos) {
         return filePath.substr(0, pos + 1); // includes the last '/'
@@ -639,7 +639,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         std::cerr << "Failed to load file" << std::endl;
     }
 
-    auto folder_prefix = getFolderPath(path);
+    auto folder_prefix = get_folder_path(path);
     const tinyxml2::XMLElement *scene_elem   = doc.FirstChildElement("scene"),
                                 *bsdf_elem    = scene_elem->FirstChildElement("brdf"),
                                 *shape_elem   = scene_elem->FirstChildElement("shape"),
@@ -920,6 +920,27 @@ void Scene::update_materials() {
         }
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+}
+
+template <typename T>
+static void free_resource(std::vector<T>& vec) {
+    vec.clear();
+    vec.shrink_to_fit();
+}
+
+void Scene::free_resources() {
+    for (int i = 0; i < 3; i++) {
+        free_resource(verts_list[i]);
+        free_resource(norms_list[i]);
+        free_resource(uvs_list[i]);
+    }
+    free_resource(objects);
+    free_resource(sphere_flags);
+    free_resource(obj_idxs);
+    free_resource(nodes);
+    free_resource(cache_fronts);
+    free_resource(cache_backs);
+    free_resource(emitter_prims);
 }
 
 void Scene::export_prims(PrecomputedArray& verts, NormalArray& norms, ConstBuffer<PackedHalf2>& uvs) const {

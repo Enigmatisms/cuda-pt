@@ -1,5 +1,5 @@
 #pragma once
-#include "core/bsdf.cuh"
+#include "bsdf/bsdf.cuh"
 #include "core/virtual_funcs.cuh"
 #include "core/preset_params.cuh"
 

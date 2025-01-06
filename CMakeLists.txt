@@ -163,17 +163,6 @@ target_compile_options(
 	>
 )
 
-# ========================================= unit-test ===============================================
-
-add_executable(sensor_test test/parsers/sensor_parse.cc)
-
-target_link_libraries(sensor_test PRIVATE tinyxml2)
-
-add_executable(obj_test test/parsers/obj_parser.cu)
-
-target_link_libraries(obj_test PRIVATE tinyxml2 tinyobjloader)
-
-
 # CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate
 # https://developer.nvidia.com/blog/separate-compilation-linking-cuda-device-code/
 

@@ -8,11 +8,11 @@
 */
 
 #pragma once
-#include "core/vec2_half.cuh"
 #include "core/vec4.cuh"
+#include "core/defines.cuh"
+#include "core/vec2_half.cuh"
 #include "core/host_device.cuh"
 
-#define USE_TEX_NORMAL
 #define TRI_IDX(index) (index << 1) + index
 
 template <typename StructType>

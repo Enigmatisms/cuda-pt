@@ -79,6 +79,8 @@ int main(int argc, char** argv) {
         }
     }
 
+    scene.free_resources();
+
     auto window = gui::create_window(scene.config.width, scene.config.height);
     renderer->graphics_resc_init(gui::init_texture_and_pbo);
     renderer->update_camera(scene.cam);

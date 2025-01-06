@@ -9,12 +9,12 @@
 #include <cmath>
 #include "core/camera_model.cuh"
 
-CPT_CPU_GPU float fov2focal(float fov, float img_size) {
+CPT_CPU float fov2focal(float fov, float img_size) {
     fov = fov / 180.f * M_Pi;
     return 0.5f * img_size / std::tan(.5f * fov);
 }
 
-CPT_CPU_GPU float focal2fov(float inv_focal, float half_size) {
+CPT_CPU float focal2fov(float inv_focal, float half_size) {
     return 360.f * M_1_Pi * atanf(half_size * inv_focal);
 }
 
@@ -34,10 +34,10 @@ CPT_CPU static Vec3 parseVec3(const std::string& str) {
     return Vec3();
 }
 
-CPT_CPU_GPU DeviceCamera::DeviceCamera(
+CPT_CPU DeviceCamera::DeviceCamera(
     const Vec3& from, const Vec3& lookat, float fov, 
-    float w, float h, float hsign, float vsign, Vec3 up
-): t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f), signs(hsign, vsign), use_orthogonal(false) {
+    float w, float h, float hsign, Vec3 up
+): t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f), sign_x(hsign), use_orthogonal(false) {
     Vec3 forward = (lookat - from).normalized_h();
     up.normalize_h();
     Vec3 right = up.cross(forward).normalized_h();
@@ -45,8 +45,8 @@ CPT_CPU_GPU DeviceCamera::DeviceCamera(
 }
 
 CPT_CPU void DeviceCamera::rotate(float yaw, float pitch) {
-    auto quat_yaw = Quaternion::angleAxis_host(yaw, Vec3(0, signs.x(), 0)),
-            quat_pit = Quaternion::angleAxis_host(pitch, Vec3(-signs.y(), 0, 0));
+    auto quat_yaw = Quaternion::angleAxis_host(yaw, Vec3(0, sign_x, 0)),
+            quat_pit = Quaternion::angleAxis_host(pitch, Vec3(1, 0, 0));
     SO3 rot = SO3::from_quat(quat_yaw * quat_pit);
     R = R * rot;
     Vec3 forward = R.col(2).normalized_h(),
@@ -58,7 +58,7 @@ CPT_CPU void DeviceCamera::rotate(float yaw, float pitch) {
 }
 
 CPT_CPU DeviceCamera DeviceCamera::from_xml(const tinyxml2::XMLElement* sensorElement) {
-    float fov = 0, hsign = 1, vsign = 1;
+    float fov = 0, hsign = 1;
     int width = 512, height = 512;
     Vec3 lookat_target;
     Vec3 lookat_origin;
@@ -98,9 +98,7 @@ CPT_CPU DeviceCamera DeviceCamera::from_xml(const tinyxml2::XMLElement* sensorEl
     while (element) {
         std::string name = element->Attribute("name");
         std::string value = element->Attribute("value");
-        if(name == "vflip") {
-            if (value == "true") vsign = -vsign;
-        } else if (name == "hflip") {
+        if (name == "hflip") {
             if (value == "true") hsign = -hsign;
         }
         element = element->NextSiblingElement("bool");
@@ -120,5 +118,5 @@ CPT_CPU DeviceCamera DeviceCamera::from_xml(const tinyxml2::XMLElement* sensorEl
             filmElement = filmElement->NextSiblingElement("integer");
         }
     }
-    return DeviceCamera(lookat_origin, lookat_target, fov, width, height, hsign, vsign, lookat_up);
+    return DeviceCamera(lookat_origin, lookat_target, fov, width, height, hsign, lookat_up);
 }

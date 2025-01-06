@@ -49,8 +49,12 @@ CPT_GPU bool occlusion_test_bvh(
         node_idx += (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
         end_idx = intersect_node ? end_idx + beg_idx : 0;
         for (int idx = beg_idx; idx < end_idx; idx ++) {
+#ifdef TRIANGLE_ONLY
             int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, true, EPSILON, max_dist);
+#else
             float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0, EPSILON, max_dist);
+#endif
             if (dist > EPSILON)
                 return false;
         }
@@ -121,7 +125,11 @@ CPT_GPU float ray_intersect_bvh(
         for (int idx = beg_idx; idx < end_idx; idx ++) {
             // if current ray intersects primitive at [idx], tasks will store it
             int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+#ifdef TRIANGLE_ONLY
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v);
+#else
             float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
+#endif
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;
             prim_u   = valid ? it_u : prim_u;

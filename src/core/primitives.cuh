@@ -10,9 +10,8 @@
 #include "core/aos.cuh"
 #include "core/so3.cuh"
 #include "core/ray.cuh"
+#include "core/defines.cuh"
 #include "core/interaction.cuh"
-
-// #define TRIANGLE_ONLY
 
 class Primitive {
 private:
@@ -112,10 +111,8 @@ public:
         bool is_mesh = true
     ) {
 #ifdef TRIANGLE_ONLY
-        return Interaction((
-            norms.x(index) * (1.f - u - v) + \
-            norms.y(index) * u + \
-            norms.z(index) * v).normalized(),
+        return Interaction(
+            norms.eval(index, u, v),
             uvs[index].lerp(u, v)
         );
 #else

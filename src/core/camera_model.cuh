@@ -12,24 +12,24 @@
 #include <tinyxml2.h>
 
 // convert fov in degree to focal length
-CPT_CPU_GPU float fov2focal(float fov, float img_size);
+CPT_CPU float fov2focal(float fov, float img_size);
 // convert focal length to degree angle 
-CPT_CPU_GPU float focal2fov(float focal, float img_size);
+CPT_CPU float focal2fov(float focal, float img_size);
 
 CPT_CPU Vec3 parseVec3(const std::string& str);
 
 class DeviceCamera {
 public:
-    SO3 R;              // camera rotation
-    Vec3 t;        // camera translation (world frame) and orientation
-    float inv_focal;    // focal length
-    float _hw, _hh;     // pixel plane 
-    Vec2 signs;
-    bool use_orthogonal;
+    SO3 R;                  // camera rotation (3 * 3)
+    Vec3 t;                 // camera translation (world frame) and orientation (3)
+    float inv_focal;        // focal length (1)
+    float _hw, _hh;         // pixel plane (2)
+    float sign_x;           // flipping sign for x (1)
+    bool use_orthogonal;    // (less than 1)
 public:
     CPT_CPU_GPU DeviceCamera() {}
 
-    CPT_CPU_GPU DeviceCamera(const Vec3& from, const Vec3& lookat, float fov, float w, float h, float hsign = 1, float vsign = 1, Vec3 up = Vec3(0, 1, 0));
+    CPT_CPU DeviceCamera(const Vec3& from, const Vec3& lookat, float fov, float w, float h, float hsign = 1, Vec3 up = Vec3(0, 1, 0));
 
     /**
      * Sampling ray with stratified sampling
@@ -37,8 +37,8 @@ public:
     CPT_GPU Ray generate_ray(int x, int y, Sampler& sampler) const {
         float x_pos = sampler.next1D() + float(x),
                 y_pos = sampler.next1D() + float(y);
-        float ndc_dir_x = (x_pos - _hw) * inv_focal * signs.x();
-        float ndc_dir_y = (y_pos - _hh) * inv_focal * signs.y();
+        float ndc_dir_x = (x_pos - _hw) * inv_focal * sign_x;
+        float ndc_dir_y = (_hh - y_pos) * inv_focal;
         Vec3 origin = t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
         return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)).normalized());
     }
@@ -46,8 +46,8 @@ public:
     CPT_GPU Ray generate_ray(int x, int y, Vec2&& sample) const {
         float x_pos = sample.x() + float(x),
                 y_pos = sample.y() + float(y);
-        float ndc_dir_x = (x_pos - _hw) * inv_focal * signs.x();
-        float ndc_dir_y = (y_pos - _hh) * inv_focal * signs.y();
+        float ndc_dir_x = (x_pos - _hw) * inv_focal * sign_x;
+        float ndc_dir_y = (_hh - y_pos) * inv_focal;
         Vec3 origin = t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
         return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x, use_orthogonal ? 0 : ndc_dir_y, 1.f)).normalized());
     }
@@ -60,8 +60,8 @@ public:
         bool success = false;
         if (local_dir.z() > 1e-5) {
             local_dir *= 1.f / local_dir.z();       // inverse NDC
-            px = floorf(_hw + local_dir.x() / (inv_focal * signs.x()));
-            py = floorf(_hh + local_dir.y() / (inv_focal * signs.y()));
+            px = floorf(_hw + local_dir.x() / (inv_focal * sign_x));
+            py = floorf(_hh + local_dir.y() / (-inv_focal));
             success = px >= 0 && px < _hw * 2 && py >= 0 && py < _hh * 2;
         }
         return success;
@@ -76,11 +76,11 @@ public:
     }
 
     CPT_CPU void move_left(float step = 0.1) {
-        t += (-step * signs.x()) * R.col(0);
+        t += (-step * sign_x) * R.col(0);
     }
 
     CPT_CPU void move_right(float step = 0.1) {
-        t += (step * signs.x()) * R.col(0);
+        t += (step * sign_x) * R.col(0);
     }
 
     CPT_CPU void rotate(float yaw, float pitch);

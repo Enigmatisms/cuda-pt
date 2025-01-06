@@ -87,11 +87,11 @@
 		<ref type="material" id="glass"/>
 	</shape>
 
-	<shape type="sphere">
+	<!-- <shape type="sphere">
 		<point name="center" x="-0.35" y="0.02" z="0.05"/>
 		<float name="radius" value="0.02"/>
 		<ref type="material" id="glass"/>
-	</shape>
+	</shape> -->
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/whiskey/wine.obj"/>

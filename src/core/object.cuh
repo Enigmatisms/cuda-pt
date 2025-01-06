@@ -18,8 +18,8 @@ private:
     int prim_num;           // number of primitives
     float inv_area;         // inverse area
 public:
-    CompactedObjInfo(): bsdf_emitter(0), prim_offset(0), prim_num(0), inv_area(0) {}
-    CompactedObjInfo(int b_e_id, int prim_o, int prim_n, float inv_a): 
+    CPT_CPU_GPU CompactedObjInfo(): bsdf_emitter(0), prim_offset(0), prim_num(0), inv_area(0) {}
+    CPT_CPU CompactedObjInfo(int b_e_id, int prim_o, int prim_n, float inv_a): 
         bsdf_emitter(b_e_id), prim_offset(prim_o), prim_num(prim_n), inv_area(inv_a)  {}
 
     CPT_CPU_GPU_INLINE int sample_emitter_primitive(uint32_t sample, float& pdf) const {
@@ -52,8 +52,6 @@ public:
         return _aabb.intersect(ray, t_near);
     }
 
-    CPT_CPU_GPU void setup(const ArrayType<Vec3>& prims, bool is_polygon = true);
-
     CPT_CPU void setup(const std::array<std::vector<Vec3>, 3>& prims, bool is_polygon = true);
 
     CPT_GPU_INLINE int sample_emitter_primitive(uint32_t sample, float& pdf) const {
@@ -71,7 +69,10 @@ public:
         prim_offset(prim_off), prim_num(prim_num), emitter_id(emitter_id)
     {}
 
-    CPT_CPU void export_bound(Vec3& mini, Vec3& maxi) const noexcept;
+    CPT_CPU void export_bound(Vec3& mini, Vec3& maxi) const noexcept {
+        mini.minimized(_aabb.mini);
+        maxi.maximized(_aabb.maxi);
+    }
 
     CPT_CPU CompactedObjInfo export_gpu() const noexcept {
         // masking lower 16 bits, negative preserving
