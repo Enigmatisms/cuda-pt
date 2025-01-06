@@ -122,6 +122,9 @@ CPT_GPU float ray_intersect_bvh(
         // is stored. So the following for loop can naturally run (while for non-leaf, naturally skip)
         node_idx += (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
         end_idx = intersect_node ? end_idx + beg_idx : 0;
+        // if (end_idx > beg_idx + 14) {
+        //     printf("Beg: %d, end: %d, diff: %d\n", beg_idx, end_idx, end_idx - beg_idx);
+        // }
         for (int idx = beg_idx; idx < end_idx; idx ++) {
             // if current ray intersects primitive at [idx], tasks will store it
             int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);

@@ -16,7 +16,9 @@
         <integer name="max_specular" value="12"/>
         <integer name="max_transmit" value="12"/>
 
-		<integer name="cache_level" value="5"/>
+		<integer class="bvh" name="cache_level" value="5"/>
+        <integer class="bvh" name="max_node_num" value="16"/>
+
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		

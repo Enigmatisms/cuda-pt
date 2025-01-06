@@ -47,8 +47,9 @@ struct BVHInfo {
 
 class BVHNode {
 public:
-    BVHNode(): bound(1e5f, -1e5f, 0, 0), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
-    BVHNode(int base, int prim_num): bound(1e5f, -1e5f, base, prim_num), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
+    BVHNode(): bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
+    BVHNode(int base, int prim_num): 
+        bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, base, prim_num), axis(AXIS_NONE), lchild(nullptr), rchild(nullptr) {}
     ~BVHNode() {
         if (lchild != nullptr) delete lchild;
         if (rchild != nullptr) delete rchild;
@@ -74,7 +75,7 @@ public:
     }
 public:
     // The axis start and end are scaled up a little bit
-    SplitAxis max_extent_axis(const std::vector<BVHInfo>& bvhs, std::vector<float>& bins) const;
+    SplitAxis max_extent_axis(const std::vector<BVHInfo>& bvhs, float& min_r, float& interval) const;
 public:
     AABB bound;
     SplitAxis axis;
@@ -137,5 +138,6 @@ void bvh_build(
     std::vector<float4>& nodes,
     std::vector<float4>& cache_fronts,
     std::vector<float4>& cache_backs,
-    int& max_cache_level
+    int& max_cache_level,
+    const int max_node_num
 );

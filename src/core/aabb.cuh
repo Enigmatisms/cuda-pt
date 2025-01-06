@@ -41,8 +41,8 @@ public:
         maxi += AABB_EPS;
     }
 
-    CPT_CPU_GPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
-    CPT_CPU_GPU Vec3 range()    const noexcept {return maxi - mini;}
+    CPT_CPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
+    CPT_CPU Vec3 range()    const noexcept {return maxi - mini;}
 
     CPT_GPU bool intersect(const Ray& ray, float& t_near) const {
         auto t2s = ray.d.rcp(), o_div = ray.o * t2s;
@@ -64,18 +64,10 @@ public:
     }
 
     CONDITION_TEMPLATE(AABBType, AABB)
-    CPT_CPU_GPU AABB& operator += (AABBType&& _aabb) noexcept {
+    CPT_CPU AABB& operator += (AABBType&& _aabb) noexcept {
         mini = mini.minimize(_aabb.mini);
         maxi = maxi.maximize(_aabb.maxi);
         return *this;
-    }
-
-    CONDITION_TEMPLATE(AABBType, AABB)
-    CPT_CPU_GPU AABB operator+ (AABBType&& _aabb) const noexcept {
-        return AABB(
-            mini.minimize(_aabb.mini),
-            maxi.maximize(_aabb.maxi)
-        );
     }
 
     CPT_GPU_INLINE void copy_from(const AABB& other) {
@@ -83,14 +75,17 @@ public:
         FLOAT4(maxi) = CONST_FLOAT4(other.maxi); // Load last two elements of second Vec3
     }
 
-    CPT_CPU_GPU_INLINE float area() const {
+    // A safe call for area
+    CPT_CPU_INLINE float area() const {
         Vec3 diff = maxi - mini;
-        return 2.f * (diff.x() * diff.y() + diff.y() * diff.z() + diff.x() * diff.z());
+        if (fabsf(diff.x()) < AABB_INVALID_DIST)
+            return 2.f * (diff.x() * diff.y() + diff.y() * diff.z() + diff.x() * diff.z());
+        return 0;
     }
 
-    CPT_CPU_GPU_INLINE void clear() {
-        mini.fill(1e4);
-        maxi.fill(-1e4);
+    CPT_CPU_INLINE void clear() {
+        mini.fill(AABB_INVALID_DIST);
+        maxi.fill(-AABB_INVALID_DIST);
     }
 
     CPT_CPU_GPU_INLINE int obj_idx() const { return __bytes1; }

@@ -72,10 +72,10 @@ public:
 
     // R @ v
     CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_CPU_GPU Vec3 rotate(VecType&& v) const noexcept {
+    CPT_CPU_GPU Vec3 rotate(VecType&& v) const noexcept {\
         return Vec3(
-            rows[0].dot(std::forward<VecType>(v)), 
-            rows[1].dot(std::forward<VecType>(v)), 
+            rows[0].dot(v), 
+            rows[1].dot(v), 
             rows[2].dot(std::forward<VecType>(v))
         );
     }

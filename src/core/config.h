@@ -11,10 +11,11 @@
 
 class RenderingConfig {
 public:
+    int spp;
     int width;
     int height;
     int cache_level;
-    int spp;
+    int max_node_num;
     int spec_constraint;
     bool gamma_correction;
     bool bidirectional;
@@ -22,7 +23,7 @@ public:
 
     MaxDepthParams md;
 
-    RenderingConfig() : width(512), height(512), cache_level(4), spp(64), 
+    RenderingConfig() : spp(64), width(512), height(512), cache_level(4), max_node_num(16), 
         spec_constraint(0), gamma_correction(true), bidirectional(false), caustic_scaling(1.0) {}
 
     static RenderingConfig from_xml(const tinyxml2::XMLElement *sensor_node);

@@ -11,7 +11,7 @@
 		<float name="fov" value="50"/>
         <integer name="sample_count" value="128"/>
         <integer name="max_bounce" value="16"/>
-		<integer name="cache_level" value="4"/>
+		<integer class="bvh" name="cache_level" value="4"/>
         <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		

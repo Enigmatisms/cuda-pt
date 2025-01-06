@@ -28,6 +28,13 @@ RenderingConfig RenderingConfig::from_xml(const tinyxml2::XMLElement *sensor_nod
                 std::cout << "Cache level clipped to [0, 6], originally: " << cache_level << std::endl;
             }
             config.cache_level = std::max(std::min(cache_level, 6), 0);
+        } else if (name == "max_node_num") {
+            int max_node_num = 0;
+            node->QueryIntAttribute("value", &max_node_num);
+            if (max_node_num < 1 || max_node_num > 32) {
+                std::cout << "Max node clipped to [1, 32], originally: " << max_node_num << std::endl;
+            }
+            config.max_node_num = std::max(std::min(max_node_num, 32), 1);
         }
         node = node->NextSiblingElement("integer");
     }

@@ -765,7 +765,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
 
     if (use_bvh) {
         printf("[BVH] Linear SAH-BVH is being built...\n");
-        Vec3 world_min(1e4, 1e4, 1e4), world_max(-1e4, -1e4, -1e4);
+        Vec3 world_min(AABB_INVALID_DIST), world_max(-AABB_INVALID_DIST);
         for (const auto& obj: objects) {
             obj.export_bound(world_min, world_max);
         }
@@ -775,7 +775,8 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
             verts_list[0], verts_list[1], verts_list[2], 
             objects, sphere_objs, world_min, world_max, 
             obj_idxs, prim_idxs, nodes, 
-            cache_fronts, cache_backs, config.cache_level
+            cache_fronts, cache_backs, 
+            config.cache_level, config.max_node_num
         );
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
@@ -961,6 +962,7 @@ void Scene::print() const noexcept {
     std::cout << "\tRenderer type:\t\t" << RENDER_TYPE_STR[rdr_type] << std::endl;
     std::cout << "\tUse SAH-BVH:\t\t" << use_bvh << std::endl;
     std::cout << "\tSAH-BVH Cache Level: \t" << config.cache_level << std::endl;
+    std::cout << "\tBVH Max Leaf Node: \t" << config.max_node_num << std::endl;
     std::cout << "\tNumber of objects: \t" << num_objects << std::endl;
     std::cout << "\tNumber of primitives: \t" << num_prims << std::endl;
     std::cout << "\tNumber of emitters: \t" << num_emitters << std::endl;

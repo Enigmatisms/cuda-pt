@@ -118,7 +118,8 @@
         "__bit_reference": "cpp",
         "ranges": "cpp",
         "span": "cpp",
-        "target": "cpp"
+        "target": "cpp",
+        "__tuple": "cpp"
     },
     "cmake.cpptools.compilerPath": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\bin\\nvcc.exe"
 }
