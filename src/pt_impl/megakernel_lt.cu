@@ -39,7 +39,7 @@ CPT_KERNEL void render_lt_kernel(
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstF4Ptr cached_nodes,
+    ConstU4Ptr cached_nodes,
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
@@ -77,9 +77,9 @@ CPT_KERNEL void render_lt_kernel(
     int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
 
     // cache near root level BVH nodes for faster traversal
-    extern __shared__ float4 s_cached[];
+    extern __shared__ uint4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+    if (tid < cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
@@ -166,7 +166,7 @@ template CPT_KERNEL void render_lt_kernel<true>(
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstF4Ptr cached_nodes,
+    ConstU4Ptr cached_nodes,
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
@@ -191,7 +191,7 @@ template CPT_KERNEL void render_lt_kernel<false>(
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstF4Ptr cached_nodes,
+    ConstU4Ptr cached_nodes,
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,

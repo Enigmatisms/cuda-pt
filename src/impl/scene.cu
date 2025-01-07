@@ -7,6 +7,8 @@
 #include <numeric>
 #include "core/scene.cuh"
 
+static constexpr int MAX_PRIMITIVE_NUM = 33554431;          // 2^25 - 1
+
 const std::unordered_map<std::string, MetalType> conductor_mapping = {
     {"Au", MetalType::Au},
     {"Cr", MetalType::Cr},
@@ -727,7 +729,12 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         shape_elem = shape_elem->NextSiblingElement("shape");
     }
     num_prims = prim_offset;
-
+    if (num_prims > MAX_PRIMITIVE_NUM) {
+        // MAX_PRIMITIVE_NUM is the upper bound. 2^25 - 1, if num_prims exceeds this bound
+        // For CompactNode, it is possible that the node offset will be out-of-range
+        std::cerr << "[Error] Too many primitives: " << num_prims << " (maximum allowed: " << MAX_PRIMITIVE_NUM << ")\n";
+        throw std::runtime_error("Too many primitives.");
+    }
 
     //  ------------------------- (4) parse all emitters --------------------------
     ptr = emitter_elem;
@@ -774,17 +781,20 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         bvh_build(
             verts_list[0], verts_list[1], verts_list[2], 
             objects, sphere_objs, world_min, world_max, 
-            obj_idxs, prim_idxs, nodes, 
-            cache_fronts, cache_backs, 
+            obj_idxs, prim_idxs, nodes, cache_nodes, 
             config.cache_level, config.max_node_num
         );
+        if (cache_nodes.size() > 32) {
+            std::cerr << "[Error] Unexpected cached node number: " << cache_nodes.size() << " (maximum allowed: 32)\n";
+            throw std::runtime_error("Too many cached nodes.");
+        }
         auto dur = std::chrono::system_clock::now() - tp;
         auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
         auto elapsed = static_cast<double>(count) / 1e3;
         printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
         // The nodes.size is actually twice the number of nodes
         // since Each BVH node will be separated to two float4, nodes will store two float4 for each node
-        printf("[BVH] Total nodes: %llu, leaves: %llu\n", nodes.size() >> 1, prim_idxs.size());
+        printf("[BVH] Total nodes: %llu, leaves: %llu\n", nodes.size(), prim_idxs.size());
 
         tp = std::chrono::system_clock::now();
         std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
@@ -939,8 +949,7 @@ void Scene::free_resources() {
     free_resource(sphere_flags);
     free_resource(obj_idxs);
     free_resource(nodes);
-    free_resource(cache_fronts);
-    free_resource(cache_backs);
+    free_resource(cache_nodes);
     free_resource(emitter_prims);
 }
 

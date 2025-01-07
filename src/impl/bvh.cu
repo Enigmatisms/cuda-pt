@@ -222,9 +222,8 @@ static BVHNode* bvh_root_start(const Vec3& world_min, const Vec3& world_max, int
 // This is the final function call for `bvh_build`
 static int recursive_linearize(
     BVHNode* cur_node, 
-    std::vector<float4>& nodes,
-    std::vector<float4>& cached_fronts,     // we extract nodes to be cached in shared memory, normally: levels closer to root
-    std::vector<float4>& cached_backs,
+    std::vector<CompactNode>& nodes,
+    std::vector<CompactNode>& cached_nodes,
     const int depth = 0,
     const int cache_max_depth = 4
 ) {
@@ -233,22 +232,21 @@ static int recursive_linearize(
     // Note that if rchild_offset is -1, then the node is leaf. Leaf node points to primitive array
     // which is already sorted during BVH construction, containing primitive_id and obj_id for true intersection
     // Note that lin_nodes has been reserved
-    size_t current_size = nodes.size() >> 1, current_cached = cached_fronts.size();
+    size_t current_size = nodes.size(), current_cached = cached_nodes.size();
     float4 node_f, node_b;
     cur_node->get_float4(node_f, node_b);
-    nodes.push_back(node_f);
-    nodes.push_back(node_b);
-    reinterpret_cast<int&>(node_f.w) = 1;               // always assume leaf node (offset = 1)
-    reinterpret_cast<int&>(node_b.w) = current_size;
+    bool not_leaf = cur_node->lchild != nullptr;
+    nodes.emplace_back(node_f, node_b, not_leaf);
+    INT_REF_CAST(node_f.w) = 1;               // always assume leaf node (offset = 1)
+    INT_REF_CAST(node_b.w) = current_size;
     if (depth < cache_max_depth) {
         // LinearNode (cached): 
         // (float3) aabb.min
-        // (int)    jump offset to next cached node 
+        // (int)    jump offset to next cached node (if 1, cache node indicates a leaf node), this offset is not more than 31
         // (float3) aabb.max 
-        // (int)    index to the global memory node (if -1, means it it not a leave node, we should continue)
-        cached_fronts.push_back(node_f);
-        cached_backs.push_back(node_b);
-    }
+        // (int)    index to the global memory node
+        cached_nodes.emplace_back(node_f, node_b, not_leaf, true);
+    }   
     /**
      * @note
      * Clarify on how do we store BVH range and node offsets:
@@ -257,22 +255,22 @@ static int recursive_linearize(
      *   that the current node is non-leaf
      * - for leaf nodes, we don't modify the float4.w
      */
-    if (cur_node->lchild != nullptr) {
+    if (not_leaf) {
         // non-leaf node
         int lnodes = recursive_linearize(
-            cur_node->lchild, nodes, 
-            cached_fronts, cached_backs, 
+            cur_node->lchild,
+            nodes, cached_nodes,
             depth + 1, cache_max_depth
         );
         lnodes += recursive_linearize(
-            cur_node->rchild, nodes,
-            cached_fronts, cached_backs, 
+            cur_node->rchild,
+            nodes, cached_nodes,
             depth + 1, cache_max_depth
         );
-        reinterpret_cast<int&>(nodes[2 * current_size + 1].w) = -(lnodes + 1);
+        nodes[current_size].set_high_27bits(-(lnodes + 1));
         if (depth < cache_max_depth) {
             // store the jump offset to the next cached node (for non-leaf node)
-            reinterpret_cast<int&>(cached_fronts[current_cached].w) = cached_fronts.size() - current_cached;
+            cached_nodes[current_cached].set_low_5bits(cached_nodes.size() - current_cached);
         }
         return lnodes + 1;                      // include the cur_node                       
     } else {
@@ -291,9 +289,8 @@ void bvh_build(
     const Vec3& world_min, const Vec3& world_max,
     std::vector<int>& obj_idxs, 
     std::vector<int>& prim_idxs, 
-    std::vector<float4>& nodes,
-    std::vector<float4>& cached_fronts,
-    std::vector<float4>& cached_backs,
+    std::vector<CompactNode>& nodes,
+    std::vector<CompactNode>& cached_nodes,
     int& cache_max_level,
     const int max_prim_node
 ) {
@@ -309,11 +306,10 @@ void bvh_build(
     printf("[BVH] BVH tree max depth: %d\n", max_depth);
     printf("[BVH] Traversed BVH SAH cost: %.7f, AVG: %.7f\n", total_cost, total_cost / static_cast<float>(bvh_infos.size()));
     cache_max_level = std::min((int)std::floor(std::log2(node_num)), cache_max_level);
-    nodes.reserve(node_num << 1);
-    cached_fronts.reserve(1 << cache_max_level);
-    cached_backs.reserve(1 << cache_max_level);
-    recursive_linearize(root_node, nodes, cached_fronts, cached_backs, 0, cache_max_level);
-    printf("[BVH] Number of nodes to cache: %llu\n", cached_fronts.size());
+    nodes.reserve(node_num);
+    cached_nodes.reserve(1 << cache_max_level);
+    recursive_linearize(root_node, nodes, cached_nodes, 0, cache_max_level);
+    printf("[BVH] Number of nodes to cache: %llu\n", cached_nodes.size());
 
     obj_idxs.reserve(bvh_infos.size());
     prim_idxs.reserve(bvh_infos.size());

@@ -44,7 +44,8 @@ void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int wi
     ImGui::NewFrame();
 
     ImGui::Begin(sub_win_name.c_str());
-    ImGui::Image((void*)(intptr_t)cuda_texture_id, ImVec2(width, height));
+    ImVec2 wh(width, height);
+    ImGui::Image(cuda_texture_id, wh);
     ImGui::End();
 
     ImGui::Render();
@@ -60,7 +61,7 @@ void window_render(
     ImVec2 top_left(0, 0);
     ImVec2 bottom_right(width, height);
     // splat pixel buffer outputs
-    draw_list->AddImage((void*)(intptr_t)cuda_texture_id, top_left, bottom_right);
+    draw_list->AddImage(cuda_texture_id, top_left, bottom_right);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -145,32 +146,31 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
 
 bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap, bool& exiting)
 {
-    ImGuiIO& io = ImGui::GetIO();
     bool update = false;
-    if (io.KeysDown[ImGuiKey_W]) {
+    if (ImGui::IsKeyPressed(ImGuiKey_W)) {
         update = true;
         camera.move_forward(step);
     }
-    if (io.KeysDown[ImGuiKey_S]) {
+    if (ImGui::IsKeyPressed(ImGuiKey_S)) {
         update = true;
         camera.move_backward(step);
     }
-    if (io.KeysDown[ImGuiKey_A]) {
+    if (ImGui::IsKeyPressed(ImGuiKey_A)) {
         update = true;
         camera.move_left(step);
     }
-    if (io.KeysDown[ImGuiKey_D]) {
+    if (ImGui::IsKeyPressed(ImGuiKey_D)) {
         update = true;
         camera.move_right(step);
     }
-    if (io.KeysDown[ImGuiKey_P]) {
+    if (ImGui::IsKeyPressed(ImGuiKey_P)) {
         frame_cap = true;
         printf("Frame capture keyboard event.\n");
     }
-    if (io.KeysDown[ImGuiKey_Escape]) {
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
         exiting = true;
     }
-    if (io.KeysDown[ImGuiKey_E]) {
+    if (ImGui::IsKeyPressed(ImGuiKey_E)) {
         printf("Camera Pose:\n");
         Vec3 lookat = camera.R.col(2) + camera.t;
         printf("\tPosition:\t");

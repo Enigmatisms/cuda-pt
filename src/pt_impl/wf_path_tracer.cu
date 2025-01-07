@@ -28,7 +28,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
     bool gamma_corr
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
-    size_t _num_bytes = 0, cached_size = 2 * num_cache * sizeof(float4);
+    size_t _num_bytes = 0, cached_size = num_cache * sizeof(float4);
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
     accum_cnt ++;
@@ -121,7 +121,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
     const int num_patches = x_patches * y_patches;
     // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
     uint32_t* const ray_idx_buffer = thrust::raw_pointer_cast(index_buffer.data()),
-                cached_size = 2 * num_cache * sizeof(float4);
+                cached_size = num_cache * sizeof(float4);
     const dim3 GRID(BLOCK_X, BLOCK_Y), BLOCK(THREAD_X, THREAD_Y);
 
     for (int i = 0; i < num_iter; i++) {
