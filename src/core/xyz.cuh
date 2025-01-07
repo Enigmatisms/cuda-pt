@@ -36,4 +36,31 @@ public:
     }
 };
 
-extern __constant__ ColorSpaceXYZ XYZ;
+template <typename TexType>
+static cudaTextureObject_t createArrayTexture1D(
+    const TexType* tex_src, 
+    cudaArray_t& arr_t,
+    size_t size 
+) {
+    cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
+    CUDA_CHECK_RETURN(cudaMallocArray(&arr_t, &channel_desc, size));
+    CUDA_CHECK_RETURN(cudaMemcpyToArray(arr_t, 0, 0, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
+
+    cudaResourceDesc res_desc;
+    memset(&res_desc, 0, sizeof(res_desc));
+    res_desc.resType = cudaResourceTypeArray;
+    res_desc.res.array.array = arr_t;
+
+    cudaTextureDesc tex_desc;
+    memset(&tex_desc, 0, sizeof(tex_desc));
+    tex_desc.addressMode[0] = cudaAddressModeClamp;
+    tex_desc.filterMode = cudaFilterModeLinear;
+    tex_desc.readMode = cudaReadModeElementType;
+    tex_desc.normalizedCoords = true;
+
+    cudaTextureObject_t tex_obj;
+    CUDA_CHECK_RETURN(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
+    return tex_obj;
+}
+
+extern CPT_GPU_CONST ColorSpaceXYZ XYZ;

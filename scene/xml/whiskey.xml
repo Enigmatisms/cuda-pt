@@ -10,13 +10,14 @@
 	<sensor type="perspective">
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
+		
         <integer name="max_bounce" value="16"/>
 		<integer name="max_diffuse" value="16"/>
         <integer name="max_specular" value="16"/>
         <integer name="max_transmit" value="16"/>
         <integer class="bvh" name="max_node_num" value="32"/>
 		<integer class="bvh" name="cache_level" value="4"/>
-        <bool name="vflip" value="true"/>
+
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">

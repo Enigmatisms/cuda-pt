@@ -11,8 +11,12 @@
 		<float name="fov" value="39.3077"/>
         <integer name="sample_count" value="128"/>
         <integer name="max_bounce" value="5"/>
-		<integer class="bvh" name="cache_level" value="4"/>
-        <bool name="vflip" value="true"/>
+        <integer name="max_diffuse" value="5"/>
+        <integer name="max_specular" value="5"/>
+        <integer name="max_transmit" value="5"/>
+
+		<integer class="bvh" name="cache_level" value="5"/>
+        <integer class="bvh" name="max_node_num" value="8"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">

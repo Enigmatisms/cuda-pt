@@ -14,7 +14,6 @@
 #include <tiny_obj_loader.h>
 #include "core/config.h"
 #include "bsdf/bsdf.cuh"
-#include "core/shapes.cuh"
 #include "core/object.cuh"
 #include "core/emitter.cuh"
 #include "core/textures.cuh"
@@ -23,11 +22,12 @@
 #include "core/dynamic_bsdf.cuh"
 #include "core/bvh.cuh"
 
-enum RendererType {
+enum RendererType: uint8_t {
     MegaKernelPT = 0,            // megakernel path tracing
     WavefrontPT  = 1,            // wavefront  path tracing
     MegeKernelLT = 2,            // megakernel light tracing
     VoxelSDFPT   = 3,            // not supported currently
+    DepthTracing = 4,
     NumRendererType
 };
 
@@ -42,7 +42,6 @@ public:
     BSDF** bsdfs;
     Emitter** emitters;
     std::vector<ObjInfo> objects;
-    std::vector<Shape> shapes;
     std::vector<bool> sphere_flags;
     std::vector<int> obj_idxs;
     std::vector<CompactNode> nodes;

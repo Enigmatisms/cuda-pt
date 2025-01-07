@@ -2,8 +2,8 @@
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
-__constant__ Emitter* c_emitter[9];
-__constant__ BSDF*    c_material[48];
+CPT_GPU_CONST Emitter* c_emitter[9];
+CPT_GPU_CONST BSDF*    c_material[48];
 
 int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaFree(nullptr));       // initialize CUDA
@@ -18,7 +18,9 @@ int main(int argc, char** argv) {
 
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
-
+#ifdef TRIANGLE_ONLY
+    printf("[ATTENTION] Note that TRIANGLE_ONLY macro is defined. Please make sure there is no sphere primitive in the scene.\n");
+#endif
     std::unique_ptr<TracerBase> renderer = nullptr;
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {

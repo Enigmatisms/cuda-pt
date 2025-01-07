@@ -141,7 +141,7 @@ public:
     }
 };
 
-extern __constant__ Textures c_textures;
+extern CPT_GPU_CONST Textures c_textures;
 
 bool save_image(
     const std::string& filename,

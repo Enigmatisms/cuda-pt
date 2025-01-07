@@ -633,7 +633,7 @@ void parseTexture(
     }
 }
 
-const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "Voxel-SDF-PT"};
+const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "Voxel-SDF-PT", "Depth Tracer"};
 
 Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0), use_bvh(false) {
     tinyxml2::XMLDocument doc;
@@ -660,11 +660,12 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
 
     // ------------------------- (0) parse the renderer -------------------------
     std::string render_type = render_elem != nullptr ? render_elem->Attribute("type") : "pt";
-    if      (render_type == "pt")   rdr_type = RendererType::MegaKernelPT;
-    else if (render_type == "wfpt") rdr_type = RendererType::WavefrontPT;
-    else if (render_type == "lt")   rdr_type = RendererType::MegeKernelLT;
-    else if (render_type == "sdf")  rdr_type = RendererType::VoxelSDFPT;
-    else                            rdr_type = RendererType::MegaKernelPT;
+    if      (render_type == "pt")    rdr_type = RendererType::MegaKernelPT;
+    else if (render_type == "wfpt")  rdr_type = RendererType::WavefrontPT;
+    else if (render_type == "lt")    rdr_type = RendererType::MegeKernelLT;
+    else if (render_type == "sdf")   rdr_type = RendererType::VoxelSDFPT;
+    else if (render_type == "depth") rdr_type = RendererType::DepthTracing;
+    else                             rdr_type = RendererType::MegaKernelPT;
     
     {       // local field starts
     auto& use_bvh_ref = const_cast<bool&>(use_bvh);
@@ -754,19 +755,13 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     config = RenderingConfig::from_xml(sensor_elem);
 
     // ------------------------- (6) initialize shapes -------------------------
-    shapes.resize(num_prims);
     sphere_flags.resize(num_prims);
     prim_offset = 0;
     for (int obj_id = 0; obj_id < num_objects; obj_id ++) {
         prim_offset += objects[obj_id].prim_num;
+        bool is_sphere = sphere_objs[obj_id];
         for (int i = objects[obj_id].prim_offset; i < prim_offset; i++) {
-            if (!sphere_objs[obj_id]) {
-                shapes[i] = TriangleShape(obj_id);
-                sphere_flags[i] = false;
-            } else {
-                shapes[i] = SphereShape(obj_id);
-                sphere_flags[i] = true;
-            }
+            sphere_flags[i] = is_sphere;
         }
     }
 
@@ -824,13 +819,11 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         // before the reordering logic, the emitter primitives are gauranteed
         // to be stored continuously, so we don't need an extra index map
         std::vector<std::vector<int>> eprim_idxs(num_emitters);
-        std::vector<Shape> reorder_shapes(num_prims);
         for (int i = 0; i < num_prims; i++) {
             int index = prim_idxs[i], obj_idx = obj_idxs[i];
             obj_idx = obj_idx < 0 ? -obj_idx - 1 : obj_idx;
             const auto& object = objects[obj_idx];
             reorder_sph_flags[i] = sphere_flags[index];
-            reorder_shapes[i] = shapes[index];
             if (object.is_emitter()) {
                 int emitter_idx = object.emitter_id - 1;
                 eprim_idxs[emitter_idx].push_back(i);
@@ -861,7 +854,6 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         verts_list   = std::move(reorder_verts);
         norms_list   = std::move(reorder_norms);
         sphere_flags = std::move(reorder_sph_flags);
-        shapes       = std::move(reorder_shapes);
         dur = std::chrono::system_clock::now() - tp;
         count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
         elapsed = static_cast<double>(count) / 1e3;

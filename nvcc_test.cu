@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cuda_runtime.h>
 
-
 class Vec3 {
 private:
     float3 _data;

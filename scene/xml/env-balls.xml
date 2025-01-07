@@ -15,7 +15,6 @@
         <integer name="max_specular" value="8"/>
         <integer name="max_transmit" value="8"/>
 		<integer class="bvh" name="cache_level" value="3"/>
-        <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">

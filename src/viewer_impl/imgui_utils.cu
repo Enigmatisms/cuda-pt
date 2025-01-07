@@ -3,12 +3,25 @@
 #include <ext/imgui/backends/imgui_impl_glfw.h>
 #include <ext/imgui/backends/imgui_impl_opengl3.h>
 #include <cuda_gl_interop.h>
+#include "core/serialize.h"
 #include "core/cuda_utils.cuh"
 #include "core/camera_model.cuh"
 #include "core/imgui_utils.cuh"
 #include "core/dynamic_bsdf.cuh"
 
 namespace gui {
+
+static constexpr const char* RENDERER_NAMES[] = {
+    "Megakernel Path Tracing",
+    "Wavefront Path Tracing",
+    "Megakernel Light Tracing",
+    "Voxel-SDF Path Tracing",
+    "Scene Depth Tracing"
+};
+
+static constexpr std::array<const char*, 4> COLOR_MAP_NAMES = {
+    "Jet", "Plasma", "Viridis", "GrayScale"
+};
 
 // initialize GL texture and PBO (pixel buffer object)
 void init_texture_and_pbo(
@@ -147,30 +160,30 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
 bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap, bool& exiting)
 {
     bool update = false;
-    if (ImGui::IsKeyPressed(ImGuiKey_W)) {
+    if (ImGui::IsKeyDown(ImGuiKey_W)) {
         update = true;
         camera.move_forward(step);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_S)) {
+    if (ImGui::IsKeyDown(ImGuiKey_S)) {
         update = true;
         camera.move_backward(step);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_A)) {
+    if (ImGui::IsKeyDown(ImGuiKey_A)) {
         update = true;
         camera.move_left(step);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_D)) {
+    if (ImGui::IsKeyDown(ImGuiKey_D)) {
         update = true;
         camera.move_right(step);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_P)) {
+    if (ImGui::IsKeyDown(ImGuiKey_P)) {
         frame_cap = true;
         printf("Frame capture keyboard event.\n");
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    if (ImGui::IsKeyDown(ImGuiKey_Escape)) {
         exiting = true;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_E)) {
+    if (ImGui::IsKeyDown(ImGuiKey_E)) {
         printf("Camera Pose:\n");
         Vec3 lookat = camera.R.col(2) + camera.t;
         printf("\tPosition:\t");
@@ -357,7 +370,8 @@ void render_settings_interface(
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
     MaxDepthParams& md_params,
-    GUIParams& params
+    GUIParams& params,
+    const uint8_t rdr_type
 ) {
     // Begin the main menu bar at the top of the window
     if (ImGui::BeginMainMenuBar()) {
@@ -399,6 +413,8 @@ void render_settings_interface(
             }
 
             if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text(RENDERER_NAMES[rdr_type]);
+                ImGui::Separator();
                 params.renderer_update |= draw_integer_input("max_depth", "Max Depth", md_params.max_depth);
                 params.renderer_update |= draw_integer_input("max_diff",  "Max Diffuse", md_params.max_diffuse);
                 params.renderer_update |= draw_integer_input("max_spec",  "Max Specular", md_params.max_specular);
@@ -408,6 +424,16 @@ void render_settings_interface(
                     ImGui::PushItemWidth(120.0f);
                     ImGui::InputInt("Compression Quality", &params.compress_q, 1, 100);
                     ImGui::PopItemWidth();
+                }
+                if (rdr_type == 4) {        // 4 is Depth Tracing
+                    uint8_t update_v = Serializer::get<int>(params.serialized_data, 0);
+                    if (draw_selection_menu(COLOR_MAP_NAMES, "##color-map", "Color Map", update_v)) {
+                        int old_v = Serializer::get<int>(params.serialized_data, 0);
+                        if (old_v != int(update_v)) {
+                            Serializer::set<int>(params.serialized_data, 0, update_v);
+                            params.serialized_update = true;
+                        }
+                    }
                 }
             }
             if (ImGui::CollapsingHeader("Material Settings", ImGuiWindowFlags_AlwaysAutoResize)) {

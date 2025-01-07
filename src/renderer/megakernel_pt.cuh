@@ -12,8 +12,8 @@
 #include "core/primitives.cuh"
 #include "core/camera_model.cuh"
 
-extern __constant__ Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
-extern __constant__ BSDF*    c_material[48];
+extern CPT_GPU_CONST Emitter* c_emitter[9];          // c_emitter[8] is a dummy emitter
+extern CPT_GPU_CONST BSDF*    c_material[48];
 
 using ConstNodePtr  = const LinearNode* const __restrict__;
 using ConstObjPtr   = const CompactedObjInfo* const __restrict__;

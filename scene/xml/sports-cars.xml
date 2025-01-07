@@ -16,7 +16,6 @@
         <integer name="max_bounce" value="6"/>
         <integer class="bvh" name="max_node_num" value="16"/>
 		<integer class="bvh" name="cache_level" value="4"/>
-        <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
         <bool name="" value="true"/>
 		

@@ -15,6 +15,10 @@ namespace gui {
 using gl_uint = unsigned int;
 
 struct GUIParams {
+    GUIParams() {
+        serialized_data.reserve(16);
+    }
+
     int compress_q = 90;
 
     float trans_speed = 0.1f;
@@ -29,10 +33,22 @@ struct GUIParams {
     bool scene_update = false;
     bool material_update = false;
     bool renderer_update = false;
+    bool serialized_update = false;
     bool output_png = true;
 
+    std::vector<char> serialized_data;
+
     inline bool buffer_flush_update() const noexcept {
-        return camera_update || scene_update || material_update || renderer_update;
+        return camera_update || scene_update || material_update || renderer_update || serialized_update;
+    }
+
+    inline void reset() {
+        capture = false;
+        camera_update   = false;
+        scene_update    = false; 
+        renderer_update = false,
+        material_update = false;
+        serialized_update = false;
     }
 };
 
@@ -93,7 +109,8 @@ void render_settings_interface(
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
     MaxDepthParams& md_params,
-    GUIParams& params
+    GUIParams& params,
+    const uint8_t rdr_type = 0
 );
 
 }   // namespace gui

@@ -78,10 +78,11 @@ aux_source_directory(src/impl CPT_IMPL_SRC)
 aux_source_directory(src/pt_impl CPT_PT_IMPL_SRC)
 aux_source_directory(src/viewer_impl CPT_VIEWER_IMPL_SRC)
 
-set(EXEC1_NAME "depth")
-	add_executable(${EXEC1_NAME}
-	app/depth_renderer.cu
+set(EXEC1_NAME "pt")
+add_executable(${EXEC1_NAME}
+	app/pt_renderer.cu
 	${CPT_IMPL_SRC}
+	${CPT_PT_IMPL_SRC}
 )
 
 target_link_libraries(
@@ -104,9 +105,10 @@ target_compile_options(
 	>
 )
 
-set(EXEC2_NAME "pt")
+set(EXEC2_NAME "cpt")
 add_executable(${EXEC2_NAME}
-	app/pt_renderer.cu
+	app/viewer.cu
+	${CPT_VIEWER_IMPL_SRC}
 	${CPT_IMPL_SRC}
 	${CPT_PT_IMPL_SRC}
 )
@@ -114,6 +116,10 @@ add_executable(${EXEC2_NAME}
 target_link_libraries(
 	${EXEC2_NAME} PRIVATE
 	tinyxml2 tinyobjloader
+	GLEW::glew
+	glfw
+	imgui
+	${OPENGL_gl_LIBRARY}
 )
 
 set_target_properties(
@@ -124,38 +130,6 @@ set_target_properties(
 
 target_compile_options(
 	${EXEC2_NAME} PRIVATE
-	$<$<COMPILE_LANGUAGE:CUDA>:
-	--expt-relaxed-constexpr
-	--use_fast_math
-	-Xptxas -O3
-	>
-)
-
-set(EXEC3_NAME "cpt")
-add_executable(${EXEC3_NAME}
-	app/viewer.cu
-	${CPT_VIEWER_IMPL_SRC}
-	${CPT_IMPL_SRC}
-	${CPT_PT_IMPL_SRC}
-)
-
-target_link_libraries(
-	${EXEC3_NAME} PRIVATE
-	tinyxml2 tinyobjloader
-	GLEW::glew
-	glfw
-	imgui
-	${OPENGL_gl_LIBRARY}
-)
-
-set_target_properties(
-	${EXEC3_NAME} PROPERTIES
-	CUDA_SEPARABLE_COMPILATION ON
-	CUDA_ARCHITECTURES native
-)
-
-target_compile_options(
-	${EXEC3_NAME} PRIVATE
 	$<$<COMPILE_LANGUAGE:CUDA>:
 	--expt-relaxed-constexpr
 	--use_fast_math

@@ -8,7 +8,7 @@
 
 #include "renderer/path_tracer.cuh"
 
-static constexpr int SEED_SCALER = 11453;       //-4!
+static constexpr int SEED_SCALER = 11467;   // 11451 is not a prime, while 11467 is
 static constexpr int SHFL_THREAD_X = 5;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 2;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
@@ -49,9 +49,6 @@ PathTracer::PathTracer(
     CUDA_CHECK_RETURN(cudaMemcpy(emitter_prims, scene.emitter_prims.data(), actual_prim_size, cudaMemcpyHostToDevice));
     for (int i = 0; i < num_objs; i++)
         obj_info[i] = scene.objects[i].export_gpu();
-#ifdef TRIANGLE_ONLY
-    printf("[ATTENTION] Note that TRIANGLE_ONLY macro is defined. Please make sure there is no sphere primitive in the scene.\n");
-#endif
 }
 
 PathTracer::~PathTracer() {
@@ -74,7 +71,6 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
     printf("Rendering starts.\n");
     TicToc _timer("render_pt_kernel()", num_iter);
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
-    printf("cache_size: %llu, cache num: %d\n", cached_size, num_cache);
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(

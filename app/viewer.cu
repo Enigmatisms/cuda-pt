@@ -7,12 +7,15 @@
 
 #include "core/xyz.cuh"
 #include "core/scene.cuh"
+#include "core/serialize.h"
 #include "core/imgui_utils.cuh"
+
+#include "renderer/depth.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
-__constant__ Emitter* c_emitter[9];
-__constant__ BSDF*    c_material[48];
+CPT_GPU_CONST Emitter* c_emitter[9];
+CPT_GPU_CONST BSDF*    c_material[48];
 
 std::string get_current_time() {
     // Get the current time as a time_point
@@ -47,7 +50,9 @@ int main(int argc, char** argv) {
     xyz_host.init();
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_emitter, scene.emitters, (scene.num_emitters + 1) * sizeof(Emitter*)));
-
+#ifdef TRIANGLE_ONLY
+    printf("[ATTENTION] Note that TRIANGLE_ONLY macro is defined. Please make sure there is no sphere primitive in the scene.\n");
+#endif
     std::unique_ptr<TracerBase> renderer = nullptr;
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
@@ -74,6 +79,11 @@ int main(int argc, char** argv) {
             std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             return 0;
         }
+        case RendererType::DepthTracing: {
+            renderer = std::make_unique<DepthTracer>(scene);
+            std::cerr << "\tDepth Tracing\n";
+            break;
+        }
         default: {
             throw std::runtime_error("Unsupported renderer type.");
         }
@@ -85,13 +95,13 @@ int main(int argc, char** argv) {
     renderer->graphics_resc_init(gui::init_texture_and_pbo);
     renderer->update_camera(scene.cam);
     gui::GUIParams params;
+    Serializer::push<int>(params.serialized_data, 1);
     params.gamma_corr   = scene.config.gamma_correction;
     bool exit_main_loop = false;
 
     ImGuiIO& io = ImGui::GetIO();
 
     while (!glfwWindowShouldClose(window.get())) {
-        params.capture = false;
         glfwPollEvents();
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -102,15 +112,13 @@ int main(int argc, char** argv) {
             renderer->get_num_sample() + 1,
             params.show_fps
         );
-        params.camera_update   = gui::keyboard_camera_update(*scene.cam, params.trans_speed, params.capture, exit_main_loop),
-        params.scene_update    = false, 
-        params.renderer_update = false,
-        params.material_update = false;
+        params.reset();
+        params.camera_update = gui::keyboard_camera_update(*scene.cam, params.trans_speed, params.capture, exit_main_loop);
         if (exit_main_loop) {
             break;
         }
         gui::render_settings_interface(
-            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.md, params
+            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.md, params, scene.rdr_type
         );
         if (!io.WantCaptureMouse) {        // no sub window (setting window or main menu) is focused
             params.camera_update |= gui::mouse_camera_update(*scene.cam, params.rot_sensitivity);
@@ -125,6 +133,9 @@ int main(int argc, char** argv) {
         }
         if (params.camera_update) {
             renderer->update_camera(scene.cam);
+        }
+        if (params.serialized_update) {
+            renderer->param_setter(params.serialized_data);
         }
         if (params.buffer_flush_update())
             renderer->reset_out_buffer();
