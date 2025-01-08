@@ -27,7 +27,8 @@ enum RendererType: uint8_t {
     WavefrontPT  = 1,            // wavefront  path tracing
     MegeKernelLT = 2,            // megakernel light tracing
     VoxelSDFPT   = 3,            // not supported currently
-    DepthTracing = 4,
+    DepthTracing = 4,            // rendering depth map
+    BVHCostViz   = 5,            // displaying BVH traversal cost
     NumRendererType
 };
 

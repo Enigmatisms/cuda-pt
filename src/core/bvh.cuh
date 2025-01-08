@@ -209,15 +209,15 @@ public:
     }
 
     CPT_GPU_INLINE void unpack(Vec3& mini, Vec3& maxi) const {
-        auto temp = Vec2Half(CONST_HALF2(data.x));
-        mini.x() = temp.x_float();
-        maxi.x() = temp.y_float();
-        temp = Vec2Half(CONST_HALF2(data.y));
-        mini.y() = temp.x_float();
-        maxi.y() = temp.y_float();
-        temp = Vec2Half(CONST_HALF2(data.z));
-        mini.z() = temp.x_float();
-        maxi.z() = temp.y_float();
+        auto temp = __half22float2(CONST_HALF2(data.x));
+        mini.x() = temp.x;
+        maxi.x() = temp.y;
+        temp = __half22float2(CONST_HALF2(data.y));
+        mini.y() = temp.x;
+        maxi.y() = temp.y;
+        temp = __half22float2(CONST_HALF2(data.z));
+        mini.z() = temp.x;
+        maxi.z() = temp.y;
     }
 
     CPT_GPU bool intersect(Vec3 inv_d, Vec3 o_div, float& t_near) const {

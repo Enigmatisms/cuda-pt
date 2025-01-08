@@ -10,7 +10,7 @@
 #include "core/serialize.h"
 #include "core/imgui_utils.cuh"
 
-#include "renderer/depth.cuh"
+#include "renderer/bvh_cost.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
@@ -82,6 +82,11 @@ int main(int argc, char** argv) {
         case RendererType::DepthTracing: {
             renderer = std::make_unique<DepthTracer>(scene);
             std::cerr << "\tDepth Tracing\n";
+            break;
+        }
+        case RendererType::BVHCostViz: {
+            renderer = std::make_unique<BVHCostVisualizer>(scene);
+            std::cerr << "\tBVH Cost Visualizer\n";
             break;
         }
         default: {

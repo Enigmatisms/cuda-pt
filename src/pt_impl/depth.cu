@@ -82,17 +82,18 @@ CPT_KERNEL static void render_depth_kernel(
     }
 }
 
-CPT_KERNEL static void false_color_mapping(
+CPT_KERNEL void false_color_mapping(
     DeviceImage image, 
     float* __restrict__ output_buffer,
     const int color_map_id,
     const int accum_cnt,
-    const int2 min_max
+    const int2 min_max,
+    const bool ordered_int_convert
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
-    float tex_coord = image(px, py).x() / float(accum_cnt),
-          min_dist = ordered_int_to_float(min_max.x),
-          max_dist = ordered_int_to_float(min_max.y);
+    float tex_coord = image(px, py).x() / float(accum_cnt);
+    float min_dist  = ordered_int_convert ? ordered_int_to_float(min_max.x) : min_max.x;
+    float max_dist  = ordered_int_convert ? ordered_int_to_float(min_max.y) : min_max.y;
     Vec4 color(0, 1);
     if (tex_coord > 0) {
         tex_coord = (tex_coord - min_dist) / fmaxf(max_dist - min_dist, 1e-4f);
@@ -168,7 +169,8 @@ DepthTracer::~DepthTracer() {
         CUDA_CHECK_RETURN(cudaDestroyTextureObject(colormaps[i]));
         CUDA_CHECK_RETURN(cudaFreeArray(_colormap_data[i]));
     }
-    printf("[Renderer] Depth Tracer Object destroyed.\n");
+    if (color_map_id >= 0)
+        printf("[Renderer] Depth Tracer Object destroyed.\n");
 }
 
 CPT_CPU std::vector<uint8_t> DepthTracer::render(

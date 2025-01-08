@@ -65,8 +65,7 @@ public:
     CPT_CPU_GPU_INLINE half& x() { return _data.x; }
     CPT_CPU_GPU_INLINE half& y() { return _data.y; }
 
-    CPT_CPU_GPU_INLINE float x_float() const noexcept { return __half2float(_data.x); }
-    CPT_CPU_GPU_INLINE float y_float() const noexcept { return __half2float(_data.y); }
+    CPT_CPU_GPU_INLINE float2 xy_float() const noexcept { return __half22float2(_data); }
 
     CONDITION_TEMPLATE(VecType, Vec2Half)
     CPT_GPU_INLINE Vec2Half operator+(VecType&& b) const noexcept { return Vec2Half(_data.x + b.x(), _data.y + b.y()); }
@@ -145,7 +144,7 @@ public:
 
     CPT_CPU_GPU_INLINE operator half2() const { return _data; }
     CPT_CPU_GPU_INLINE operator Vec2() const {
-        return Vec2(x_float(), y_float());
+        return Vec2(xy_float());
     }
 };
 
@@ -183,5 +182,6 @@ public:
 };
 
 CPT_GPU_INLINE void print_vec2_half(const Vec2Half& obj) {
-    printf("[%f, %f]\n", obj.x_float(), obj.y_float());
+    auto temp = obj.xy_float();
+    printf("[%f, %f]\n", temp.x, temp.y);
 }

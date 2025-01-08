@@ -35,6 +35,7 @@ static constexpr int num_bins = 16;
 static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;
 static constexpr float traverse_cost = 0.2;
+static constexpr float overlap_core_a = 1.f;
 static int max_depth = 0;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, float& min_r, float& interval) const {

@@ -633,7 +633,14 @@ void parseTexture(
     }
 }
 
-const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {"MegaKernel-PT", "Wavefront-PT", "Megakernel-LT", "Voxel-SDF-PT", "Depth Tracer"};
+const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
+    "MegaKernel-PT", 
+    "Wavefront-PT", 
+    "Megakernel-LT", 
+    "Voxel-SDF-PT", 
+    "Depth Tracer", 
+    "BVH Cost Visualizer"
+};
 
 Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0), use_bvh(false) {
     tinyxml2::XMLDocument doc;
@@ -665,7 +672,8 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     else if (render_type == "lt")    rdr_type = RendererType::MegeKernelLT;
     else if (render_type == "sdf")   rdr_type = RendererType::VoxelSDFPT;
     else if (render_type == "depth") rdr_type = RendererType::DepthTracing;
-    else                             rdr_type = RendererType::MegaKernelPT;
+    else if (render_type == "bvh-cost") rdr_type = RendererType::BVHCostViz;
+    else                                rdr_type = RendererType::MegaKernelPT;
     
     {       // local field starts
     auto& use_bvh_ref = const_cast<bool&>(use_bvh);
@@ -818,6 +826,9 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         // build an emitter primitive index map for emitter sampling
         // before the reordering logic, the emitter primitives are gauranteed
         // to be stored continuously, so we don't need an extra index map
+
+        // if we don't reorder the primitives, then we need to store the primitive index
+        // for the leaf node, and the access for the leaf node primitives won't be continuous
         std::vector<std::vector<int>> eprim_idxs(num_emitters);
         for (int i = 0; i < num_prims; i++) {
             int index = prim_idxs[i], obj_idx = obj_idxs[i];
