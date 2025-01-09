@@ -49,11 +49,6 @@ public:
         }
     }
 
-    CPT_CPU void fill(const StructType& v) {
-        parallel_memset << <1, 256 >> > (data, v, size * 3);
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    }
-
     CPT_CPU_GPU_INLINE const StructType& x(int index) const { return data[index]; }
     CPT_CPU_GPU_INLINE const StructType& y(int index) const { return data[index + size]; }
     CPT_CPU_GPU_INLINE const StructType& z(int index) const { return data[index + (size << 1)]; }
@@ -133,11 +128,6 @@ public:
             data[INDEX_Y(i, size)] = Vec4(diff1.x(), diff1.y(), diff1.z(), a21);
             data[INDEX_Z(i, size)] = Vec4(diff2.x(), diff2.y(), diff2.z(), a22);
         }
-    }
-
-    CPT_CPU void fill(const Vec4& v) {
-        parallel_memset << <1, 256 >> > (data, v, size * 3);
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
 
     CPT_CPU_GPU_INLINE Vec4 x(int index) const { return data[INDEX_X(index, size)]; }

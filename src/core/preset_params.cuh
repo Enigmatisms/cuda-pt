@@ -4,25 +4,8 @@
  */
 #include <array>
 #include "core/vec3.cuh"
+#include "core/enums.cuh"
 
-enum MetalType: uint8_t {
-    Au   = 0,
-    Cr   = 1,
-    Cu   = 2,
-    Ag   = 3,
-    Al   = 4,
-    W    = 5,
-    TiO2 = 6,
-    Ni   = 7,
-    MgO  = 8,
-    Na   = 9,
-    SiC  = 10,
-    V    = 11,
-    CuO  = 12,
-    Hg   = 13,
-    Ir   = 14,
-    NumMetalType
-};
 
 inline constexpr std::array<const char*, NumMetalType> METAL_NAMES = {
     "Au", "Cr", "Cu", "Ag", "Al", "W", "TiO2", "Ni", "MgO", "Na", "SiC", "V", "CuO", "Hg", "Ir"
@@ -63,19 +46,6 @@ inline constexpr Vec3 METAL_KS[NumMetalType] = {
     Vec3(0.5202739621f, 0.5707372756f, 0.7172250613f),      // CuO
     Vec3(6.3276269444f, 4.3719414152f, 3.4217899270f),      // Hg
     Vec3(5.5921510077f, 4.0671757150f, 3.2672611269f)       // Ir
-};
-
-// Data from Wikipedia and LuxRenderer
-enum DispersionType: uint8_t {
-    Diamond     = 0,
-    DiamondHigh = 1,
-    Silica      = 2,
-    Glass_BK7   = 3,
-    Glass_BaF10 = 4,
-    Glass_SF10  = 5,
-    Sapphire    = 6,
-    Water       = 7,
-    NumDispersionType
 };
 
 inline constexpr std::array<const char*, DispersionType::NumDispersionType> DISPERSION_NAMES = {

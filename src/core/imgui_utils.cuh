@@ -35,11 +35,12 @@ struct GUIParams {
     bool renderer_update = false;
     bool serialized_update = false;
     bool output_png = true;
+    bool log2_output = false;
 
     std::vector<char>& serialized_data;
 
     inline bool buffer_flush_update() const noexcept {
-        return camera_update || scene_update || material_update || renderer_update || serialized_update;
+        return camera_update || scene_update || material_update || renderer_update;
     }
 
     inline void reset() {

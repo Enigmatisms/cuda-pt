@@ -20,14 +20,6 @@ static constexpr int ORDERED_INT_MAX = 0x4b189680;  // = MAX_DIST (1e7)
 
 CPT_GPU_CONST cudaTextureObject_t COLOR_MAPS[3];
 
-CPT_GPU_INLINE int float_to_ordered_int( float float_v ) {
-    int int_v = __float_as_int( float_v );
-    return (int_v >= 0 ) ? int_v : int_v ^ 0x7FFFFFFF;
-}
-CPT_GPU_INLINE float ordered_int_to_float( int int_v ) {
-    return __int_as_float( (int_v >= 0) ? int_v : int_v ^ 0x7FFFFFFF);
-}
-
 CPT_KERNEL static void render_depth_kernel(
     const DeviceCamera& dev_cam, 
     const PrecomputedArray verts,
@@ -82,21 +74,23 @@ CPT_KERNEL static void render_depth_kernel(
     }
 }
 
-CPT_KERNEL void false_color_mapping(
+CPT_KERNEL static void false_color_mapping(
     DeviceImage image, 
     float* __restrict__ output_buffer,
-    const int color_map_id,
+    int color_map_id,
     const int accum_cnt,
-    const int2 min_max,
-    const bool ordered_int_convert
+    const int2 min_max
 ) {
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     float tex_coord = image(px, py).x() / float(accum_cnt);
-    float min_dist  = ordered_int_convert ? ordered_int_to_float(min_max.x) : min_max.x;
-    float max_dist  = ordered_int_convert ? ordered_int_to_float(min_max.y) : min_max.y;
+    float min_dist  = ordered_int_to_float(min_max.x);
+    float max_dist  = ordered_int_to_float(min_max.y);
     Vec4 color(0, 1);
     if (tex_coord > 0) {
         tex_coord = (tex_coord - min_dist) / fmaxf(max_dist - min_dist, 1e-4f);
+        if (color_map_id & 0x80)
+            tex_coord = log2f(tex_coord + 1.f);
+        color_map_id &= 0x7f;
         if (color_map_id < 3) {
             color = Vec4(tex1D<float4>(COLOR_MAPS[color_map_id], tex_coord));
         } else {
@@ -207,6 +201,26 @@ CPT_CPU void DepthTracer::render_online(
 }
 
 CPT_CPU void DepthTracer::param_setter(const std::vector<char>& bytes) {
-    int val = Serializer::get<int>(bytes, 0);
-    color_map_id = std::clamp(val, 0, 3);
+    color_map_id = Serializer::get<int>(bytes, 0);
+}
+
+CPT_CPU std::vector<uint8_t> DepthTracer::get_image_buffer(bool) const {
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    std::vector<uint8_t> byte_buffer(w * h * 4);
+    std::vector<float4> host_floats(w * h);
+    size_t copy_size = w * h * sizeof(float4);
+    CUDA_CHECK_RETURN(cudaMemcpy(host_floats.data(), output_buffer, copy_size, cudaMemcpyDeviceToHost));
+    for (int i = 0; i < h; i ++) {
+        int base = i * w;
+        for (int j = 0; j < w; j ++) {
+            int pixel_index = base + j;
+            const float4& color = host_floats[pixel_index];
+            pixel_index <<= 2;
+            byte_buffer[pixel_index + 3] = 255;
+            byte_buffer[pixel_index + 0] = to_int_linear(color.x);
+            byte_buffer[pixel_index + 1] = to_int_linear(color.y);
+            byte_buffer[pixel_index + 2] = to_int_linear(color.z);
+        }
+    }
+    return byte_buffer;
 }

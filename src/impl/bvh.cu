@@ -34,7 +34,11 @@ struct AxisBins {
 static constexpr int num_bins = 16;
 static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;
-static constexpr float traverse_cost = 0.2;
+// A cluster with all the primitive centroid within a small range [less than 1e-3]
+// is ill-posed. If there is more than 64 primitives, the primitives will be discarded
+static constexpr float traverse_cost = 0.2f;
+
+static float bvh_overlap_w = 1.f;
 static int max_depth = 0;
 
 SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, float& min_r, float& interval) const {
@@ -47,19 +51,22 @@ SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo>& bvhs, float& min_
     }
     Vec3 diff = max_ctr - min_ctr;
     float max_diff = diff.x();
-    min_r = min_ctr[0] - 0.001f;
+    min_r = min_ctr[0] - 1e-5;
     int split_axis = 0;
     if (diff.y() > max_diff) {
         max_diff = diff.y();
         split_axis = 1;
-        min_r = min_ctr[1] - 0.001f;
+        min_r = min_ctr[1] - 1e-5;
     }
     if (diff.z() > max_diff) {
         max_diff = diff.z();
         split_axis = 2;
-        min_r = min_ctr[2] - 0.001f;
+        min_r = min_ctr[2] - 1e-5;
     }
-    interval = (max_diff + 0.002f) / float(num_bins);
+    if (diff.max_elem() < 1e-3) {
+        return SplitAxis::AXIS_NONE;
+    }
+    interval = (max_diff + 2e-5f) / float(num_bins);
     return SplitAxis(split_axis);
 }
 
@@ -97,23 +104,21 @@ void create_bvh_info(
     }
 }
 
-int recursive_bvh_SAH(
-    BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
-    int depth = 0, int max_prim_node = 16, float overlap_w = 1.f
-) {
+int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, int depth = 0, int max_prim_node = 16) {
     AABB fwd_bound(1e5f, -1e5f, 0, 0), bwd_bound(1e5f, -1e5f, 0, 0);
     int child_prim_cnt = 0;                // this index is used for indexing variable `bins`
     const int prim_num = cur_node->prim_num(), base = cur_node->base(), max_pos = base + prim_num;
     float min_cost = 5e9f, node_prim_cnt = float(prim_num);
-
+    
     // Step 1: decide the axis that expands the maximum extent of space
     float min_range = 0, interval = 0;
     SplitAxis max_axis = cur_node->max_extent_axis(bvh_infos, min_range, interval);
-    if (prim_num > sah_split_threshold) {   // SAH
+    
+    if (max_axis != SplitAxis::AXIS_NONE && prim_num > sah_split_threshold) {   // SAH
         // Step 2: binning the space
         std::array<AxisBins, num_bins> idx_bins;
         for (int i = base; i < max_pos; i++) {
-            size_t index = (size_t)std::floorf((bvh_infos[i].centroid[max_axis] - min_range) / interval);
+            int index = std::min((int)std::floorf((bvh_infos[i].centroid[max_axis] - min_range) / interval), num_bins - 1);
             idx_bins[index].push(bvh_infos[i]);
         }
 
@@ -147,7 +152,7 @@ int recursive_bvh_SAH(
         for (int i = 0; i < num_bins - 1; i++) {
             float intrsct_a = fwd_aabbs[i].intersection_area(bwd_aabbs.back());
             float cost = traverse_cost + node_inv_area * (
-                intrsct_a * std::max(overlap_w - 0.5f, 0.f) * node_prim_cnt +
+                intrsct_a * std::max(bvh_overlap_w - 0.5f, 0.f) * node_prim_cnt +
                 float(prim_cnts[i]) * fwd_areas[i] + (node_prim_cnt - float(prim_cnts[i])) * bwd_areas[i]
             );
             if (cost < min_cost) {
@@ -164,6 +169,7 @@ int recursive_bvh_SAH(
             });
             child_prim_cnt = prim_cnts[seg_bin_idx];
         }
+
         fwd_bound.clear();
         bwd_bound.clear();
         for (int i = 0; i <= seg_bin_idx; i++)       // calculate child node bound
@@ -173,11 +179,13 @@ int recursive_bvh_SAH(
     } else {                                    // equal primitive number split (two nodes have identical primitives)
         int seg_idx = (base + max_pos) >> 1;
         // Step 5: reordering the BVH info in the vector to make the segment contiguous (keep around half of the bvh in lchild)
-        std::nth_element(bvh_infos.begin() + base, bvh_infos.begin() + seg_idx, bvh_infos.begin() + max_pos,
-            [dim = max_axis] (const BVHInfo& bvh1, const BVHInfo& bvh2) {
-                return bvh1.centroid[dim] < bvh2.centroid[dim];
-            }
-        );
+        if (max_axis != SplitAxis::AXIS_NONE) {
+            std::nth_element(bvh_infos.begin() + base, bvh_infos.begin() + seg_idx, bvh_infos.begin() + max_pos,
+                [dim = max_axis] (const BVHInfo& bvh1, const BVHInfo& bvh2) {
+                    return bvh1.centroid[dim] < bvh2.centroid[dim];
+                }
+            );
+        }
         for (int i = base; i < seg_idx; i++)    // calculate child node bound
             fwd_bound += bvh_infos[i].bound;
         for (int i = seg_idx; i < max_pos; i++)
@@ -187,13 +195,13 @@ int recursive_bvh_SAH(
         child_prim_cnt = seg_idx - base;        // bvh[seg_idx] will be in rchild
         float intrsct_a = fwd_bound.intersection_area(bwd_bound);
         float split_cost = traverse_cost + (1.f / cur_node->bound.area()) * (
-            intrsct_a * std::max(overlap_w - 0.5f, 0.f) * node_prim_cnt + \
+            intrsct_a * std::max(bvh_overlap_w - 0.5f, 0.f) * node_prim_cnt + \
             fwd_bound.area() * float(child_prim_cnt) + bwd_bound.area() * (node_prim_cnt - float(child_prim_cnt))
         );
         if (split_cost >= node_prim_cnt && prim_num < max_prim_node)
             child_prim_cnt = 0;
     }
-    // FIXME: BVH can not be perfectedly built!
+
     if (child_prim_cnt > 0) {             // cost of splitting is less than making this node a leaf node
         // Step 5: split the node and initialize the children
         cur_node->lchild = new BVHNode(base, child_prim_cnt);
@@ -207,10 +215,10 @@ int recursive_bvh_SAH(
         // Step 7: start recursive splitting for the children
         int node_num = 1;
         if (cur_node->lchild->prim_num() > no_div_threshold)
-            node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1, max_prim_node, overlap_w);
+            node_num += recursive_bvh_SAH(cur_node->lchild, bvh_infos, depth + 1, max_prim_node);
         else node_num ++;
         if (cur_node->rchild->prim_num() > no_div_threshold)
-            node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1, max_prim_node, overlap_w);
+            node_num += recursive_bvh_SAH(cur_node->rchild, bvh_infos, depth + 1, max_prim_node);
         else node_num ++;
         return node_num;
     } else {
@@ -221,14 +229,7 @@ int recursive_bvh_SAH(
     }
 }
 
-static BVHNode* bvh_root_start(
-    const Vec3& world_min, 
-    const Vec3& world_max, 
-    int& node_num, 
-    std::vector<BVHInfo>& bvh_infos, 
-    int max_prim_node = 16,
-    float overlap_w = 1.f
-) {
+static BVHNode* bvh_root_start(const Vec3& world_min, const Vec3& world_max, int& node_num, std::vector<BVHInfo>& bvh_infos, int max_prim_node = 16) {
     // Build BVH tree root node and start recursive tree construction
     printf("[BVH] World min: ");
     print_vec3(world_min);
@@ -237,7 +238,7 @@ static BVHNode* bvh_root_start(
     BVHNode* root_node = new BVHNode(0, bvh_infos.size());
     root_node->bound.mini = world_min;
     root_node->bound.maxi = world_max;
-    node_num = recursive_bvh_SAH(root_node, bvh_infos, max_prim_node, overlap_w);
+    node_num = recursive_bvh_SAH(root_node, bvh_infos, max_prim_node);
     return root_node;
 }
 
@@ -289,10 +290,10 @@ static int recursive_linearize(
             nodes, cached_nodes,
             depth + 1, cache_max_depth
         );
-        nodes[current_size].set_high_27bits(-(lnodes + 1));
+        nodes[current_size].set_high_26bits(-(lnodes + 1));
         if (depth < cache_max_depth) {
             // store the jump offset to the next cached node (for non-leaf node)
-            cached_nodes[current_cached].set_low_5bits(cached_nodes.size() - current_cached);
+            cached_nodes[current_cached].set_low_6bits(cached_nodes.size() - current_cached);
         }
         return lnodes + 1;                      // include the cur_node                       
     } else {
@@ -317,17 +318,17 @@ void bvh_build(
     const int max_prim_node,
     const float overlap_w
 ) {
+    bvh_overlap_w = overlap_w;
+
     max_depth = 0;
     std::vector<PrimMappingInfo> idx_prs;
     std::vector<BVHInfo> bvh_infos;
     int node_num = 0, num_prims_all = points1.size();
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
     create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
-    printf("Shit, overlap: %f, max_node: %d, cache_level: %d\n", overlap_w, max_prim_node, cache_max_level);
-    BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos, max_prim_node, overlap_w);
-    printf("Shit, overlap: %f, max_node: %d, cache_level: %d\n", overlap_w, max_prim_node, cache_max_level);
+    BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos, max_prim_node);
     float total_cost = calculate_cost(root_node, traverse_cost);
-    
+
     printf("[BVH] BVH tree max depth: %d\n", max_depth);
     printf("[BVH] Traversed BVH SAH cost: %.7f, AVG: %.7f\n", total_cost, total_cost / static_cast<float>(bvh_infos.size()));
     cache_max_level = std::min((int)std::floor(std::log2(node_num)), cache_max_level);

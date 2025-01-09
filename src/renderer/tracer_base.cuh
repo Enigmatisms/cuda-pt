@@ -104,7 +104,7 @@ public:
         return accum_cnt;
     }
 
-    CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
+    CPT_CPU virtual std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         return image.export_cpu(1.f / accum_cnt, gamma_cor);
     }

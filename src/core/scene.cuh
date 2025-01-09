@@ -22,16 +22,6 @@
 #include "core/dynamic_bsdf.cuh"
 #include "core/bvh.cuh"
 
-enum RendererType: uint8_t {
-    MegaKernelPT = 0,            // megakernel path tracing
-    WavefrontPT  = 1,            // wavefront  path tracing
-    MegeKernelLT = 2,            // megakernel light tracing
-    VoxelSDFPT   = 3,            // not supported currently
-    DepthTracing = 4,            // rendering depth map
-    BVHCostViz   = 5,            // displaying BVH traversal cost
-    NumRendererType
-};
-
 using Vec4Arr = std::vector<Vec4>;
 using Vec3Arr = std::vector<Vec3>;
 using Vec2Arr = std::vector<Vec2>;

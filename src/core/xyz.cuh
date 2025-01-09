@@ -44,7 +44,7 @@ static cudaTextureObject_t createArrayTexture1D(
 ) {
     cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
     CUDA_CHECK_RETURN(cudaMallocArray(&arr_t, &channel_desc, size));
-    CUDA_CHECK_RETURN(cudaMemcpyToArray(arr_t, 0, 0, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy2DToArray(arr_t, 0, 0, tex_src, size * sizeof(TexType), size * sizeof(TexType), 1, cudaMemcpyHostToDevice));
 
     cudaResourceDesc res_desc;
     memset(&res_desc, 0, sizeof(res_desc));

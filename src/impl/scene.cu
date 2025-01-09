@@ -7,7 +7,7 @@
 #include <numeric>
 #include "core/scene.cuh"
 
-static constexpr int MAX_PRIMITIVE_NUM = 33554431;          // 2^25 - 1
+static constexpr int MAX_PRIMITIVE_NUM = 20000000;
 static constexpr const char* SCENE_VERSION = "1.2";
 
 const std::unordered_map<std::string, MetalType> conductor_mapping = {

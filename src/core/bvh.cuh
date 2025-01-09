@@ -32,6 +32,7 @@ struct BVHInfo {
             centroid = (p1 + p2 + p3) * 0.33333333333f;      // barycenter
             bound    = AABB(p1, p2, p3, obj_idx, prim_idx);
         }
+        auto range = bound.range();
     }
 
     void get_float4(float4& node_f, float4& node_b) const {
@@ -132,24 +133,22 @@ public:
  */
 class CompactNode {
 private:
-    static constexpr uint32_t LOW_5_MASK = 0x1F;           // 000...00011111
-    static constexpr uint32_t HIGH_27_MASK = 0xFFFFFFE0;  // 111...11100000
-    static constexpr uint32_t LOW_27_MASK = 0x07FFFFFF;  // 00000111...1111
-    static constexpr int HIGH_SHIFT = 5;
+    static constexpr uint32_t LOW_6_MASK = 0x3F;           // 000...0011 1111
+    static constexpr uint32_t HIGH_26_MASK = 0xFFFFFFC0;  // 111...1100 0000
+    static constexpr uint32_t LOW_26_MASK = 0x03FFFFFF;  // 0000 0011...1111
+    static constexpr int HIGH_SHIFT = 6;
     uint4 data;
     /**
-     * The last uint32: high 27 bits is the 
-     * 
+     * The last uint32: high 26 bits | low 6 bits represents different meanings
      */
 public:
-
     CPT_CPU CompactNode(const float4& front, const float4& back, bool not_leaf = true, bool smem_cached = false) {
         HALF2(data.x) = Vec2Half(front.x, back.x);
         HALF2(data.y) = Vec2Half(front.y, back.y);
         HALF2(data.z) = Vec2Half(front.z, back.z);
         if (smem_cached) {
-            set_high_27bits(INT_CREF_CAST(back.w));
-            set_low_5bits(1);
+            set_high_26bits(INT_CREF_CAST(back.w));
+            set_low_6bits(1);
         } else {
             // for non-leaf nodes, beg_idx is useless, node_num is used to skip over the sub-tree
             // for leaf nodes, beg_idx and node_num is both useful, with node_num no more than 31
@@ -158,10 +157,10 @@ public:
             // so, negative beg_idx indicates non-leaf nodes
             int beg_idx = INT_CREF_CAST(front.w), node_num = INT_CREF_CAST(back.w);
             if (not_leaf) {
-                set_low_5bits(0);
+                set_low_6bits(0);
             } else {
-                set_high_27bits(beg_idx);
-                set_low_5bits(node_num);
+                set_high_26bits(beg_idx);
+                set_low_6bits(node_num);
             }
         }
     }
@@ -169,43 +168,43 @@ public:
     CPT_GPU CompactNode(): data({0, 0, 0, 0}) {}
     CPT_GPU CompactNode(uint4 _data): data(std::move(_data)) {}
 
-    // set high 27 bits (signed)
-    CPT_CPU void set_high_27bits(int val) {
-        // clear the high 27 bits
-        data.w &= LOW_5_MASK;
+    // set high 26 bits (signed)
+    CPT_CPU void set_high_26bits(int val) {
+        // clear the high 26 bits
+        data.w &= LOW_6_MASK;
 
         // store as uint32
-        uint32_t unsigned_val = static_cast<uint32_t>(val) & LOW_27_MASK; // 27 bits
+        uint32_t unsigned_val = static_cast<uint32_t>(val) & LOW_26_MASK; // 26 bits
         data.w |= (unsigned_val << HIGH_SHIFT);
     }
 
-    CPT_CPU void set_low_5bits(int val) {
-        // clear low 5 bits
-        data.w &= HIGH_27_MASK;
-        data.w |= (val & LOW_5_MASK);
+    CPT_CPU void set_low_6bits(int val) {
+        // clear low 6 bits
+        data.w &= HIGH_26_MASK;
+        data.w |= (val & LOW_6_MASK);
     }
-    // signed 27 bits (upper bound: ~68M)
+    // signed 26 bits (upper bound: ~33M)
     CPT_GPU_INLINE int get_gmem_index() const noexcept {
-        uint32_t high = (data.w >> HIGH_SHIFT) & LOW_27_MASK;
+        uint32_t high = (data.w >> HIGH_SHIFT) & LOW_26_MASK;
         // place the sign bit at bit 31, then perform an arithmetic right shift for sign-extend
         return (static_cast<int>(high << HIGH_SHIFT)) >> HIGH_SHIFT;
     }
 
-    // signed 27 bits (upper bound: ~68M)
+    // signed 26 bits (upper bound: ~33M)
     CPT_GPU_INLINE int get_beg_idx() const noexcept {
-        uint32_t high = (data.w >> HIGH_SHIFT) & LOW_27_MASK;
+        uint32_t high = (data.w >> HIGH_SHIFT) & LOW_26_MASK;
         // place the sign bit at bit 31, then perform an arithmetic right shift for sign-extend
         return (static_cast<int>(high << HIGH_SHIFT)) >> HIGH_SHIFT;
     }
 
-    // unsigned 5 bits (upper bound: 31)
+    // unsigned 6 bits (upper bound: 63)
     CPT_GPU_INLINE uint32_t get_cached_offset() const noexcept {
-        return data.w & LOW_5_MASK;
+        return data.w & LOW_6_MASK;
     }
 
-    // unsigned 5 bits (upper bound: 31)
+    // unsigned 6 bits (upper bound: 63)
     CPT_GPU_INLINE uint32_t get_prim_cnt() const noexcept {
-        return data.w & LOW_5_MASK;
+        return data.w & LOW_6_MASK;
     }
 
     CPT_GPU_INLINE void unpack(Vec3& mini, Vec3& maxi) const {

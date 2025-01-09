@@ -4,6 +4,7 @@
 #include <ext/imgui/backends/imgui_impl_opengl3.h>
 #include <cuda_gl_interop.h>
 #include "core/serialize.h"
+#include "core/enums.cuh"
 #include "core/cuda_utils.cuh"
 #include "core/camera_model.cuh"
 #include "core/imgui_utils.cuh"
@@ -498,12 +499,23 @@ void render_settings_interface(
                     ImGui::InputInt("Compression Quality", &params.compress_q, 1, 100);
                     ImGui::PopItemWidth();
                 }
-                if (rdr_type == 4 || rdr_type == 5) {        // 4 is Depth Tracing, 5 is BVH Cost Visualizer
-                    uint8_t update_v = Serializer::get<int>(params.serialized_data, 0);
-                    if (draw_selection_menu(COLOR_MAP_NAMES, "##color-map", "Color Map", update_v)) {
-                        int old_v = Serializer::get<int>(params.serialized_data, 0);
-                        if (old_v != int(update_v)) {
-                            Serializer::set<int>(params.serialized_data, 0, update_v);
+                if (rdr_type == RendererType::DepthTracing || rdr_type == RendererType::BVHCostViz) {
+                    uint8_t update_v = Serializer::get<int>(params.serialized_data, 0) & 0x7f;
+                    if (ImGui::Checkbox("Log2 Transform", &params.log2_output) ||
+                        draw_selection_menu(COLOR_MAP_NAMES, "##color-map", "Color Map", update_v)
+                    ) {
+                        int data = params.log2_output ? (update_v | 0x80) : update_v;
+                        Serializer::set<int>(params.serialized_data, 0, data);
+                        params.serialized_update = true;
+                    }
+                    if (rdr_type == RendererType::BVHCostViz) {
+                        int max_query = std::ceilf(Serializer::get<float>(params.serialized_data, 2));
+                        ImGui::Text(("Max value: " + std::to_string(max_query)).c_str());
+                        
+                        int max_value = Serializer::get<int>(params.serialized_data, 1);
+                        max_value = max_value > 0 ? max_value : max_query;
+                        if (draw_integer_input("bvh-max-cost",  "(Viz) Max Cost", max_value)) {
+                            Serializer::set<int>(params.serialized_data, 1, max_value);
                             params.serialized_update = true;
                         }
                     }

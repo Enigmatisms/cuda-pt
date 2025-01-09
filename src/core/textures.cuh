@@ -7,18 +7,12 @@
 
 #include "core/so3.cuh"
 #include "core/vec4.cuh"
+#include "core/enums.cuh"
 #include "core/vec2_half.cuh"
 #include "core/interaction.cuh"
 
 // Host side memory management tool
 
-enum TextureType: uint8_t {
-    DIFFUSE_TEX   = 0x0,
-    SPECULAR_TEX  = 0x1,
-    GLOSSY_TEX    = 0x2,
-    NORMAL_TEX    = 0x3,
-    ROUGHNESS_TEX = 0x4,
-};
 
 struct TextureInfo {
     std::string diff_path{};

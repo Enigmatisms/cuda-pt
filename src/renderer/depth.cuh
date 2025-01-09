@@ -44,15 +44,8 @@ public:
     void create_color_map_texture();
 
     CPT_CPU void param_setter(const std::vector<char>& bytes);
-};
 
-CPT_KERNEL void false_color_mapping(
-    DeviceImage image, 
-    float* __restrict__ output_buffer,
-    const int color_map_id,
-    const int accum_cnt,
-    const int2 min_max,
-    const bool ordered_int_convert = true
-);
+    CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const override;
+};
 
 extern CPT_GPU_CONST cudaTextureObject_t COLOR_MAPS[3];

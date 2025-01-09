@@ -6,6 +6,8 @@ project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
 message(STATUS "Using SoA3 (struct of arrays) for GPU containers.")
 
+set(CUDA_COMMON_FLAGS --expt-relaxed-constexpr)
+
 find_package(Threads REQUIRED)
 find_package(OpenMP REQUIRED)
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG")
@@ -20,6 +22,7 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -G -O0 -lineinfo -maxrregcount=40 -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
 	endif ()
+    set(CUDA_CONFIG_FLAGS -G)
 ELSE()
 	# to check register usage, please set "-Xptxas -v"
 	# to cap the register usage to boost occupancy, set ""
@@ -47,7 +50,9 @@ ELSE()
 			message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
 		endif()
 	endif ()
+	set(CUDA_CONFIG_FLAGS --use_fast_math -Xptxas -O3)
 ENDIF()
+set(CUDA_FINAL_FLAGS ${CUDA_COMMON_FLAGS} ${CUDA_CONFIG_FLAGS})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -98,9 +103,7 @@ set_target_properties(
 
 target_compile_options(
 	${EXEC1_NAME} PRIVATE
-	$<$<COMPILE_LANGUAGE:CUDA>:
-	--expt-relaxed-constexpr
-	>
+	$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
 )
 
 set(EXEC2_NAME "cpt")
@@ -128,9 +131,7 @@ set_target_properties(
 
 target_compile_options(
 	${EXEC2_NAME} PRIVATE
-	$<$<COMPILE_LANGUAGE:CUDA>:
-	--expt-relaxed-constexpr
-	>
+	$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
 )
 
 # CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate

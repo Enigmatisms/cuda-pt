@@ -20,7 +20,7 @@
 		<integer name="cache_level" value="4"/>
         <integer name="max_node_num" value="16"/>
 
-		<float name="overlap_w" value="0.6f"/>
+		<float name="overlap_w" value="0.7"/>
 	</accelerator>
 	
 	<sensor type="perspective">
