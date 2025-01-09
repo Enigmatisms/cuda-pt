@@ -21,7 +21,7 @@ CPT_GPU int ray_intersect_cost(
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
     const PrecomputedArray& verts,
-    ConstU4Ptr cached_nodes,
+    ConstF4Ptr cached_nodes,
     int& min_index,
     const int node_num,
     const int cache_num
@@ -32,9 +32,12 @@ CPT_GPU int ray_intersect_cost(
     // There can be much control flow divergence, not good
     Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
     for (int i = 0; i < cache_num;) {
-        const CompactNode node(cached_nodes[i]);
-        bool intersect_node = node.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
-        int all_offset = node.get_cached_offset(), gmem_index = node.get_gmem_index();
+         const LinearNode node(
+            cached_nodes[i],
+            cached_nodes[i + cache_num]
+        );
+        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
+        int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
         int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
         // reuse
         intersect_node = intersect_node && all_offset == 1;
@@ -44,15 +47,17 @@ CPT_GPU int ray_intersect_cost(
     }
     // There can be much control flow divergence, not good
     while (node_idx < node_num) {
-        const CompactNode node(tex1Dfetch<uint4>(nodes, node_idx));
-        int beg_idx = node.get_beg_idx(), end_idx = node.get_prim_cnt();
-        bool intersect_node = node.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
+        const LinearNode node(tex1Dfetch<float4>(nodes, 2 * node_idx), 
+                        tex1Dfetch<float4>(nodes, 2 * node_idx + 1));
+        int beg_idx = 0, end_idx = 0;
+        node.get_range(beg_idx, end_idx);
+        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
         // The logic here: end_idx is reuse, if end_idx < 0, meaning that the current node is
         // non-leaf, non-leaf node stores (-all_offset) as end_idx, so to skip the node and its children
         // -end_idx will be the offset. While for leaf node, 1 will be the increment offset, and `POSITIVE` end_idx
         // is stored. So the following for loop can naturally run (while for non-leaf, naturally skip)
-        node_idx += (!intersect_node) * (beg_idx < 0 ? -beg_idx : 1) + int(intersect_node);
-        end_idx = intersect_node && beg_idx >= 0 ? end_idx + beg_idx : beg_idx;
+        node_idx += (!intersect_node) * (end_idx < 0 ? -end_idx : 1) + int(intersect_node);
+        end_idx = intersect_node ? end_idx + beg_idx : 0;
         intersect_query ++;
         for (int idx = beg_idx; idx < end_idx; idx ++) {
             // if current ray intersects primitive at [idx], tasks will store it
@@ -76,7 +81,7 @@ CPT_KERNEL static void render_cost_kernel(
     const PrecomputedArray verts,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstU4Ptr cached_nodes,
+    ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* __restrict__ output_buffer,
     int seed_offset,
@@ -84,14 +89,14 @@ CPT_KERNEL static void render_cost_kernel(
     int accum_cnt,
     int cache_num
 ) {
-    extern __shared__ uint4 s_cached[];
+    extern __shared__ float4 s_cached[];
 
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     Sampler sampler(px + py * image.w(), seed_offset);
 
     int min_index = -1, tid = threadIdx.x + threadIdx.y * blockDim.x;
     // cache near root level BVH nodes for faster traversal
-    if (tid < cache_num) {      // no more than 32 nodes will be cached
+    if (tid < 2 * cache_num) {      // no more than 32 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
     Ray ray = dev_cam.generate_ray(px, py, sampler);
@@ -172,7 +177,7 @@ CPT_CPU void BVHCostVisualizer::render_online(
     *reduced_max = 0;
     
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
-    size_t _num_bytes = 0, cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
+    size_t _num_bytes = 0, cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
     // if we have an illegal memory access here: check whether you have a valid emitter in the xml scene description file.
     // it might be possible that having no valid emitter triggers an illegal memory access
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));

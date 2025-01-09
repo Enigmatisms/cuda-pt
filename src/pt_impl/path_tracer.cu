@@ -17,21 +17,20 @@ PathTracer::PathTracer(
 ): TracerBase(scene), 
     num_objs(scene.objects.size()), num_nodes(-1), num_emitter(scene.num_emitters), envmap_id(scene.envmap_id)
 {
-    if (scene.bvh_available()) {
+if (scene.bvh_available()) {
         size_t num_bvh  = scene.obj_idxs.size();
         // Comment in case I forget: scene.nodes combines nodes_front and nodes_back
         // So the size of nodes is exactly twice the number of nodes 
-        num_nodes = scene.nodes.size();
-        num_cache = scene.cache_nodes.size();
+        num_nodes = scene.nodes.size() >> 1;
+        num_cache = scene.cache_fronts.size();
         CUDA_CHECK_RETURN(cudaMalloc(&_obj_idxs,  num_bvh * sizeof(int)));
-        CUDA_CHECK_RETURN(cudaMalloc(&_nodes, num_nodes * sizeof(uint4)));
-        CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, num_cache * sizeof(uint4)));
+        CUDA_CHECK_RETURN(cudaMalloc(&_nodes, 2 * num_nodes * sizeof(float4)));
+        CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, 2 * num_cache * sizeof(float4)));
         // note that BVH leaf node only stores the primitive to object mapping
         bvh_leaves = createTexture1D<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs);
-        const uint4 *nodes_ptr = reinterpret_cast<const uint4*>(scene.nodes.data()),
-                    *cache_ptr = reinterpret_cast<const uint4*>(scene.cache_nodes.data());
-        nodes      = createTexture1D<uint4>(nodes_ptr, num_nodes, _nodes);
-        CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, cache_ptr, sizeof(uint4) * num_cache, cudaMemcpyHostToDevice));
+        nodes      = createTexture1D<float4>(scene.nodes.data(), 2 * num_nodes, _nodes);
+        CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, scene.cache_fronts.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemcpy(&_cached_nodes[num_cache], scene.cache_backs.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
     } else {
         throw std::runtime_error("BVH not available in scene. Abort.");
     }
@@ -70,7 +69,7 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
 ) {
     printf("Rendering starts.\n");
     TicToc _timer("render_pt_kernel()", num_iter);
-    size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
+    size_t cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
@@ -91,7 +90,7 @@ CPT_CPU void PathTracer::render_online(
     bool gamma_corr
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
-    size_t _num_bytes = 0, cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
+    size_t _num_bytes = 0, cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
     // if we have an illegal memory access here: check whether you have a valid emitter in the xml scene description file.
     // it might be possible that having no valid emitter triggers an illegal memory access
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));

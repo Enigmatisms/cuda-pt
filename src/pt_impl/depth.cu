@@ -25,7 +25,7 @@ CPT_KERNEL static void render_depth_kernel(
     const PrecomputedArray verts,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstU4Ptr cached_nodes,
+    ConstF4Ptr cached_nodes,
     DeviceImage image,
     float* __restrict__ output_buffer,
     int2* __restrict__ global_min_max,
@@ -34,7 +34,7 @@ CPT_KERNEL static void render_depth_kernel(
     int accum_cnt,
     int cache_num
 ) {
-    extern __shared__ uint4 s_cached[];
+    extern __shared__ float4 s_cached[];
     __shared__ int2 min_max;
 
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -44,7 +44,7 @@ CPT_KERNEL static void render_depth_kernel(
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
     if (tid == 0) min_max = make_int2(ORDERED_INT_MAX, 0);
     // cache near root level BVH nodes for faster traversal
-    if (tid < cache_num) {      // no more than 32 nodes will be cached
+    if (tid < 2 * cache_num) {      // no more than 32 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
     Ray ray = dev_cam.generate_ray(px, py, sampler);
@@ -106,17 +106,18 @@ DepthTracer::DepthTracer(
 {
     if (scene.bvh_available()) {
         size_t num_bvh  = scene.obj_idxs.size();
-        num_nodes = scene.nodes.size();
-        num_cache = scene.cache_nodes.size();
+        // Comment in case I forget: scene.nodes combines nodes_front and nodes_back
+        // So the size of nodes is exactly twice the number of nodes 
+        num_nodes = scene.nodes.size() >> 1;
+        num_cache = scene.cache_fronts.size();
         CUDA_CHECK_RETURN(cudaMalloc(&_obj_idxs,  num_bvh * sizeof(int)));
-        CUDA_CHECK_RETURN(cudaMalloc(&_nodes, num_nodes * sizeof(uint4)));
-        CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, num_cache * sizeof(uint4)));
+        CUDA_CHECK_RETURN(cudaMalloc(&_nodes, 2 * num_nodes * sizeof(float4)));
+        CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, 2 * num_cache * sizeof(float4)));
         // note that BVH leaf node only stores the primitive to object mapping
         bvh_leaves = createTexture1D<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs);
-        const uint4 *nodes_ptr = reinterpret_cast<const uint4*>(scene.nodes.data()),
-                    *cache_ptr = reinterpret_cast<const uint4*>(scene.cache_nodes.data());
-        nodes      = createTexture1D<uint4>(nodes_ptr, num_nodes, _nodes);
-        CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, cache_ptr, sizeof(uint4) * num_cache, cudaMemcpyHostToDevice));
+        nodes      = createTexture1D<float4>(scene.nodes.data(), 2 * num_nodes, _nodes);
+        CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, scene.cache_fronts.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemcpy(&_cached_nodes[num_cache], scene.cache_backs.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
     } else {
         throw std::runtime_error("BVH not available in scene. Abort.");
     }
@@ -185,7 +186,7 @@ CPT_CPU void DepthTracer::render_online(
     min_max->x = ORDERED_INT_MAX;
     min_max->y = 0;
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
-    size_t _num_bytes = 0, cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
+    size_t _num_bytes = 0, cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
     // if we have an illegal memory access here: check whether you have a valid emitter in the xml scene description file.
     // it might be possible that having no valid emitter triggers an illegal memory access
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));

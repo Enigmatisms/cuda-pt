@@ -15,7 +15,7 @@
 class PathTracer: public TracerBase {
 private:
     int* _obj_idxs;
-    uint4* _nodes;
+    float4* _nodes;
 protected:
     CompactedObjInfo* obj_info;
     int num_objs;
@@ -26,7 +26,7 @@ protected:
 
     cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t nodes;
-    uint4* _cached_nodes;
+    float4* _cached_nodes;
 
     float* output_buffer;                // output buffer for images
     int* emitter_prims;

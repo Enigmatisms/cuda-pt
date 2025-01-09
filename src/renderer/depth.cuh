@@ -12,16 +12,16 @@ class DepthTracer: public TracerBase {
 private:
     cudaArray_t _colormap_data[3];
     int* _obj_idxs;
-    uint4* _nodes;
+    float4* _nodes;
 protected:
     int color_map_id;
     int num_nodes;
     int num_cache;                  // number of cached BVH nodes
 
+    float4* _cached_nodes;
     cudaTextureObject_t colormaps[3];
     cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t nodes;
-    uint4* _cached_nodes;
     int2* min_max;
 
     float* output_buffer;                // output buffer for images

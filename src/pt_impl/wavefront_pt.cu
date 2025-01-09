@@ -32,7 +32,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     ConstObjPtr objects,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstU4Ptr cached_nodes,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset, int num_prims,
     int x_patch, int y_patch, int iter,
@@ -62,9 +62,9 @@ CPT_KERNEL void raygen_primary_hit_shader(
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
         // cache near root level BVH nodes for faster traversal
-    extern __shared__ uint4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < cache_num) {      // no more than 128 nodes will be cached
+    extern __shared__ float4 s_cached[];
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
@@ -112,7 +112,7 @@ CPT_KERNEL void closesthit_shader(
     ConstObjPtr objects,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstU4Ptr cached_nodes,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
@@ -135,9 +135,9 @@ CPT_KERNEL void closesthit_shader(
     ray.hit_t = MAX_DIST;
 
     // cache near root level BVH nodes for faster traversal
-    extern __shared__ uint4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < cache_num) {      // no more than 128 nodes will be cached
+    extern __shared__ float4 s_cached[];
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();
@@ -174,7 +174,7 @@ CPT_KERNEL void nee_shader(
     ConstIndexPtr emitter_prims,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
-    ConstU4Ptr cached_nodes,
+    ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
     int stream_offset,
     int num_prims,
@@ -188,9 +188,9 @@ CPT_KERNEL void nee_shader(
                             blockDim.x * gridDim.x +                            // cols
                             threadIdx.x + blockIdx.x * blockDim.x;              // px
     // cache near root level BVH nodes for faster traversal
-    extern __shared__ uint4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < cache_num) {      // no more than 128 nodes will be cached
+    extern __shared__ float4 s_cached[];
+    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
     }
     __syncthreads();

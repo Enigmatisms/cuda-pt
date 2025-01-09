@@ -44,6 +44,15 @@ public:
     CPT_CPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU Vec3 range()    const noexcept {return maxi - mini;}
 
+    CPT_GPU bool intersect(Vec3 inv_d, Vec3 o_div, float& t_near) const {
+        auto t1s = mini.fmsub(inv_d, o_div);
+        inv_d    = maxi.fmsub(inv_d, o_div);
+
+        float tmax = 0;
+        t1s.min_max(inv_d, t_near, tmax);
+        return (tmax > t_near) && (tmax > 0);             // local memory access problem
+    }
+
     CPT_GPU bool intersect(const Ray& ray, float& t_near) const {
         auto t2s = ray.d.rcp(), o_div = ray.o * t2s;
         auto t1s = mini.fmsub(t2s, o_div);

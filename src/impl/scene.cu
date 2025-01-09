@@ -7,7 +7,7 @@
 #include <numeric>
 #include "core/scene.cuh"
 
-static constexpr int MAX_PRIMITIVE_NUM = 20000000;
+static constexpr int MAX_PRIMITIVE_NUM = 64000000;
 static constexpr const char* SCENE_VERSION = "1.2";
 
 const std::unordered_map<std::string, MetalType> conductor_mapping = {
@@ -777,13 +777,11 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     bvh_build(
         verts_list[0], verts_list[1], verts_list[2], 
         objects, sphere_objs, world_min, world_max, 
-        obj_idxs, prim_idxs, nodes, cache_nodes, 
-        config.cache_level, config.max_node_num, config.bvh_overlap_w
+        obj_idxs, prim_idxs, nodes, 
+        cache_fronts, cache_backs, 
+        config.cache_level, config.max_node_num, 
+        config.bvh_overlap_w
     );
-    if (cache_nodes.size() > 32) {
-        std::cerr << "[Error] Unexpected cached node number: " << cache_nodes.size() << " (maximum allowed: 32)\n";
-        throw std::runtime_error("Too many cached nodes.");
-    }
     auto dur = std::chrono::system_clock::now() - tp;
     auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
     auto elapsed = static_cast<double>(count) / 1e3;
@@ -924,7 +922,8 @@ void Scene::free_resources() {
     free_resource(sphere_flags);
     free_resource(obj_idxs);
     free_resource(nodes);
-    free_resource(cache_nodes);
+    free_resource(cache_fronts);
+    free_resource(cache_backs);
     free_resource(emitter_prims);
 }
 

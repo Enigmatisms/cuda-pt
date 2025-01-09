@@ -252,7 +252,6 @@ bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap, b
     }
     if (ImGui::IsKeyDown(ImGuiKey_P)) {
         frame_cap = true;
-        printf("Frame capture keyboard event.\n");
     }
     if (ImGui::IsKeyDown(ImGuiKey_Escape)) {
         exiting = true;

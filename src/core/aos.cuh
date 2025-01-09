@@ -298,7 +298,7 @@ using ArrayType = SoA3<InnerType>;
 #undef INDEX_Y
 #undef INDEX_Z
 
-using ConstU4Ptr   = const uint4* const __restrict__;
+using ConstF4Ptr   = const float4* const __restrict__;
 using ConstVertPtr = const PrecomputedArray* const __restrict__;
 using ConstUVPtr   = const ConstBuffer<PackedHalf2>* const __restrict__;
 
