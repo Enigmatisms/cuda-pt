@@ -3,22 +3,28 @@
 <!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
-<scene version="1.1">
-	<renderer type="pt"/>
-	<bool name="use_bvh" value="true"/>
-
-	<sensor type="perspective">
-		<float name="fov" value="42.2"/>
-        <integer name="sample_count" value="128"/>
-
-		<integer name="max_bounce" value="16"/>
-        <integer name="max_diffuse" value="4"/>
+<scene version="1.2">
+	<renderer type="pt">
+		<integer name="sample_count" value="128"/>
+        <integer name="max_bounce"   value="16"/>
+        <integer name="max_diffuse"  value="4"/>
         <integer name="max_specular" value="4"/>
         <integer name="max_transmit" value="16"/>
 
-		<integer class="bvh" name="cache_level" value="4"/>
-        <integer class="bvh" name="max_node_num" value="16"/>
+		<integer name="specular_constraint" value="-1"/>
+		<bool name="bidirectional" value="false"/>
+		<float name="caustic_scaling" value="1.5"/>
+	</renderer>
 
+	<accelerator type="bvh">
+		<integer name="cache_level" value="4"/>
+        <integer name="max_node_num" value="16"/>
+
+		<float name="overlap_w" value="0.6f"/>
+	</accelerator>
+
+	<sensor type="perspective">
+		<float name="fov" value="42.2"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
@@ -31,10 +37,7 @@
 		<film type="film">
 			<integer name="width" value="1920"/>
 			<integer name="height" value="1080"/>
-			<integer name="specular_constraint" value="0"/>
 			<bool name="gamma_correction" value="true"/>
-			<bool name="bidirectional" value="false"/>
-			<float name="caustic_scaling" value="1"/>
 		</film>
 	</sensor>
 

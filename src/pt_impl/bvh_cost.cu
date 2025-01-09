@@ -121,6 +121,12 @@ CPT_KERNEL static void render_cost_kernel(
     }
 }
 
+BVHCostVisualizer::BVHCostVisualizer(const Scene& scene): DepthTracer(scene) {
+    // We need two extra floats to display the minimum and maximum
+    Serializer::push<float>(serialized_data, 0);
+    Serializer::push<float>(serialized_data, 0);
+}
+
 BVHCostVisualizer::~BVHCostVisualizer() {
     color_map_id = -1;
     printf("[Renderer] BVH Cost Visualizer Object destroyed.\n");
@@ -145,5 +151,7 @@ CPT_CPU void BVHCostVisualizer::render_online(
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     false_color_mapping<<<dim3(w >> 5, h >> 3), dim3(32, 8)>>>(image, output_buffer, color_map_id, accum_cnt, *min_max, false);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    Serializer::set<float>(serialized_data, 1, min_max->x);
+    Serializer::set<float>(serialized_data, 2, min_max->y);
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }

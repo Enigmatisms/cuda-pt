@@ -244,5 +244,6 @@ void bvh_build(
     std::vector<CompactNode>& nodes,
     std::vector<CompactNode>& cached_nodes,
     int& max_cache_level,
-    const int max_node_num
+    const int max_node_num,
+    const float overlap_w
 );

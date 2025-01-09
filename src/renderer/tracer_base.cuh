@@ -27,6 +27,8 @@ protected:
     uint32_t cuda_texture_id, pbo_id;
     cudaGraphicsResource_t pbo_resc;
 public:
+    std::vector<char> serialized_data;
+public:
     /**
      * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
      * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)

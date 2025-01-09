@@ -10,7 +10,7 @@
 
 class BVHCostVisualizer: public DepthTracer {
 public:
-    BVHCostVisualizer(const Scene& scene): DepthTracer(scene) {}
+    BVHCostVisualizer(const Scene& scene);
 
     virtual ~BVHCostVisualizer();
 

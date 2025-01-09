@@ -100,8 +100,6 @@ target_compile_options(
 	${EXEC1_NAME} PRIVATE
 	$<$<COMPILE_LANGUAGE:CUDA>:
 	--expt-relaxed-constexpr
-	--use_fast_math
-	-Xptxas -O3
 	>
 )
 
@@ -132,8 +130,6 @@ target_compile_options(
 	${EXEC2_NAME} PRIVATE
 	$<$<COMPILE_LANGUAGE:CUDA>:
 	--expt-relaxed-constexpr
-	--use_fast_math
-	-Xptxas -O3
 	>
 )
 

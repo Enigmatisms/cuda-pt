@@ -132,6 +132,8 @@ DepthTracer::DepthTracer(
     create_color_map_texture();
     min_max->x = ORDERED_INT_MAX;
     min_max->y = 0;
+    // We need one extra int
+    Serializer::push<int>(serialized_data, 1);
 }
 
 void DepthTracer::create_color_map_texture() {

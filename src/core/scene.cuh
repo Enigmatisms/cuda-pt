@@ -70,7 +70,6 @@ public:
     int num_emitters;
     int num_objects;
     int envmap_id;
-    const bool use_bvh;
 
     RendererType rdr_type;
 public:

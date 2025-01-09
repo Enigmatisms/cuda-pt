@@ -6,70 +6,109 @@
 #include <iostream>
 #include "core/config.h"
 
-RenderingConfig RenderingConfig::from_xml(const tinyxml2::XMLElement *sensor_node) {
+RenderingConfig RenderingConfig::from_xml(
+    const tinyxml2::XMLElement *acc_node,
+    const tinyxml2::XMLElement *render_node,
+    const tinyxml2::XMLElement *sensor_node
+) {
     RenderingConfig config;
-    const tinyxml2::XMLElement *node = sensor_node->FirstChildElement("integer");
-    while (node) {
-        std::string name = node->Attribute("name");
-        if (name == "sample_count")
-            node->QueryIntAttribute("value", &config.spp);
-        else if (name == "max_bounce")
-            node->QueryIntAttribute("value", &config.md.max_depth);
-        else if (name == "max_diffuse")
-            node->QueryIntAttribute("value", &config.md.max_diffuse);
-        else if (name == "max_specular")
-            node->QueryIntAttribute("value", &config.md.max_specular);
-        else if (name == "max_transmit")
-            node->QueryIntAttribute("value", &config.md.max_tranmit);
-        else if (name == "cache_level") {
-            int cache_level = 0;
-            node->QueryIntAttribute("value", &cache_level);
-            if (cache_level < 0 || cache_level > 5) {
-                std::cout << "Cache level clipped to [0, 5], originally: " << cache_level << std::endl;
-            }
-            config.cache_level = std::max(std::min(cache_level, 6), 0);
-        } else if (name == "max_node_num") {
-            int max_node_num = 0;
-            node->QueryIntAttribute("value", &max_node_num);
-            if (max_node_num < 1 || max_node_num > 32) {
-                std::cout << "Max node clipped to [1, 32], originally: " << max_node_num << std::endl;
-            }
-            config.max_node_num = std::max(std::min(max_node_num, 32), 1);
+    {   // Renderer Element Parsing
+        const tinyxml2::XMLElement *node = render_node->FirstChildElement("integer");
+        while (node) {
+            std::string name = node->Attribute("name");
+            if (name == "sample_count")
+                node->QueryIntAttribute("value", &config.spp);
+            else if (name == "max_bounce")
+                node->QueryIntAttribute("value", &config.md.max_depth);
+            else if (name == "max_diffuse")
+                node->QueryIntAttribute("value", &config.md.max_diffuse);
+            else if (name == "max_specular")
+                node->QueryIntAttribute("value", &config.md.max_specular);
+            else if (name == "max_transmit")
+                node->QueryIntAttribute("value", &config.md.max_tranmit);
+            else if (name == "specular_constraint")
+                node->QueryIntAttribute("value", &config.spec_constraint);
+
+            node = node->NextSiblingElement("integer");
         }
-        node = node->NextSiblingElement("integer");
+
+        node = render_node->FirstChildElement("float");
+        while (node) {
+            std::string name = node->Attribute("name");
+            if (name == "caustic_scaling") {
+                node->QueryFloatAttribute("value", &config.caustic_scaling);
+            }
+            node = node->NextSiblingElement("float");
+        }
+
+        node = render_node->FirstChildElement("bool");
+        while (node) {
+            std::string name = node->Attribute("name");
+            if (name == "bidirectional") {
+                node->QueryBoolAttribute("value", &config.bidirectional);
+            }
+            node = node->NextSiblingElement("bool");
+        }
     }
 
-    node = sensor_node->FirstChildElement("film");
-    if (node) {
-        const tinyxml2::XMLElement* film_elem = node->FirstChildElement("integer");
-        while (film_elem) {
-            std::string name = film_elem->Attribute("name");
-            if (name == "width") {
-                film_elem->QueryIntAttribute("value", &config.width);
-            } else if (name == "height") {
-                film_elem->QueryIntAttribute("value", &config.height);
-            } else if (name == "specular_constraint") {
-                film_elem->QueryIntAttribute("value", &config.spec_constraint);
+    {   // Accelerator Element Parsing
+        const tinyxml2::XMLElement *node = acc_node->FirstChildElement("integer");
+        while (node) {
+            std::string name = node->Attribute("name");
+            if (name == "cache_level") {
+                int cache_level = 0;
+                node->QueryIntAttribute("value", &cache_level);
+                if (cache_level < 0 || cache_level > 5) {
+                    std::cout << "Cache level clipped to [0, 5], originally: " << cache_level << std::endl;
+                }
+                config.cache_level = std::max(std::min(cache_level, 6), 0);
+            } else if (name == "max_node_num") {
+                int max_node_num = 0;
+                node->QueryIntAttribute("value", &max_node_num);
+                if (max_node_num < 1 || max_node_num > 32) {
+                    std::cout << "Max node clipped to [1, 32], originally: " << max_node_num << std::endl;
+                }
+                config.max_node_num = std::max(std::min(max_node_num, 32), 1);
             }
-            film_elem = film_elem->NextSiblingElement("integer");
+            node = node->NextSiblingElement("integer");
         }
-        film_elem = node->FirstChildElement("bool");
-        while (film_elem) {
-            std::string name = film_elem->Attribute("name");
-            if (name == "gamma_correction") {
-                film_elem->QueryBoolAttribute("value", &config.gamma_correction);
-            } else if (name == "bidirectional") {
-                film_elem->QueryBoolAttribute("value", &config.bidirectional);
+
+        node = acc_node->FirstChildElement("float");
+        while (node) {
+            std::string name = node->Attribute("name");
+            if (name == "overlap_w") {
+                float overlap_w = 0.75f;
+                node->QueryFloatAttribute("value", &overlap_w);
+                if (overlap_w < 0.5f) {
+                    std::cout << "BVH overlap weight should be in range [0.5, +inf), clipped to 0.5" << std::endl;
+                    overlap_w = 0.5f;
+                }
+                config.bvh_overlap_w = overlap_w;
             }
-            film_elem = film_elem->NextSiblingElement("bool");
+            node = node->NextSiblingElement("float");
         }
-        film_elem = node->FirstChildElement("float");
-        while (film_elem) {
-            std::string name = film_elem->Attribute("name");
-            if (name == "caustic_scaling") {
-                film_elem->QueryFloatAttribute("value", &config.caustic_scaling);
+    }
+
+    {   // Sensor Element Parsing
+        if (const auto node = sensor_node->FirstChildElement("film")) {
+            const tinyxml2::XMLElement* film_elem = node->FirstChildElement("integer");
+            while (film_elem) {
+                std::string name = film_elem->Attribute("name");
+                if (name == "width") {
+                    film_elem->QueryIntAttribute("value", &config.width);
+                } else if (name == "height") {
+                    film_elem->QueryIntAttribute("value", &config.height);
+                }
+                film_elem = film_elem->NextSiblingElement("integer");
             }
-            film_elem = film_elem->NextSiblingElement("float");
+            film_elem = node->FirstChildElement("bool");
+            while (film_elem) {
+                std::string name = film_elem->Attribute("name");
+                if (name == "gamma_correction") {
+                    film_elem->QueryBoolAttribute("value", &config.gamma_correction);
+                }
+                film_elem = film_elem->NextSiblingElement("bool");
+            }
         }
     }
     return config;

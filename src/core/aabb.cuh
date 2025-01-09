@@ -61,6 +61,22 @@ public:
         return *this;
     }
 
+    // intersection of two AABB
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU float intersection_area(AABBType&& _aabb) const noexcept {
+        if (range().max_elem() < 0 || _aabb.range().max_elem() < 0) return 0;
+        auto temp_min = mini.maximize(_aabb.mini);
+        auto temp_max = maxi.minimize(_aabb.maxi);
+        if (temp_max.x() <= temp_min.x() || 
+            temp_max.y() <= temp_min.y() ||
+            temp_max.z() <= temp_min.z()
+        ) {
+            return 0;
+        }
+        auto diff = temp_max - temp_min;
+        return 2.f * (diff.x() * diff.y() + diff.y() * diff.z() + diff.z() * diff.x());
+    }
+
     CPT_GPU_INLINE void copy_from(const AABB& other) {
         FLOAT4(mini) = CONST_FLOAT4(other.mini);
         FLOAT4(maxi) = CONST_FLOAT4(other.maxi); // Load last two elements of second Vec3

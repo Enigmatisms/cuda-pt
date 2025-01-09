@@ -15,7 +15,7 @@ namespace gui {
 using gl_uint = unsigned int;
 
 struct GUIParams {
-    GUIParams() {
+    GUIParams(std::vector<char>& _data): serialized_data(_data) {
         serialized_data.reserve(16);
     }
 
@@ -36,7 +36,7 @@ struct GUIParams {
     bool serialized_update = false;
     bool output_png = true;
 
-    std::vector<char> serialized_data;
+    std::vector<char>& serialized_data;
 
     inline bool buffer_flush_update() const noexcept {
         return camera_update || scene_update || material_update || renderer_update || serialized_update;

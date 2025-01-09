@@ -3,22 +3,30 @@
 <!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
-<scene version="1.1">
+<scene version="1.2">
 	<renderer type="depth"/>
-	<bool name="use_bvh" value="true"/>
 
-	<sensor type="perspective">
-		<float name="fov" value="39.3077"/>
-        <integer name="sample_count" value="128"/>
-
-        <integer name="max_bounce" value="6"/>
-        <integer name="max_diffuse" value="6"/>
+	<renderer type="depth">
+		<integer name="sample_count" value="128"/>
+        <integer name="max_bounce"   value="6"/>
+        <integer name="max_diffuse"  value="6"/>
         <integer name="max_specular" value="6"/>
         <integer name="max_transmit" value="6"/>
 
-		<integer class="bvh" name="cache_level" value="4"/>
-        <integer class="bvh" name="max_node_num" value="16"/>
+		<integer name="specular_constraint" value="-1"/>
+		<bool name="bidirectional" value="false"/>
+		<float name="caustic_scaling" value="1.5"/>
+	</renderer>
 
+	<accelerator type="bvh">
+		<integer name="cache_level" value="4"/>
+        <integer name="max_node_num" value="16"/>
+
+		<float name="overlap_w" value="0.6f"/>
+	</accelerator>
+	
+	<sensor type="perspective">
+		<float name="fov" value="39.3077"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
