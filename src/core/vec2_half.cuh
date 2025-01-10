@@ -12,30 +12,22 @@
 #define HALF2(v) (*(reinterpret_cast<half2*>(&v)))
 #define CONST_HALF2(v) (*(reinterpret_cast<const half2*>(&v)))
 
-CPT_GPU_INLINE half float_to_half(float f) {
-    return __float2half(f);
-}
-
-CPT_GPU_INLINE float half_to_float(half h) {
-    return __half2float(h);
-}
-
 class Vec2Half {
 private:
     half2 _data;
 public:
-    CPT_GPU Vec2Half() {}
+    CPT_CPU_GPU Vec2Half() {}
 
-    CPT_GPU
+    CPT_CPU_GPU
     Vec2Half(float _v): 
         _data(make_half2(
-            float_to_half(_v), 
-            float_to_half(_v)
+            __float2half(_v), 
+            __float2half(_v)
         )
     ) {}
 
     CONDITION_TEMPLATE_DEFAULT(Half2Type, half2)
-    CPT_GPU
+    CPT_CPU_GPU
     Vec2Half(Half2Type&& _h): 
         _data(std::forward<Half2Type>(_h)) {}
 
@@ -44,11 +36,11 @@ public:
     Vec2Half(Vec2Type&& _h): 
         _data(_h.x(), _h.y()) {}
 
-    CPT_GPU
+    CPT_CPU_GPU
     Vec2Half(float _x, float _y): 
         _data(make_half2(
-            float_to_half(_x), 
-            float_to_half(_y)
+            __float2half(_x), 
+            __float2half(_y)
         )
     ) {}
 
@@ -70,17 +62,16 @@ public:
         return *((&_data.x) + index);
     }
 
-    CPT_GPU_INLINE half& x() { return _data.x; }
-    CPT_GPU_INLINE half& y() { return _data.y; }
+    CPT_CPU_GPU_INLINE half& x() { return _data.x; }
+    CPT_CPU_GPU_INLINE half& y() { return _data.y; }
 
-    CPT_GPU_INLINE float x_float() const noexcept { return half_to_float(_data.x); }
-    CPT_GPU_INLINE float y_float() const noexcept { return half_to_float(_data.y); }
+    CPT_CPU_GPU_INLINE float2 xy_float() const noexcept { return __half22float2(_data); }
 
     CONDITION_TEMPLATE(VecType, Vec2Half)
     CPT_GPU_INLINE Vec2Half operator+(VecType&& b) const noexcept { return Vec2Half(_data.x + b.x(), _data.y + b.y()); }
 
     CPT_GPU_INLINE Vec2Half operator+(float b) const noexcept { 
-        auto v = float_to_half(b);
+        auto v = __float2half(b);
         return Vec2Half(_data.x + v, _data.y + v); 
     }
 
@@ -109,19 +100,19 @@ public:
     Vec2Half operator-(VecType&& b) const { return Vec2Half(_data.x - b.x(), _data.y - b.y()); }
 
     CPT_GPU_INLINE Vec2Half operator-(float b) const { 
-        auto v = float_to_half(b);
+        auto v = __float2half(b);
         return Vec2Half(_data.x - v, _data.y - v); 
     }
 
     CPT_GPU_INLINE
     Vec2Half operator*(float b) const noexcept { 
-        auto v = float_to_half(b);
+        auto v = __float2half(b);
         return Vec2Half(_data.x * v, _data.y * v); 
     }
 
     CPT_GPU_INLINE
     Vec2Half& operator*=(float b) noexcept {
-        auto v = float_to_half(b);
+        auto v = __float2half(b);
         _data.x *= v;
         _data.y *= v;
         return *this;
@@ -151,9 +142,9 @@ public:
         return *this;
     }
 
-    CPT_GPU_INLINE operator half2() const { return _data; }
-    CPT_GPU_INLINE operator Vec2() const {
-        return Vec2(x_float(), y_float());
+    CPT_CPU_GPU_INLINE operator half2() const { return _data; }
+    CPT_CPU_GPU_INLINE operator Vec2() const {
+        return Vec2(xy_float());
     }
 };
 
@@ -191,5 +182,6 @@ public:
 };
 
 CPT_GPU_INLINE void print_vec2_half(const Vec2Half& obj) {
-    printf("[%f, %f]\n", obj.x_float(), obj.y_float());
+    auto temp = obj.xy_float();
+    printf("[%f, %f]\n", temp.x, temp.y);
 }

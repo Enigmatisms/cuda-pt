@@ -7,30 +7,9 @@
 #include <array>
 #include <cuda_runtime.h>
 #include "core/vec4.cuh"
+#include "core/enums.cuh"
 #include "core/sampling.cuh"
 #include "core/interaction.cuh"
-
-enum BSDFFlag: int {
-    BSDF_NONE     = 0x00,
-    BSDF_DIFFUSE  = 0x01,
-    BSDF_SPECULAR = 0x02,
-    BSDF_GLOSSY   = 0x04,
-    BSDF_FORWARD  = 0x08,
-
-    BSDF_REFLECT  = 0x10,
-    BSDF_TRANSMIT = 0x20
-};
-
-enum BSDFType: uint8_t {
-    Lambertian     = 0x00,
-    Specular       = 0x01,
-    Translucent    = 0x02,
-    Plastic        = 0x03,
-    PlasticForward = 0x04,
-    GGXConductor   = 0x05,
-    Dispersion     = 0x06,
-    NumSupportedBSDF = 0x07
-};
 
 extern const std::array<const char*, NumSupportedBSDF> BSDF_NAMES;
 

@@ -62,10 +62,13 @@ CPT_KERNEL void raygen_primary_hit_shader(
     payloads.thp(px + buffer_xoffset, py) = Vec4(1, 1, 1, 1);
     idx_buffer[block_index + stream_id * TOTAL_RAY] = (py << 16) + px + buffer_xoffset;    
         // cache near root level BVH nodes for faster traversal
-    extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+    extern __shared__ uint4 s_cached[];
+    if (tid < cache_num) {      // no more than 256 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
+        int offset_tid = tid + blockDim.x * blockDim.y;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
@@ -135,10 +138,13 @@ CPT_KERNEL void closesthit_shader(
     ray.hit_t = MAX_DIST;
 
     // cache near root level BVH nodes for faster traversal
-    extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+    extern __shared__ uint4 s_cached[];
+    if (tid < cache_num) {      // no more than 256 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
+        int offset_tid = tid + blockDim.x * blockDim.y;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     __syncthreads();
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
@@ -188,10 +194,13 @@ CPT_KERNEL void nee_shader(
                             blockDim.x * gridDim.x +                            // cols
                             threadIdx.x + blockIdx.x * blockDim.x;              // px
     // cache near root level BVH nodes for faster traversal
-    extern __shared__ float4 s_cached[];
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+    extern __shared__ uint4 s_cached[];
+    if (tid < cache_num) {      // no more than 256 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
+        int offset_tid = tid + blockDim.x * blockDim.y;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     __syncthreads();
     

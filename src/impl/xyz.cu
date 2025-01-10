@@ -1,7 +1,7 @@
 #include "core/xyz.cuh"
-__constant__ ColorSpaceXYZ XYZ;
+CPT_GPU_CONST ColorSpaceXYZ XYZ;
 
-const float CIE_X_entries[ColorSpaceXYZ::CIE_samples] = {
+static constexpr float CIE_X_entries[ColorSpaceXYZ::CIE_samples] = {
     0.0001299000,   0.0001458470,   0.0001638021,   0.0001840037,   0.0002066902,   0.0002321000,   0.0002607280,
     0.0002930750,   0.0003293880,   0.0003699140,   0.0004149000,   0.0004641587,   0.0005189860,   0.0005818540,
     0.0006552347,   0.0007416000,   0.0008450296,   0.0009645268,   0.001094949,    0.001231154,    0.001368000,
@@ -72,7 +72,7 @@ const float CIE_X_entries[ColorSpaceXYZ::CIE_samples] = {
     0.000001341977, 0.000001251141
 };
 
-const float CIE_Y_entries[ColorSpaceXYZ::CIE_samples] = {
+static constexpr float CIE_Y_entries[ColorSpaceXYZ::CIE_samples] = {
     0.000003917000,  0.000004393581,  0.000004929604,  0.000005532136,  0.000006208245,  0.000006965000,
     0.000007813219,  0.000008767336,  0.000009839844,  0.00001104323,   0.00001239000,   0.00001388641,
     0.00001555728,   0.00001744296,   0.00001958375,   0.00002202000,   0.00002483965,   0.00002804126,
@@ -154,7 +154,7 @@ const float CIE_Y_entries[ColorSpaceXYZ::CIE_samples] = {
     0.0000005198080, 0.0000004846123, 0.0000004518100
 };
 
-const float CIE_Z_entries[ColorSpaceXYZ::CIE_samples] = {
+static constexpr float CIE_Z_entries[ColorSpaceXYZ::CIE_samples] = {
     0.0006061000, 0.0006808792, 0.0007651456, 0.0008600124,
     0.0009665928, 0.001086000, 0.001220586, 0.001372729,
     0.001543579, 0.001734286, 0.001946000, 0.002177777,
@@ -275,7 +275,7 @@ const float CIE_Z_entries[ColorSpaceXYZ::CIE_samples] = {
     0.0, 0.0, 0.0
 };
 
-const float D65_SPD[ColorSpaceXYZ::D65_samples] = {
+static constexpr float D65_SPD[ColorSpaceXYZ::D65_samples] = {
     0.0341,  0.36014, 0.68618, 1.01222, 1.33826, 1.6643,  1.99034, 2.31638, 2.64242, 2.96846, 3.2945,  4.98865, 6.6828,
     8.37695, 10.0711, 11.7652, 13.4594, 15.1535, 16.8477, 18.5418, 20.236,  21.9177, 23.5995, 25.2812, 26.963,  28.6447,
     30.3265, 32.0082, 33.69,   35.3717, 37.0535, 37.343,  37.6326, 37.9221, 38.2116, 38.5011, 38.7907, 39.0802, 39.3697,
@@ -318,33 +318,6 @@ const float D65_SPD[ColorSpaceXYZ::D65_samples] = {
     54.2069, 53.4576, 52.7083, 51.959,  52.5072, 53.0553, 53.6035, 54.1516, 54.6998, 55.248,  55.7961, 56.3443, 56.8924,
     57.4406, 57.7278, 58.015,  58.3022, 58.5894, 58.8765, 59.1637, 59.4509, 59.7381, 60.0253, 60.3125
 };
-
-template <typename TexType>
-static cudaTextureObject_t createArrayTexture1D(
-    const TexType* tex_src, 
-    cudaArray_t& arr_t,
-    size_t size 
-) {
-    cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
-    CUDA_CHECK_RETURN(cudaMallocArray(&arr_t, &channel_desc, size));
-    CUDA_CHECK_RETURN(cudaMemcpyToArray(arr_t, 0, 0, tex_src, size * sizeof(TexType), cudaMemcpyHostToDevice));
-
-    cudaResourceDesc res_desc;
-    memset(&res_desc, 0, sizeof(res_desc));
-    res_desc.resType = cudaResourceTypeArray;
-    res_desc.res.array.array = arr_t;
-
-    cudaTextureDesc tex_desc;
-    memset(&tex_desc, 0, sizeof(tex_desc));
-    tex_desc.addressMode[0] = cudaAddressModeClamp;
-    tex_desc.filterMode = cudaFilterModeLinear;
-    tex_desc.readMode = cudaReadModeElementType;
-    tex_desc.normalizedCoords = true;
-
-    cudaTextureObject_t tex_obj;
-    CUDA_CHECK_RETURN(cudaCreateTextureObject(&tex_obj, &res_desc, &tex_desc, nullptr));
-    return tex_obj;
-}
 
 void ColorSpaceXYZ::init() {
     std::vector<float4> CIE_host;

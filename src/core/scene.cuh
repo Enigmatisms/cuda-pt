@@ -14,7 +14,6 @@
 #include <tiny_obj_loader.h>
 #include "core/config.h"
 #include "bsdf/bsdf.cuh"
-#include "core/shapes.cuh"
 #include "core/object.cuh"
 #include "core/emitter.cuh"
 #include "core/textures.cuh"
@@ -22,14 +21,6 @@
 #include "core/virtual_funcs.cuh"
 #include "core/dynamic_bsdf.cuh"
 #include "core/bvh.cuh"
-
-enum RendererType {
-    MegaKernelPT = 0,            // megakernel path tracing
-    WavefrontPT  = 1,            // wavefront  path tracing
-    MegeKernelLT = 2,            // megakernel light tracing
-    VoxelSDFPT   = 3,            // not supported currently
-    NumRendererType
-};
 
 using Vec4Arr = std::vector<Vec4>;
 using Vec3Arr = std::vector<Vec3>;
@@ -42,12 +33,10 @@ public:
     BSDF** bsdfs;
     Emitter** emitters;
     std::vector<ObjInfo> objects;
-    std::vector<Shape> shapes;
     std::vector<bool> sphere_flags;
     std::vector<int> obj_idxs;
     std::vector<float4> nodes;
-    std::vector<float4> cache_fronts;
-    std::vector<float4> cache_backs;
+    std::vector<CompactNode> cache_nodes;
 
     std::array<Vec3Arr, 3> verts_list;
     std::array<Vec3Arr, 3> norms_list;
@@ -71,7 +60,6 @@ public:
     int num_emitters;
     int num_objects;
     int envmap_id;
-    const bool use_bvh;
 
     RendererType rdr_type;
 public:

@@ -7,20 +7,12 @@
 
 #include "core/so3.cuh"
 #include "core/vec4.cuh"
+#include "core/enums.cuh"
 #include "core/vec2_half.cuh"
 #include "core/interaction.cuh"
 
-// TODO: we need host side Texture support
-
 // Host side memory management tool
 
-enum TextureType: uint8_t {
-    DIFFUSE_TEX   = 0x0,
-    SPECULAR_TEX  = 0x1,
-    GLOSSY_TEX    = 0x2,
-    NORMAL_TEX    = 0x3,
-    ROUGHNESS_TEX = 0x4,
-};
 
 struct TextureInfo {
     std::string diff_path{};
@@ -74,7 +66,8 @@ public:
         const cudaTextureObject_t norm_tex = normals[index];
         auto R_w2l = rotation_fixed_anchor(it.shading_norm, false);
         Vec3 local_n = R_w2l.rotate(it.shading_norm);
-        float4 pnorm = norm_tex == 0 ? make_float4(0, 0, 1, 0) : tex2D<float4>(norm_tex, it.uv_coord.x_float(), it.uv_coord.y_float());
+        auto tex_uv = it.uv_coord.xy_float();
+        float4 pnorm = norm_tex == 0 ? make_float4(0, 0, 1, 0) : tex2D<float4>(norm_tex, tex_uv.x, tex_uv.y);
         return R_w2l.transposed_rotate(Vec3(pnorm.x, pnorm.y, pnorm.z).normalized());
     }
 
@@ -83,17 +76,20 @@ public:
         R_w2l = rotation_fixed_anchor(it.shading_norm, false);
         const cudaTextureObject_t norm_tex = normals[index];
         Vec3 local_n = R_w2l.rotate(it.shading_norm);
-        float4 pnorm = norm_tex == 0 ? make_float4(0, 0, 1, 0) : tex2D<float4>(norm_tex, it.uv_coord.x_float(), it.uv_coord.y_float());
+        auto tex_uv = it.uv_coord.xy_float();
+        float4 pnorm = norm_tex == 0 ? make_float4(0, 0, 1, 0) : tex2D<float4>(norm_tex, tex_uv.x, tex_uv.y);
         return R_w2l.transposed_rotate(Vec3(pnorm.x, pnorm.y, pnorm.z).normalized());
     }
 
     CPT_GPU_INLINE Vec2 eval_rough(const Vec2Half& uv, int index, const Vec2& default_r) {
         const cudaTextureObject_t rough_tex = roughness[index];
-        return rough_tex == 0 ? default_r : Vec2(tex2D<float2>(rough_tex, uv.x_float(), uv.y_float()));
+        auto tex_uv = uv.xy_float();
+        return rough_tex == 0 ? default_r : Vec2(tex2D<float2>(rough_tex, tex_uv.x, tex_uv.y));
     }
 
     CPT_GPU_INLINE Vec4 eval(const cudaTextureObject_t& target, const Vec2Half& uv, const Vec4& default_v) {
-           return target == 0 ? default_v : Vec4( tex2D<float4>(target, uv.x_float(), uv.y_float()) );
+        auto tex_uv = uv.xy_float();
+        return target == 0 ? default_v : Vec4( tex2D<float4>(target, tex_uv.x, tex_uv.y) );
     }
 
     void init(int _num_bsdfs) {
@@ -141,7 +137,7 @@ public:
     }
 };
 
-extern __constant__ Textures c_textures;
+extern CPT_GPU_CONST Textures c_textures;
 
 bool save_image(
     const std::string& filename,

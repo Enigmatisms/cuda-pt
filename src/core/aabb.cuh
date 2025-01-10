@@ -44,6 +44,15 @@ public:
     CPT_CPU Vec3 centroid() const noexcept {return (maxi + mini) * 0.5f;}
     CPT_CPU Vec3 range()    const noexcept {return maxi - mini;}
 
+    CPT_GPU bool intersect(Vec3 inv_d, Vec3 o_div, float& t_near) const {
+        auto t1s = mini.fmsub(inv_d, o_div);
+        inv_d    = maxi.fmsub(inv_d, o_div);
+
+        float tmax = 0;
+        t1s.min_max(inv_d, t_near, tmax);
+        return (tmax > t_near) && (tmax > 0);             // local memory access problem
+    }
+
     CPT_GPU bool intersect(const Ray& ray, float& t_near) const {
         auto t2s = ray.d.rcp(), o_div = ray.o * t2s;
         auto t1s = mini.fmsub(t2s, o_div);
@@ -54,20 +63,27 @@ public:
         return (tmax > t_near) && (tmax > 0);             // local memory access problem
     }
 
-    CPT_GPU bool intersect(Vec3 inv_d, Vec3 o_div, float& t_near) const {
-        auto t1s = mini.fmsub(inv_d, o_div);
-        inv_d    = maxi.fmsub(inv_d, o_div);
-
-        float tmax = 0;
-        t1s.min_max(inv_d, t_near, tmax);
-        return (tmax > t_near) && (tmax > 0);             // local memory access problem
-    }
-
     CONDITION_TEMPLATE(AABBType, AABB)
     CPT_CPU AABB& operator += (AABBType&& _aabb) noexcept {
         mini = mini.minimize(_aabb.mini);
         maxi = maxi.maximize(_aabb.maxi);
         return *this;
+    }
+
+    // intersection of two AABB
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU float intersection_area(AABBType&& _aabb) const noexcept {
+        if (range().max_elem() < 0 || _aabb.range().max_elem() < 0) return 0;
+        auto temp_min = mini.maximize(_aabb.mini);
+        auto temp_max = maxi.minimize(_aabb.maxi);
+        if (temp_max.x() <= temp_min.x() || 
+            temp_max.y() <= temp_min.y() ||
+            temp_max.z() <= temp_min.z()
+        ) {
+            return 0;
+        }
+        auto diff = temp_max - temp_min;
+        return 2.f * (diff.x() * diff.y() + diff.y() * diff.z() + diff.z() * diff.x());
     }
 
     CPT_GPU_INLINE void copy_from(const AABB& other) {

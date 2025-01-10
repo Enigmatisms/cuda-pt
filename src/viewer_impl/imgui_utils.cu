@@ -3,12 +3,100 @@
 #include <ext/imgui/backends/imgui_impl_glfw.h>
 #include <ext/imgui/backends/imgui_impl_opengl3.h>
 #include <cuda_gl_interop.h>
+#include "core/serialize.h"
+#include "core/enums.cuh"
 #include "core/cuda_utils.cuh"
 #include "core/camera_model.cuh"
 #include "core/imgui_utils.cuh"
 #include "core/dynamic_bsdf.cuh"
 
 namespace gui {
+
+static constexpr const char* RENDERER_NAMES[] = {
+    "Megakernel Path Tracing",
+    "Wavefront Path Tracing",
+    "Megakernel Light Tracing",
+    "Voxel-SDF Path Tracing",
+    "Scene Depth Tracing",
+    "BVH Cost Visualizer"
+};
+
+static constexpr std::array<const char*, 4> COLOR_MAP_NAMES = {
+    "Jet", "Plasma", "Viridis", "GrayScale"
+};
+
+static void setup_imgui_style( bool dark_style, float alpha_  ) {
+    ImGuiStyle& style = ImGui::GetStyle();
+    
+    // style settings from https://gist.github.com/dougbinks/8089b4bbaccaaf6fa204236978d165a9
+    style.Alpha = 1.0f;
+    style.FrameRounding     = 3.f;
+    style.WindowRounding    = 3.f;
+    style.TabRounding       = 3.0f;
+    style.GrabRounding      = 3.0f;
+    style.ScrollbarRounding = 3.0f;
+    style.ChildRounding     = 3.0f;
+    style.PopupRounding     = 3.0f;
+    style.Colors[ImGuiCol_Text]                  = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+    style.Colors[ImGuiCol_TextDisabled]          = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
+    style.Colors[ImGuiCol_WindowBg]              = ImVec4(0.94f, 0.94f, 0.94f, 0.94f);
+    style.Colors[ImGuiCol_PopupBg]               = ImVec4(1.00f, 1.00f, 1.00f, 0.94f);
+    style.Colors[ImGuiCol_Border]                = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
+    style.Colors[ImGuiCol_BorderShadow]          = ImVec4(1.00f, 1.00f, 1.00f, 0.10f);
+    style.Colors[ImGuiCol_FrameBg]               = ImVec4(1.00f, 1.00f, 1.00f, 0.94f);
+    style.Colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+    style.Colors[ImGuiCol_FrameBgActive]         = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+    style.Colors[ImGuiCol_TitleBg]               = ImVec4(0.96f, 0.96f, 0.96f, 1.00f);
+    style.Colors[ImGuiCol_TitleBgCollapsed]      = ImVec4(1.00f, 1.00f, 1.00f, 0.51f);
+    style.Colors[ImGuiCol_TitleBgActive]         = ImVec4(0.82f, 0.82f, 0.82f, 1.00f);
+    style.Colors[ImGuiCol_MenuBarBg]             = ImVec4(0.86f, 0.86f, 0.86f, 1.00f);
+    style.Colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.98f, 0.98f, 0.98f, 0.53f);
+    style.Colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.69f, 0.69f, 0.69f, 1.00f);
+    style.Colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
+    style.Colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.49f, 0.49f, 0.49f, 1.00f);
+    style.Colors[ImGuiCol_CheckMark]             = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_SliderGrab]            = ImVec4(0.24f, 0.52f, 0.88f, 1.00f);
+    style.Colors[ImGuiCol_SliderGrabActive]      = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_Button]                = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+    style.Colors[ImGuiCol_ButtonHovered]         = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_ButtonActive]          = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_Header]                = ImVec4(0.26f, 0.59f, 0.98f, 0.31f);
+    style.Colors[ImGuiCol_HeaderHovered]         = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+    style.Colors[ImGuiCol_HeaderActive]          = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    style.Colors[ImGuiCol_ResizeGrip]            = ImVec4(1.00f, 1.00f, 1.00f, 0.50f);
+    style.Colors[ImGuiCol_ResizeGripHovered]     = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+    style.Colors[ImGuiCol_ResizeGripActive]      = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+    style.Colors[ImGuiCol_PlotLines]             = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    style.Colors[ImGuiCol_PlotLinesHovered]      = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    style.Colors[ImGuiCol_PlotHistogram]         = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    style.Colors[ImGuiCol_PlotHistogramHovered]  = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+    style.Colors[ImGuiCol_TextSelectedBg]        = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
+
+    if( dark_style ) {
+        for (int i = 0; i <= ImGuiCol_COUNT; i++) {
+            ImVec4& col = style.Colors[i];
+            float H, S, V;
+            ImGui::ColorConvertRGBtoHSV( col.x, col.y, col.z, H, S, V );
+
+            if( S < 0.1f ) V = 1.0f - V;
+            ImGui::ColorConvertHSVtoRGB( H, S, V, col.x, col.y, col.z );
+            if( col.w < 1.00f ) col.w *= alpha_;
+        }
+    } else {
+        for (int i = 0; i <= ImGuiCol_COUNT; i++) {
+            ImVec4& col = style.Colors[i];
+            if( col.w < 1.00f ) {
+                col.x *= alpha_;
+                col.y *= alpha_;
+                col.z *= alpha_;
+                col.w *= alpha_;
+            }
+        }
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->AddFontFromFileTTF("../../assets/fonts/nunito-sans.ttf", 16);
+}
 
 // initialize GL texture and PBO (pixel buffer object)
 void init_texture_and_pbo(
@@ -44,7 +132,8 @@ void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int wi
     ImGui::NewFrame();
 
     ImGui::Begin(sub_win_name.c_str());
-    ImGui::Image((void*)(intptr_t)cuda_texture_id, ImVec2(width, height));
+    ImVec2 wh(width, height);
+    ImGui::Image(cuda_texture_id, wh);
     ImGui::End();
 
     ImGui::Render();
@@ -60,7 +149,7 @@ void window_render(
     ImVec2 top_left(0, 0);
     ImVec2 bottom_right(width, height);
     // splat pixel buffer outputs
-    draw_list->AddImage((void*)(intptr_t)cuda_texture_id, top_left, bottom_right);
+    draw_list->AddImage(cuda_texture_id, top_left, bottom_right);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -136,8 +225,7 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
     // initialize ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    ImGui::StyleColorsDark();
+    setup_imgui_style(true, 0.75);
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
     return std::unique_ptr<GLFWwindow, GLFWWindowDeleter>(window);
@@ -145,32 +233,30 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
 
 bool keyboard_camera_update(DeviceCamera& camera, float step, bool& frame_cap, bool& exiting)
 {
-    ImGuiIO& io = ImGui::GetIO();
     bool update = false;
-    if (io.KeysDown[ImGuiKey_W]) {
+    if (ImGui::IsKeyDown(ImGuiKey_W)) {
         update = true;
         camera.move_forward(step);
     }
-    if (io.KeysDown[ImGuiKey_S]) {
+    if (ImGui::IsKeyDown(ImGuiKey_S)) {
         update = true;
         camera.move_backward(step);
     }
-    if (io.KeysDown[ImGuiKey_A]) {
+    if (ImGui::IsKeyDown(ImGuiKey_A)) {
         update = true;
         camera.move_left(step);
     }
-    if (io.KeysDown[ImGuiKey_D]) {
+    if (ImGui::IsKeyDown(ImGuiKey_D)) {
         update = true;
         camera.move_right(step);
     }
-    if (io.KeysDown[ImGuiKey_P]) {
+    if (ImGui::IsKeyDown(ImGuiKey_P)) {
         frame_cap = true;
-        printf("Frame capture keyboard event.\n");
     }
-    if (io.KeysDown[ImGuiKey_Escape]) {
+    if (ImGui::IsKeyDown(ImGuiKey_Escape)) {
         exiting = true;
     }
-    if (io.KeysDown[ImGuiKey_E]) {
+    if (ImGui::IsKeyDown(ImGuiKey_E)) {
         printf("Camera Pose:\n");
         Vec3 lookat = camera.R.col(2) + camera.t;
         printf("\tPosition:\t");
@@ -234,6 +320,13 @@ static bool draw_coupled_slider_input(std::string id, std::string name, float& v
     updated |= ImGui::InputFloat(label.c_str(), &val, min_val, max_val, "%.3f");
     ImGui::PopItemWidth();
     return updated;
+}
+
+static bool draw_customized_check_box(std::string id, std::string name, bool& val) {
+    ImGui::Text(name.c_str());
+    ImGui::SameLine();
+    std::string label = "##select-" + id;
+    return ImGui::Checkbox(label.c_str(), &val);
 }
 
 static bool draw_integer_input(std::string id, std::string name, int& val, int min_val = 1, int max_val = 64, float width = 100.f) {
@@ -333,6 +426,11 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
                 local_update |= draw_coupled_slider_input(info.name + "-ior", "IoR", info.bsdf.ior(), 1.0, 3.0);
                 local_update |= draw_coupled_slider_input(info.name + "-thc", "Thickness", info.bsdf.thickness());
                 local_update |= draw_coupled_slider_input(info.name + "-trp", "Transmit Proba", info.bsdf.trans_scaler());
+                bool is_selected = info.bsdf.penetration() > 0;
+                if(draw_customized_check_box(info.name, "Penetrable", is_selected)) {
+                    info.bsdf.penetration() = is_selected;
+                    local_update = true;
+                }
             } else if (info.type == BSDFType::Translucent) {
                 local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
                 local_update |= draw_coupled_slider_input(info.name + "ior", "IoR", info.bsdf.k_d.x());
@@ -357,7 +455,8 @@ void render_settings_interface(
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
     MaxDepthParams& md_params,
-    GUIParams& params
+    GUIParams& params,
+    const uint8_t rdr_type
 ) {
     // Begin the main menu bar at the top of the window
     if (ImGui::BeginMainMenuBar()) {
@@ -399,6 +498,8 @@ void render_settings_interface(
             }
 
             if (ImGui::CollapsingHeader("Renderer Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text(RENDERER_NAMES[rdr_type]);
+                ImGui::Separator();
                 params.renderer_update |= draw_integer_input("max_depth", "Max Depth", md_params.max_depth);
                 params.renderer_update |= draw_integer_input("max_diff",  "Max Diffuse", md_params.max_diffuse);
                 params.renderer_update |= draw_integer_input("max_spec",  "Max Specular", md_params.max_specular);
@@ -409,6 +510,27 @@ void render_settings_interface(
                     ImGui::InputInt("Compression Quality", &params.compress_q, 1, 100);
                     ImGui::PopItemWidth();
                 }
+                if (rdr_type == RendererType::DepthTracing || rdr_type == RendererType::BVHCostViz) {
+                    uint8_t update_v = Serializer::get<int>(params.serialized_data, 0) & 0x7f;
+                    if (ImGui::Checkbox("Log2 Transform", &params.log2_output) ||
+                        draw_selection_menu(COLOR_MAP_NAMES, "##color-map", "Color Map", update_v)
+                    ) {
+                        int data = params.log2_output ? (update_v | 0x80) : update_v;
+                        Serializer::set<int>(params.serialized_data, 0, data);
+                        params.serialized_update = true;
+                    }
+                    if (rdr_type == RendererType::BVHCostViz) {
+                        int max_query = std::ceilf(Serializer::get<float>(params.serialized_data, 2));
+                        ImGui::Text(("Max value: " + std::to_string(max_query)).c_str());
+                        
+                        int max_value = Serializer::get<int>(params.serialized_data, 1);
+                        max_value = max_value > 0 ? max_value : max_query;
+                        if (draw_integer_input("bvh-max-cost",  "(Viz) Max Cost", max_value)) {
+                            Serializer::set<int>(params.serialized_data, 1, max_value);
+                            params.serialized_update = true;
+                        }
+                    }
+                }
             }
             if (ImGui::CollapsingHeader("Material Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
                 params.material_update |= material_widget(bsdf_infos);
@@ -416,8 +538,8 @@ void render_settings_interface(
             if (ImGui::CollapsingHeader("Screen Capture", ImGuiWindowFlags_AlwaysAutoResize)) {
                 params.capture = ImGui::Button("Capture Frame");
             }
-            ImGui::End();
         }
+        ImGui::End();
     }
 }
 }   // namespace gui

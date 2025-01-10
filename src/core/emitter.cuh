@@ -165,8 +165,8 @@ public:
         sphere_normal.normalize();
         sample_sum = normal.dot(sphere_normal);           // dot_light
         pdf *= float(sample_sum > 0) / sample_sum;
-        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
-        le = (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * float(sample_sum > 0);
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y()).xy_float();
+        le = (emission_tex == 0 ? Le : scaled_Le(tex_uv.x, tex_uv.y)) * float(sample_sum > 0);
         return sampled;
     }
 
@@ -192,12 +192,13 @@ public:
         ray_d  = delocalize_rotate(normal, ray_d);
         // input pdf is already the pdf of position (1 / area)
         pdf   *= pdf_dir;
-        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
-        return (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * fabsf(normal.dot(ray_d));
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y()).xy_float();
+        return (emission_tex == 0 ? Le : scaled_Le(tex_uv.x, tex_uv.y)) * fabsf(normal.dot(ray_d));
     }
 
     CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Interaction* const it) const override {
-        return select(emission_tex == 0 ? Le : scaled_Le(it->uv_coord.x_float(), it->uv_coord.y_float()), 
+        auto tex_uv = it->uv_coord.xy_float();
+        return select(emission_tex == 0 ? Le : scaled_Le(tex_uv.x, tex_uv.y), 
             Vec4(0, 0, 0, 1), inci_dir->dot(it->shading_norm) < 0);
     }
 };
@@ -243,8 +244,8 @@ public:
         sphere_normal.normalize();
         sample_sum = normal.dot(sphere_normal);           // dot_light
         pdf *= float(sample_sum > 0) / sample_sum;
-        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
-        le = (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * (sample_sum > cos_val);
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y()).xy_float();
+        le = (emission_tex == 0 ? Le : scaled_Le(tex_uv.x, tex_uv.y)) * (sample_sum > cos_val);
         return sampled;
     }
 
@@ -270,12 +271,13 @@ public:
         ray_d  = delocalize_rotate(normal, ray_d);
         // input pdf is already the pdf of position (1 / area)
         pdf   *= pdf_dir;
-        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y());
-        return (emission_tex == 0 ? Le : scaled_Le(tex_uv.x_float(), tex_uv.y_float())) * fabsf(normal.dot(ray_d));
+        auto tex_uv = uvs[sampled_index].lerp(uv.x(), uv.y()).xy_float();
+        return (emission_tex == 0 ? Le : scaled_Le(tex_uv.x, tex_uv.y)) * fabsf(normal.dot(ray_d));
     }
 
     CPT_GPU virtual Vec4 eval_le(const Vec3* const inci_dir, const Interaction* const it) const override {
-        return select(emission_tex == 0 ? Le : scaled_Le(it->uv_coord.x_float(), it->uv_coord.y_float()), 
+        auto tex_uv = it->uv_coord.xy_float();
+        return select(emission_tex == 0 ? Le : scaled_Le(tex_uv.x, tex_uv.y), 
             Vec4(0, 0, 0, 1), inci_dir->dot(it->shading_norm) < -cos_val);
     }
 };

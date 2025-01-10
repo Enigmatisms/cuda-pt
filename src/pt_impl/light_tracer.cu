@@ -8,7 +8,7 @@
 
 #include "renderer/light_tracer.cuh"
 
-static constexpr int SEED_SCALER = 11451;       //-4!
+static constexpr int SEED_SCALER = 11467;       //-4!
 static constexpr int SHFL_THREAD_X = 4;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 3;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
@@ -19,7 +19,7 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
 ) {
     printf("Rendering starts.\n");
     TicToc _timer("render_lt_kernel()", num_iter);
-    size_t cached_size = 2 * num_cache * sizeof(float4);
+    size_t cached_size = num_cache * sizeof(uint4);
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory should be used
         if (bidirectional) {
@@ -49,7 +49,7 @@ CPT_CPU void LightTracer::render_online(
     bool gamma_corr
 ) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
-    size_t _num_bytes = 0, cached_size = 2 * num_cache * sizeof(float4);
+    size_t _num_bytes = 0, cached_size = num_cache * sizeof(uint4);
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
     accum_cnt ++;

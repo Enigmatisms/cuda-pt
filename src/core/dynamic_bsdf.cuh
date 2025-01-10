@@ -12,14 +12,14 @@ public:
         Vec4 k_d;
         Vec4 k_s;
         Vec4 k_g;
-        Vec3 extras;
+        Vec4 extras;
         uint8_t mtype;
 
         BSDFParams() {}
         CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec4, Vec4, Vec4)
         BSDFParams(VType1&& _k_d, VType2&& _k_s, VType3&& _k_g):
             k_d(std::forward<VType1>(_k_d)), k_s(std::forward<VType2>(_k_s)), 
-            k_g(std::forward<VType3>(_k_g)), extras(1.5, 1, 0), mtype(MetalType::Au)
+            k_g(std::forward<VType3>(_k_g)), extras(1.5, 1, 0, 0), mtype(MetalType::Au)
         {}
 
         CONDITION_TEMPLATE(VecType, Vec4)
@@ -51,12 +51,14 @@ public:
         inline float& thickness() { return extras.z(); }
         inline float& roughness_x() { return extras.x(); }
         inline float& roughness_y() { return extras.y(); }
+        inline float& penetration() { return extras.w(); }
 
         inline float ior() const { return extras.x(); }
         inline float trans_scaler() const { return extras.y(); }
         inline float thickness() const { return extras.z(); }
         inline float roughness_x() const { return extras.x(); }
         inline float roughness_y() const { return extras.y(); }
+        inline float penetration() const { return extras.w(); }
     } bsdf;
     mutable bool updated;           // whether the parameters are updated (BSDF type not changed)
     mutable bool bsdf_changed;      // whether we have changed the BSDF type

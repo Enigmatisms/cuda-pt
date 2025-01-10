@@ -27,8 +27,9 @@ protected:
     uint32_t cuda_texture_id, pbo_id;
     cudaGraphicsResource_t pbo_resc;
 public:
+    std::vector<char> serialized_data;
+public:
     /**
-     * @param shapes    shape information (for AABB generation)
      * @param verts     vertices, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
      * @param norms     normal vectors, ArrayType: (p1, 3D) -> (p2, 3D) -> (p3, 3D)
      * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
@@ -48,7 +49,6 @@ public:
        accum_cnt(0),
        cuda_texture_id(0), pbo_id(0)
     {
-        // TODO: shapes is so fucking useless
         scene.export_prims(verts, norms, uvs);
     }
 
@@ -61,6 +61,9 @@ public:
 
     CPT_CPU uint32_t& get_texture_id() noexcept { return this->cuda_texture_id; }
     CPT_CPU uint32_t& get_pbo_id()     noexcept { return this->pbo_id; }
+
+    // set parameters with serialized data
+    CPT_CPU virtual void param_setter(const std::vector<char>& bytes) {}
 
     CPT_CPU virtual std::vector<uint8_t> render(
         const MaxDepthParams& md,
@@ -101,7 +104,7 @@ public:
         return accum_cnt;
     }
 
-    CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
+    CPT_CPU virtual std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         return image.export_cpu(1.f / accum_cnt, gamma_cor);
     }

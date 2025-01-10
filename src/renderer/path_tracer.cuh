@@ -26,7 +26,7 @@ protected:
 
     cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t nodes;
-    float4* _cached_nodes;
+    uint4* _cached_nodes;
 
     float* output_buffer;                // output buffer for images
     int* emitter_prims;

@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cuda_runtime.h>
 
-
 class Vec3 {
 private:
     float3 _data;
@@ -32,5 +31,6 @@ int main() {
 
     constexpr Vec3 data(1, 2, 3);
     std::cout << data.x() << ", " << data.y() << ", " << data.z() << std::endl;
+
     return 0;
 }

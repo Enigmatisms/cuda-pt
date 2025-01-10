@@ -49,11 +49,6 @@ public:
         }
     }
 
-    CPT_CPU void fill(const StructType& v) {
-        parallel_memset << <1, 256 >> > (data, v, size * 3);
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    }
-
     CPT_CPU_GPU_INLINE const StructType& x(int index) const { return data[index]; }
     CPT_CPU_GPU_INLINE const StructType& y(int index) const { return data[index + size]; }
     CPT_CPU_GPU_INLINE const StructType& z(int index) const { return data[index + (size << 1)]; }
@@ -135,14 +130,17 @@ public:
         }
     }
 
-    CPT_CPU void fill(const Vec4& v) {
-        parallel_memset << <1, 256 >> > (data, v, size * 3);
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    }
-
     CPT_CPU_GPU_INLINE Vec4 x(int index) const { return data[INDEX_X(index, size)]; }
     CPT_CPU_GPU_INLINE Vec4 y(int index) const { return data[INDEX_Y(index, size)]; }
     CPT_CPU_GPU_INLINE Vec4 z(int index) const { return data[INDEX_Z(index, size)]; }
+
+    CPT_CPU_GPU_INLINE float2 x_front(int index_2) const { return (reinterpret_cast<const float2*>(data))[(index_2 << 1) + index_2]; }
+    CPT_CPU_GPU_INLINE float2 y_front(int index_2) const { return (reinterpret_cast<const float2*>(data))[(index_2 << 1) + index_2 + 2]; }
+    CPT_CPU_GPU_INLINE float2 z_front(int index_2) const { return (reinterpret_cast<const float2*>(data))[(index_2 << 1) + index_2 + 4]; }
+
+    CPT_CPU_GPU_INLINE float2 x_back(int index_2) const { return (reinterpret_cast<const float2*>(data))[(index_2 << 1) + index_2 + 1]; }
+    CPT_CPU_GPU_INLINE float2 y_back(int index_2) const { return (reinterpret_cast<const float2*>(data))[(index_2 << 1) + index_2 + 3]; }
+    CPT_CPU_GPU_INLINE float2 z_back(int index_2) const { return (reinterpret_cast<const float2*>(data))[(index_2 << 1) + index_2 + 5]; }
 
     CPT_CPU_GPU_INLINE Vec3 x_clipped(int index) const { 
         auto v = data[INDEX_X(index, size)]; 
@@ -300,7 +298,7 @@ using ArrayType = SoA3<InnerType>;
 #undef INDEX_Y
 #undef INDEX_Z
 
-using ConstF4Ptr   = const float4* const __restrict__;
+using ConstF4Ptr   = const uint4* const __restrict__;
 using ConstVertPtr = const PrecomputedArray* const __restrict__;
 using ConstUVPtr   = const ConstBuffer<PackedHalf2>* const __restrict__;
 

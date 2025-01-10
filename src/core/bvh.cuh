@@ -126,6 +126,80 @@ public:
     }
 };
 
+/**
+ * @brief Compact BVH node (only 4 floats) for bandwidth reduction
+ */
+class CompactNode {
+private:
+    static constexpr uint32_t LOW_8_MASK = 0xFF;           // 0000...1111 1111
+    static constexpr uint32_t HIGH_24_MASK = 0xFFFFFF00;  // 1111...0000 0000
+    static constexpr uint32_t LOW_24_MASK = 0x00FFFFFF;  // 0000 1111...1111
+    static constexpr uint32_t HIGH_SHIFT = 8;
+    uint4 data;
+    /**
+     * The last uint32: high 24 bits | low 8 bits represents different meanings
+     */
+public:
+    CPT_CPU CompactNode(const float4& front, const float4& back) {
+        HALF2(data.x) = Vec2Half(front.x, back.x);
+        HALF2(data.y) = Vec2Half(front.y, back.y);
+        HALF2(data.z) = Vec2Half(front.z, back.z);
+        set_high_24bits(UINT_CREF_CAST(back.w));
+        set_low_8bits(1);
+    }
+
+    CPT_GPU CompactNode(): data({0, 0, 0, 0}) {}
+    CPT_GPU CompactNode(uint4 _data): data(std::move(_data)) {}
+
+    // set high 24 bits (signed)
+    CPT_CPU void set_high_24bits(uint32_t val) {
+        // clear the high 24 bits
+        data.w &= LOW_8_MASK;
+
+        // store as uint32
+        uint32_t unsigned_val = val & LOW_24_MASK; // 24 bits
+        data.w |= (unsigned_val << HIGH_SHIFT);
+    }
+
+    CPT_CPU void set_low_8bits(uint32_t val) {
+        // clear low 8 bits
+        data.w &= HIGH_24_MASK;
+        data.w |= (val & LOW_8_MASK);
+    }
+    // unsigned 24 bits (upper bound: ~33M)
+    CPT_GPU_INLINE uint32_t get_gmem_index() const noexcept {
+        return (data.w >> HIGH_SHIFT) & LOW_24_MASK;
+    }
+
+    // unsigned 6 bits (upper bound: 63)
+    CPT_GPU_INLINE uint32_t get_cached_offset() const noexcept {
+        return data.w & LOW_8_MASK;
+    }
+
+    CPT_GPU_INLINE void unpack(Vec3& mini, Vec3& maxi) const {
+        auto temp = __half22float2(CONST_HALF2(data.x));
+        mini.x() = temp.x;
+        maxi.x() = temp.y;
+        temp = __half22float2(CONST_HALF2(data.y));
+        mini.y() = temp.x;
+        maxi.y() = temp.y;
+        temp = __half22float2(CONST_HALF2(data.z));
+        mini.z() = temp.x;
+        maxi.z() = temp.y;
+    }
+
+    CPT_GPU bool intersect(Vec3 inv_d, Vec3 o_div, float& t_near) const {
+        Vec3 mini, maxi;
+        unpack(mini, maxi);
+        auto t1s = mini.fmsub(inv_d, o_div);
+        inv_d    = maxi.fmsub(inv_d, o_div);
+
+        float tmax = 0;
+        t1s.min_max(inv_d, t_near, tmax);
+        return (tmax > t_near) && (tmax > 0);             // local memory access problem
+    }
+};
+
 void bvh_build(
     const std::vector<Vec3>& points1,
     const std::vector<Vec3>& points2,
@@ -136,8 +210,8 @@ void bvh_build(
     std::vector<int>& obj_idxs, 
     std::vector<int>& prim_idxs, 
     std::vector<float4>& nodes,
-    std::vector<float4>& cache_fronts,
-    std::vector<float4>& cache_backs,
+    std::vector<CompactNode>& cache_nodes,
     int& max_cache_level,
-    const int max_node_num
+    const int max_node_num,
+    const float overlap_w
 );

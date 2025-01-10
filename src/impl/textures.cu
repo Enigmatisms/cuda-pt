@@ -8,7 +8,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "ext/stb/stb_image_write.h"
 
-__constant__ Textures c_textures;
+CPT_GPU_CONST Textures c_textures;
 
 bool save_image(
     const std::string& filename,

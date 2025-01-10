@@ -3,17 +3,23 @@
 <!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
-<scene version="1.1">
-    <renderer type="pt"/>
-	<bool name="use_bvh" value="true"/>
+<scene version="1.2">
+    <renderer type="pt">
+		<integer name="sample_count" value="128"/>
+        <integer name="max_bounce"   value="16"/>
+        <integer name="max_diffuse"  value="16"/>
+        <integer name="max_specular" value="16"/>
+        <integer name="max_transmit" value="16"/>
+	</renderer>
 
+	<accelerator type="bvh">
+		<integer name="cache_level" value="4"/>
+        <integer name="max_node_num" value="16"/>
+		<float name="overlap_w" value="1.0"/>
+	</accelerator>
+	
 	<sensor type="perspective">
         <float name="fov" value="47.073"/>
-		<integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="16"/>
-		<integer class="bvh" name="cache_level" value="4"/>
-        <integer class="bvh" name="max_node_num" value="16"/>
-        <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
@@ -21,18 +27,10 @@
 			<!-- <lookat target="1.940958, 0.600080, 2.770657" origin="2.644605, 0.604483, 3.481193" up="-0.002901, 0.999990, -0.003324"/> -->
 		</transform>
 
-		<integer name="start_t" value="1"/>       
-        <integer name="end_t" value="100"/>       
-        <integer name="start_s" value="0"/>       
-        <integer name="end_s" value="100"/>   
-
 		<film type="film">
 			<integer name="width" value="1024"/>
 			<integer name="height" value="1024"/>
-			<integer name="specular_constraint" value="0"/>
 			<bool name="gamma_correction" value="true"/>
-			<bool name="bidirectional" value="false"/>
-			<float name="caustic_scaling" value="1.5"/>
 		</film>
 	</sensor>
 

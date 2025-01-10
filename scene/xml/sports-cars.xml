@@ -3,22 +3,27 @@
 <!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
-<scene version="1.1">
-	<renderer type="pt"/>
-	<bool name="use_bvh" value="true"/>
+<scene version="1.2">
+	<renderer type="pt">
+		<integer name="sample_count" value="128"/>
+        <integer name="max_bounce"   value="6"/>
+        <integer name="max_diffuse"  value="6"/>
+        <integer name="max_specular" value="6"/>
+        <integer name="max_transmit" value="6"/>
+	</renderer>
 
+	<accelerator type="bvh">
+		<integer name="cache_level" value="4"/>
+        <integer name="max_node_num" value="16"/>
+		<float name="overlap_w" value="1.0"/>
+	</accelerator>
+	
 	<sensor type="perspective">
 		<!-- Normal red front blue back -->
 		<float name="fov" value="50"/>			
 		<!-- New red back blue front -->
 		<!-- <float name="fov" value="42.5"/>		 -->
-        <integer name="sample_count" value="128"/>
-        <integer name="max_bounce" value="6"/>
-        <integer class="bvh" name="max_node_num" value="16"/>
-		<integer class="bvh" name="cache_level" value="4"/>
-        <bool name="vflip" value="true"/>
         <bool name="hflip" value="true"/>
-        <bool name="" value="true"/>
 		
 		<transform name="toWorld">
 			<!-- Normal red front blue back -->

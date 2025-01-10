@@ -8,10 +8,10 @@
             "name": "(gdb) viewer",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build_debug/Debug/cpt.exe",
-            "stopAtEntry": true,
+            "program": "${workspaceFolder}/build_debug/Debug/pt.exe",
+            "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build_debug/Debug/",
-            "args": ["../../scene/xml/prisma.xml"],
+            "args": ["../../scene/xml/vader.xml"],
             "environment": [],
             "externalConsole": true,
             "MIMode": "gdb",
@@ -19,7 +19,7 @@
                 {
                     "description": "Enable pretty-printing for gdb",
                     "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
+                    "ignoreFailures": false
                 }
             ]
         },

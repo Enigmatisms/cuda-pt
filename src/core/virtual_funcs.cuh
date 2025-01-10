@@ -49,10 +49,10 @@ template <typename PlasticType>
 CPT_KERNEL void create_plastic_bsdf(
     BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 
     float ior, float trans_scaler = 1.f, 
-    float thickness = 0
+    float thickness = 0, bool penetrable = false
 ) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *dst = new PlasticType(k_d, k_s, sigma_a, ior, trans_scaler, thickness);
+        *dst = new PlasticType(k_d, k_s, sigma_a, ior, trans_scaler, thickness, penetrable);
         (*dst)->set_kd(std::move(k_d));
         (*dst)->set_ks(std::move(k_s));
         (*dst)->set_kg(std::move(sigma_a));
@@ -63,7 +63,7 @@ template <typename PlasticType>
 CPT_KERNEL void load_plastic_bsdf(
     BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 
     float ior, float trans_scaler = 1.f, 
-    float thickness = 0
+    float thickness = 0, bool penetrable = false
 ) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         // I will make sure (I can) the base ptr is actually of PlasticType*
@@ -72,6 +72,7 @@ CPT_KERNEL void load_plastic_bsdf(
         ptr->eta = 1.f / ior;
         ptr->trans_scaler = trans_scaler;
         ptr->thickness = thickness;
+        ptr->__padding = penetrable;
         ptr->set_kd(std::move(k_d));
         ptr->set_ks(std::move(k_s));
         ptr->set_kg(std::move(sigma_a));
