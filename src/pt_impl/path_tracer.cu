@@ -12,9 +12,6 @@ static constexpr int SEED_SCALER = 11467;   // 11451 is not a prime, while 11467
 static constexpr int SHFL_THREAD_X = 5;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 2;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
-CPT_GPU_CONST Emitter* c_emitter[9];
-CPT_GPU_CONST BSDF*    c_material[48];
-
 PathTracer::PathTracer(
     const Scene& scene
 ): TracerBase(scene), 
