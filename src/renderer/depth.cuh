@@ -18,7 +18,7 @@ protected:
     int num_nodes;
     int num_cache;                  // number of cached BVH nodes
 
-    float4* _cached_nodes;
+    uint4* _cached_nodes;
     cudaTextureObject_t colormaps[3];
     cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t nodes;

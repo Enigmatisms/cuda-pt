@@ -241,6 +241,7 @@ void parseBSDF(
         k_g = Vec4(0, 1);
         element = bsdf_elem->FirstChildElement("float");
         float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
+        bool penetrable = false;
         while (element) {
             std::string name = element->Attribute("name");
             tinyxml2::XMLError eResult;
@@ -255,14 +256,22 @@ void parseBSDF(
                 throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
             element = element->NextSiblingElement("float");
         }
+        element = bsdf_elem->FirstChildElement("bool");
+        if (element) {
+            if (std::string(element->Attribute("name")) == "penetrable") {
+                auto eResult = element->QueryBoolAttribute("value", &penetrable);
+                if (eResult != tinyxml2::XML_SUCCESS)
+                    throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
+            }
+        }
         if (type == "plastic") {
             info.type = BSDFType::Plastic;
             create_plastic_bsdf<PlasticBSDF><<<1, 1>>>(bsdfs + index, 
-                    k_d, k_s, k_g, ior, trans_scaler, thickness);
+                    k_d, k_s, k_g, ior, trans_scaler, thickness, penetrable);
         } else {
             info.type = BSDFType::PlasticForward;
             create_plastic_bsdf<PlasticForwardBSDF><<<1, 1>>>(bsdfs + index, 
-                    k_d, k_s, k_g, ior, trans_scaler, thickness);
+                    k_d, k_s, k_g, ior, trans_scaler, thickness, penetrable);
         }
         info.bsdf.store_plastic_params(ior, trans_scaler, thickness);
     } else if (type == "dispersion") {
@@ -778,9 +787,8 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         verts_list[0], verts_list[1], verts_list[2], 
         objects, sphere_objs, world_min, world_max, 
         obj_idxs, prim_idxs, nodes, 
-        cache_fronts, cache_backs, 
-        config.cache_level, config.max_node_num, 
-        config.bvh_overlap_w
+        cache_nodes, config.cache_level, 
+        config.max_node_num, config.bvh_overlap_w
     );
     auto dur = std::chrono::system_clock::now() - tp;
     auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
@@ -922,8 +930,7 @@ void Scene::free_resources() {
     free_resource(sphere_flags);
     free_resource(obj_idxs);
     free_resource(nodes);
-    free_resource(cache_fronts);
-    free_resource(cache_backs);
+    free_resource(cache_nodes);
     free_resource(emitter_prims);
 }
 

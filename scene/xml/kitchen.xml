@@ -17,7 +17,7 @@
 	</renderer>
 
 	<accelerator type="bvh">
-		<integer name="cache_level" value="5"/>
+		<integer name="cache_level" value="8"/>
         <integer name="max_node_num" value="32"/>
 
 		<float name="overlap_w" value="1.0"/>
@@ -495,7 +495,7 @@
         <ref type="material" id="signs"/>
     </shape>
     <shape type="obj">
-        <string name="filename" value="../meshes/kitchen/wood-floor.obj"/>
+        <string name="filename" value="../meshes/kitchen/wood-floor-new.obj"/>
         <ref type="material" id="floor"/>
     </shape>
 

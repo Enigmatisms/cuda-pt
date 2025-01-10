@@ -23,8 +23,11 @@ public:
     using BSDF::k_d;
     using BSDF::k_g;
 public:
+    // Penetration: if true, the plastic material will allow 'erroneous' light leaks
+    // (light leak: incident ray and exiting ray are not in the same hemisphere)
+    // if light leak is enabled, the plastic material is more suitable for plants
     CPT_CPU_GPU PlasticBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, 
-        float ior, float trans_scaler = 1.f, float thickness = 0
+        float ior, float trans_scaler = 1.f, float thickness = 0, bool penetration = false
     );
 
     CPT_CPU_GPU PlasticBSDF(): BSDF() {}
@@ -52,8 +55,9 @@ public:
     using BSDF::k_d;
     using BSDF::k_g;
 public:
+    // the last parameter is a dummy parameter (thus we can have the same API with PlasticBSDF)
     CPT_CPU_GPU PlasticForwardBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, 
-        float ior, float trans_scaler = 1.f, float thickness = 0
+        float ior, float trans_scaler = 1.f, float thickness = 0, bool _dummy = false
     );
 
     CPT_CPU_GPU PlasticForwardBSDF(): BSDF() {}

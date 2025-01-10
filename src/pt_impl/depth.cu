@@ -34,7 +34,7 @@ CPT_KERNEL static void render_depth_kernel(
     int accum_cnt,
     int cache_num
 ) {
-    extern __shared__ float4 s_cached[];
+    extern __shared__ uint4 s_cached[];
     __shared__ int2 min_max;
 
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -44,8 +44,11 @@ CPT_KERNEL static void render_depth_kernel(
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
     if (tid == 0) min_max = make_int2(ORDERED_INT_MAX, 0);
     // cache near root level BVH nodes for faster traversal
-    if (tid < 2 * cache_num) {      // no more than 32 nodes will be cached
+    if (tid < cache_num) {      // no more than 256 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
+        int offset_tid = tid + blockDim.x * blockDim.y;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     Ray ray = dev_cam.generate_ray(px, py, sampler);
     __syncthreads();
@@ -109,15 +112,14 @@ DepthTracer::DepthTracer(
         // Comment in case I forget: scene.nodes combines nodes_front and nodes_back
         // So the size of nodes is exactly twice the number of nodes 
         num_nodes = scene.nodes.size() >> 1;
-        num_cache = scene.cache_fronts.size();
+        num_cache = scene.cache_nodes.size();
         CUDA_CHECK_RETURN(cudaMalloc(&_obj_idxs,  num_bvh * sizeof(int)));
         CUDA_CHECK_RETURN(cudaMalloc(&_nodes, 2 * num_nodes * sizeof(float4)));
-        CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, 2 * num_cache * sizeof(float4)));
+        CUDA_CHECK_RETURN(cudaMalloc(&_cached_nodes, num_cache * sizeof(uint4)));
         // note that BVH leaf node only stores the primitive to object mapping
         bvh_leaves = createTexture1D<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs);
         nodes      = createTexture1D<float4>(scene.nodes.data(), 2 * num_nodes, _nodes);
-        CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, scene.cache_fronts.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
-        CUDA_CHECK_RETURN(cudaMemcpy(&_cached_nodes[num_cache], scene.cache_backs.data(), sizeof(float4) * num_cache, cudaMemcpyHostToDevice));
+        CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, scene.cache_nodes.data(), sizeof(uint4) * num_cache, cudaMemcpyHostToDevice));
     } else {
         throw std::runtime_error("BVH not available in scene. Abort.");
     }

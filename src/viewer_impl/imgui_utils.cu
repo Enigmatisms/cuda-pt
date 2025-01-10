@@ -322,6 +322,13 @@ static bool draw_coupled_slider_input(std::string id, std::string name, float& v
     return updated;
 }
 
+static bool draw_customized_check_box(std::string id, std::string name, bool& val) {
+    ImGui::Text(name.c_str());
+    ImGui::SameLine();
+    std::string label = "##select-" + id;
+    return ImGui::Checkbox(label.c_str(), &val);
+}
+
 static bool draw_integer_input(std::string id, std::string name, int& val, int min_val = 1, int max_val = 64, float width = 100.f) {
     bool updated = false;
     ImGui::Text(name.c_str());
@@ -419,6 +426,11 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
                 local_update |= draw_coupled_slider_input(info.name + "-ior", "IoR", info.bsdf.ior(), 1.0, 3.0);
                 local_update |= draw_coupled_slider_input(info.name + "-thc", "Thickness", info.bsdf.thickness());
                 local_update |= draw_coupled_slider_input(info.name + "-trp", "Transmit Proba", info.bsdf.trans_scaler());
+                bool is_selected = info.bsdf.penetration() > 0;
+                if(draw_customized_check_box(info.name, "Penetrable", is_selected)) {
+                    info.bsdf.penetration() = is_selected;
+                    local_update = true;
+                }
             } else if (info.type == BSDFType::Translucent) {
                 local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
                 local_update |= draw_coupled_slider_input(info.name + "ior", "IoR", info.bsdf.k_d.x());

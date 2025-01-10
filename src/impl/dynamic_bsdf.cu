@@ -27,7 +27,8 @@ void BSDFInfo::copy_to_gpu(BSDF*& to_store) const {
             bsdf.k_g, 
             bsdf.ior(), 
             bsdf.trans_scaler(), 
-            bsdf.thickness()
+            bsdf.thickness(),
+            bsdf.penetration()
         );
     } else if (type == BSDFType::PlasticForward) {
         load_plastic_bsdf<PlasticForwardBSDF><<<1, 1>>>(&to_store, 

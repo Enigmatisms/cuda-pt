@@ -32,12 +32,9 @@ CPT_GPU int ray_intersect_cost(
     // There can be much control flow divergence, not good
     Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
     for (int i = 0; i < cache_num;) {
-         const LinearNode node(
-            cached_nodes[i],
-            cached_nodes[i + cache_num]
-        );
-        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
-        int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
+         const CompactNode node(cached_nodes[i]);
+        bool intersect_node = node.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
+        int all_offset = node.get_cached_offset(), gmem_index = node.get_gmem_index();
         int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
         // reuse
         intersect_node = intersect_node && all_offset == 1;
@@ -89,15 +86,18 @@ CPT_KERNEL static void render_cost_kernel(
     int accum_cnt,
     int cache_num
 ) {
-    extern __shared__ float4 s_cached[];
+    extern __shared__ uint4 s_cached[];
 
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     Sampler sampler(px + py * image.w(), seed_offset);
 
     int min_index = -1, tid = threadIdx.x + threadIdx.y * blockDim.x;
     // cache near root level BVH nodes for faster traversal
-    if (tid < 2 * cache_num) {      // no more than 32 nodes will be cached
+    if (tid < cache_num) {      // no more than 256 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
+        int offset_tid = tid + blockDim.x * blockDim.y;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     Ray ray = dev_cam.generate_ray(px, py, sampler);
     __syncthreads();

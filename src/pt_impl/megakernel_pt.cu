@@ -25,12 +25,9 @@ CPT_GPU bool occlusion_test_bvh(
     Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
     // There can be much control flow divergence, not good
     for (int i = 0; i < cache_num;) {
-        const LinearNode node(
-            cached_nodes[i],
-            cached_nodes[i + cache_num]
-        );
-        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < max_dist;
-        int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
+        const CompactNode node(cached_nodes[i]);
+        bool intersect_node = node.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < max_dist;
+        int all_offset = node.get_cached_offset(), gmem_index = node.get_gmem_index();
         int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
         // reuse
         intersect_node = intersect_node && all_offset == 1;
@@ -97,12 +94,9 @@ CPT_GPU float ray_intersect_bvh(
     // There can be much control flow divergence, not good
     Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d; 
     for (int i = 0; i < cache_num;) {
-        const LinearNode node(
-            cached_nodes[i],
-            cached_nodes[i + cache_num]
-        );
-        bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
-        int all_offset = node.aabb.base(), gmem_index = node.aabb.prim_cnt();
+        const CompactNode node(cached_nodes[i]);
+        bool intersect_node = node.intersect(inv_d, o_div, aabb_tmin) && aabb_tmin < min_dist;
+        int all_offset = node.get_cached_offset(), gmem_index = node.get_gmem_index();
         int increment = (!intersect_node) * all_offset + int(intersect_node && all_offset != 1);
         // reuse
         intersect_node = intersect_node && all_offset == 1;
@@ -188,10 +182,13 @@ CPT_KERNEL void render_pt_kernel(
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    extern __shared__ float4 s_cached[];
+    extern __shared__ uint4 s_cached[];
     // cache near root level BVH nodes for faster traversal
-    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+    if (tid < cache_num) {      // no more than 256 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
+        int offset_tid = tid + blockDim.x * blockDim.y;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     Ray ray = dev_cam.generate_ray(px, py, sampler);
     __syncthreads();

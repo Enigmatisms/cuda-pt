@@ -26,7 +26,7 @@
 #define CONST_UINT4(v) (*(reinterpret_cast<const uint4*>(&v)))
 #define CONST_UINT2(v) (*(reinterpret_cast<const uint2*>(&v)))
 #define INT_REF_CAST(v) reinterpret_cast<int&>(v)
-#define INT_CREF_CAST(v) reinterpret_cast<const int&>(v)
+#define UINT_CREF_CAST(v) reinterpret_cast<const uint32_t&>(v)
 
 #define CONDITION_TEMPLATE(VecType, TargetType) \
     template<typename VecType, typename = std::enable_if_t<std::is_same_v<std::decay_t<VecType>, TargetType>>>

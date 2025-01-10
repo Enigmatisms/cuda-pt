@@ -59,10 +59,10 @@ RenderingConfig RenderingConfig::from_xml(
             if (name == "cache_level") {
                 int cache_level = 0;
                 node->QueryIntAttribute("value", &cache_level);
-                if (cache_level < 0 || cache_level > 5) {
-                    std::cout << "Cache level clipped to [0, 5], originally: " << cache_level << std::endl;
+                if (cache_level < 0 || cache_level > 8) {
+                    std::cout << "Cache level clipped to [0, 8], originally: " << cache_level << std::endl;
                 }
-                config.cache_level = std::max(std::min(cache_level, 6), 0);
+                config.cache_level = std::max(std::min(cache_level, 8), 0);
             } else if (name == "max_node_num") {
                 int max_node_num = 0;
                 node->QueryIntAttribute("value", &max_node_num);

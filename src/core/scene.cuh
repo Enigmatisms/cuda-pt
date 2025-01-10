@@ -36,8 +36,7 @@ public:
     std::vector<bool> sphere_flags;
     std::vector<int> obj_idxs;
     std::vector<float4> nodes;
-    std::vector<float4> cache_fronts;
-    std::vector<float4> cache_backs;
+    std::vector<CompactNode> cache_nodes;
 
     std::array<Vec3Arr, 3> verts_list;
     std::array<Vec3Arr, 3> norms_list;

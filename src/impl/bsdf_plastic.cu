@@ -2,13 +2,14 @@
 
 CPT_CPU_GPU PlasticBSDF::PlasticBSDF(
     Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
-    float trans_scaler, float thickness
+    float trans_scaler, float thickness, bool penetration
 ): BSDF(_k_d, std::move(_k_s), std::move(sigma_a),
     BSDFFlag::BSDF_SPECULAR | 
     BSDFFlag::BSDF_DIFFUSE  | 
     BSDFFlag::BSDF_REFLECT
 ), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {
     precomp_diff_f = FresnelTerms::diffuse_fresnel(ior);
+    __padding = penetration;
 }
 
 CPT_GPU float PlasticBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const {
@@ -24,7 +25,8 @@ CPT_GPU float PlasticBSDF::pdf(const Interaction& it, const Vec3& out, const Vec
 
 CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi, bool is_radiance) const {
     const Vec3 normal = c_textures.eval_normal(it, index);
-    float dot_wo = fabsf(out.dot(normal)), dot_wi = fabsf(in.dot(normal)),
+    float raw_dot_wo = out.dot(normal), raw_dot_wi = in.dot(normal);
+    float dot_wo = fabsf(raw_dot_wo), dot_wi = fabsf(raw_dot_wi),
           Fi = FresnelTerms::fresnel_simple(eta, dot_wi),
           Fo = FresnelTerms::fresnel_simple(eta, dot_wo);
     Vec3 refdir = -reflection(in, normal);
@@ -38,7 +40,7 @@ CPT_GPU Vec4 PlasticBSDF::eval(const Interaction& it, const Vec3& out, const Vec
             (c_textures.eval(siga_tex, it.uv_coord, k_g) * 
             thickness * (-1.0f / dot_wo - 1.0f / dot_wi)).exp_xyz();
     brdf += refdir.dot(out) < 1.f - THP_EPS ? Vec4(0) : Vec4(Fi, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
-
+    brdf = (__padding > 0 || (raw_dot_wo > 0) ^ (raw_dot_wi > 0)) ? brdf : Vec4(0, 1);
     return brdf;
 }
 
@@ -52,7 +54,7 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
     bool is_radiance
 ) const {
     const Vec3 normal = c_textures.eval_normal(it, index);
-    float dot_indir = fabsf(normal.dot(indir));
+    float raw_dot_indir = normal.dot(indir), dot_indir = fabsf(raw_dot_indir);;
     float Fi = FresnelTerms::fresnel_simple(eta, dot_indir),
           specular_prob = Fi / (Fi + trans_scaler * (1.0f - Fi));
 
@@ -83,6 +85,7 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
         outdir = delocalize_rotate(normal, local_dir);
         samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_DIFFUSE);
     }
+    throughput = (__padding > 0 || (raw_dot_indir > 0) ^ (outdir.dot(normal) > 0)) ? throughput : Vec4(0, 1);
     return outdir;
 }
 
@@ -90,7 +93,7 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
 
 CPT_CPU_GPU PlasticForwardBSDF::PlasticForwardBSDF(
     Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
-    float trans_scaler, float thickness
+    float trans_scaler, float thickness, bool
 ): BSDF(_k_d, std::move(_k_s), std::move(sigma_a),
     BSDFFlag::BSDF_SPECULAR | 
     BSDFFlag::BSDF_TRANSMIT | 

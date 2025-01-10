@@ -77,9 +77,12 @@ CPT_KERNEL void render_lt_kernel(
     int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
 
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
-    extern __shared__ float4 s_cached[];
-    if (tid < 2 * cache_num) {      // no more than 128 nodes will be cached
+    extern __shared__ uint4 s_cached[];
+    if (tid < cache_num) {      // no more than 256 nodes will be cached
         s_cached[tid] = cached_nodes[tid];
+        int offset_tid = tid + blockDim.x * blockDim.y;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     __syncthreads();
 

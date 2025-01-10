@@ -75,7 +75,6 @@ struct GLFWWindowDeleter {
     void operator() (GLFWwindow* window) const {
         if (window) {
             glfwDestroyWindow(window);
-            std::cout << "GLFW window destroyed." << std::endl;
         }
     }
 };
