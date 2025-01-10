@@ -80,9 +80,9 @@ RenderingConfig RenderingConfig::from_xml(
             if (name == "overlap_w") {
                 float overlap_w = 0.75f;
                 node->QueryFloatAttribute("value", &overlap_w);
-                if (overlap_w < 0.5f || overlap_w > 1.f) {
-                    std::cout << "BVH overlap weight should be in range [0.5, 1.f], clipped." << std::endl;
-                    overlap_w = std::clamp(overlap_w, 0.5f, 1.f);
+                if (overlap_w < 0.5f || overlap_w > 1.5f) {
+                    std::cout << "BVH overlap weight should be in range [0.5, 1.5f], clipped." << std::endl;
+                    overlap_w = std::clamp(overlap_w, 0.5f, 1.5f);
                 }
                 config.bvh_overlap_w = overlap_w;
             }

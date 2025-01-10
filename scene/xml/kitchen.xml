@@ -18,26 +18,30 @@
 
 	<accelerator type="bvh">
 		<integer name="cache_level" value="5"/>
-        <integer name="max_node_num" value="16"/>
+        <integer name="max_node_num" value="32"/>
 
 		<float name="overlap_w" value="1.0"/>
 	</accelerator>
 	
 	<sensor type="perspective">
-		<!-- <float name="fov" value="32"/> -->
 		<float name="fov" value="48"/>
+		<!-- <float name="fov" value="32"/> -->
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
 			<!-- <lookat target="3.214929, 1.259441, 6.739809" origin="3.098763, 1.222549, 7.732354" up="-0.004290, 0.999319, 0.036641"/> -->
 			<!-- <lookat target="3.205850, 1.401939, 3.542233" origin="2.971070, 1.398597, 4.514276" up="-0.000784, 0.999994, 0.003249"/> -->
+
+			<!-- Benchmark -->
 			<lookat target="4.386742, 1.350119, 0.887063" origin="4.053925, 1.291838, 1.828252" up="-0.019840, 0.998300, 0.054801"/>
 			<!-- <lookat target="2.708319, 1.561703, 2.233381" origin="2.228504, 1.735339, 3.093398" up="0.086427, 0.984808, -0.150612"/> -->
+			<!-- <lookat target="5.630173, 0.919332, -0.246719" origin="5.039186, 1.054056, 0.548633" up="0.080328, 0.990883, -0.108158"/> -->
 		</transform>
 
 		<film type="film">
 			<integer name="width" value="960"/>
-			<integer name="height" value="540"/>
+			<!-- Benchmark: 960 * 540, FOV: 48 -->
+			<integer name="height" value="540"/>		
 			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>
