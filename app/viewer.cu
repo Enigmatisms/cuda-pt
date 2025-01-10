@@ -14,8 +14,8 @@
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
-CPT_GPU_CONST Emitter* c_emitter[9];
-CPT_GPU_CONST BSDF*    c_material[48];
+extern CPT_GPU_CONST Emitter* c_emitter[9];
+extern CPT_GPU_CONST BSDF*    c_material[48];
 
 std::string get_current_time() {
     // Get the current time as a time_point

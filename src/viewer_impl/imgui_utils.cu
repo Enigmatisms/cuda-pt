@@ -100,7 +100,6 @@ static void setup_imgui_style( bool dark_style, float alpha_  ) {
 
 // initialize GL texture and PBO (pixel buffer object)
 void init_texture_and_pbo(
-    float* output_buffer,
     cudaGraphicsResource_t& pbo_resc, 
     gl_uint& pbo_id, gl_uint& cuda_texture_id,
     int width, int height
@@ -120,10 +119,6 @@ void init_texture_and_pbo(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
-
-    // Allocate accumulation buffer
-    CUDA_CHECK_RETURN(cudaMalloc(&output_buffer, width * height * 4 * sizeof(float)));
-    CUDA_CHECK_RETURN(cudaMemset(output_buffer, 0, width * height * 4 * sizeof(float)));
 }
 
 void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int width, int height) {

@@ -63,6 +63,7 @@ add_subdirectory(src/ext/tinyxml2)
 add_subdirectory(src/ext/tinyobjloader)
 add_subdirectory(src/ext/imgui)
 add_subdirectory(src/ext/glfw)
+add_subdirectory(src/ext/nanobind)
 
 find_package(OpenGL REQUIRED)
 if (MSVC)
@@ -155,6 +156,69 @@ target_compile_options(
 	${EXEC2_NAME} PRIVATE
 	$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
 )
+
+# ============================ Python Bindings ============================
+find_package(Python REQUIRED COMPONENTS Development)
+find_package(CUDAToolkit REQUIRED)
+if (Python_FOUND AND CUDAToolkit_FOUND)
+	message(STATUS "Python found: Version: ${Python_VERSION}")
+	message(STATUS "CUDAToolkit found: Version: ${CUDAToolkit_VERSION}")
+	message(STATUS "Building remote distributed rendering code and nanobind python binds...")
+	enable_language(CUDA)
+
+	set(NANOBIND_NDARRAY_SRC_FILES
+		src/ext/nanobind/src/nb_func.cpp
+		src/ext/nanobind/src/common.cpp
+		src/ext/nanobind/src/error.cpp
+		src/ext/nanobind/src/nb_internals.cpp
+		src/ext/nanobind/src/nb_type.cpp
+		src/ext/nanobind/src/nb_static_property.cpp
+		src/ext/nanobind/src/implicit.cpp
+		src/ext/nanobind/src/nb_ndarray.cpp
+	)
+
+	add_library(pyrender MODULE
+		src/pyrender/python_render.cu
+		src/pyrender/python_bind.cu
+		${NANOBIND_NDARRAY_SRC_FILES}
+	)
+
+	target_include_directories(pyrender PRIVATE
+		${CMAKE_CURRENT_LIST_DIR}/src 
+		${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/include
+		${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/ext/robin_map/include/
+		${Python_INCLUDE_DIRS}
+	)
+
+	target_link_libraries(pyrender PRIVATE
+		${Python_LIBRARIES}
+		RenderCore
+	)
+
+	if (MSVC)
+		set(MODULE_SUFFIX ".pyd")
+	else()
+		set(MODULE_SUFFIX ".so")
+	endif()
+
+	set_target_properties(pyrender PROPERTIES
+		PREFIX ""
+		SUFFIX ${MODULE_SUFFIX}
+		CUDA_SEPARABLE_COMPILATION ON
+		CUDA_ARCHITECTURES native
+	)
+
+	target_compile_options(pyrender PRIVATE
+		$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
+	)
+else()
+	if (Python_FOUND)
+		message(WARNING "Python Package not found. Without Python Package, remote distributed rendering can not be compiled.")
+	else()
+		message(WARNING "CUDAToolkit not found. Without CUDAToolkit, remote distributed rendering can not be compiled.")
+	endif()
+endif()
+
 
 # CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate
 # https://developer.nvidia.com/blog/separate-compilation-linking-cuda-device-code/

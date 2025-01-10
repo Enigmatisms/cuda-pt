@@ -200,3 +200,31 @@ CPT_CPU void BVHCostVisualizer::render_online(
     Serializer::set<float>(serialized_data, 2, max_query);
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
+
+CPT_CPU float* BVHCostVisualizer::render_raw(
+    const MaxDepthParams& md,
+    bool gamma_corr
+) {
+    *reduced_max = 0;
+    size_t cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
+    // if we have an illegal memory access here: check whether you have a valid emitter in the xml scene description file.
+    // it might be possible that having no valid emitter triggers an illegal memory access
+    accum_cnt ++;
+    render_cost_kernel<<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
+        *camera, verts, bvh_leaves, nodes, _cached_nodes, image, 
+        output_buffer, accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache
+    ); 
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    false_color_manual_range<<<dim3(w >> 5, h >> 3), dim3(32, 8)>>>(
+        image, output_buffer, reduced_max, color_map_id, accum_cnt, 1.f, max_v
+    );
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    int ordered_int = (*reduced_max >= 0) ? *reduced_max : *reduced_max ^ 0x7FFFFFFF;
+    float max_query = *reinterpret_cast<float*>(&ordered_int);
+    if (max_v == 0) {
+        max_v = std::ceilf(max_query);
+        Serializer::set<int>(serialized_data, 1, max_v);
+    }
+    Serializer::set<float>(serialized_data, 2, max_query);
+    return output_buffer;
+}

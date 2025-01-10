@@ -2,8 +2,8 @@
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
-CPT_GPU_CONST Emitter* c_emitter[9];
-CPT_GPU_CONST BSDF*    c_material[48];
+extern CPT_GPU_CONST Emitter* c_emitter[9];
+extern CPT_GPU_CONST BSDF*    c_material[48];
 
 int main(int argc, char** argv) {
     CUDA_CHECK_RETURN(cudaFree(nullptr));       // initialize CUDA

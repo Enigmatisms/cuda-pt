@@ -12,6 +12,9 @@ static constexpr int SEED_SCALER = 11467;   // 11451 is not a prime, while 11467
 static constexpr int SHFL_THREAD_X = 5;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 2;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
+CPT_GPU_CONST Emitter* c_emitter[9];
+CPT_GPU_CONST BSDF*    c_material[48];
+
 PathTracer::PathTracer(
     const Scene& scene
 ): TracerBase(scene), 
@@ -101,4 +104,20 @@ CPT_CPU void PathTracer::render_online(
         accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
+}
+
+CPT_CPU float* PathTracer::render_raw(
+    const MaxDepthParams& md,
+    bool gamma_corr
+) {
+    size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
+    accum_cnt ++;
+    render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
+        *camera, verts, norms, uvs, obj_info, 
+        emitter_prims, bvh_leaves, nodes, _cached_nodes,
+        image, md, output_buffer, num_prims, num_objs, num_emitter, 
+        accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
+    ); 
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    return output_buffer;
 }

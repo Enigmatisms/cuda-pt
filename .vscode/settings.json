@@ -120,7 +120,9 @@
         "span": "cpp",
         "target": "cpp",
         "__tuple": "cpp",
-        "__target_macros": "cpp"
+        "__target_macros": "cpp",
+        "__mutex_base": "cpp",
+        "__functional_03": "cpp"
     },
     "cmake.cpptools.compilerPath": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\bin\\nvcc.exe"
 }

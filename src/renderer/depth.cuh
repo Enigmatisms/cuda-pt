@@ -46,6 +46,11 @@ public:
     CPT_CPU void param_setter(const std::vector<char>& bytes);
 
     CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const override;
+
+    virtual CPT_CPU float* render_raw(
+        const MaxDepthParams& md,
+        bool gamma_corr = false
+    ) override;
 };
 
 extern CPT_GPU_CONST cudaTextureObject_t COLOR_MAPS[3];

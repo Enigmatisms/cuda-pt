@@ -227,3 +227,23 @@ CPT_CPU std::vector<uint8_t> DepthTracer::get_image_buffer(bool) const {
     }
     return byte_buffer;
 }
+
+CPT_CPU float* DepthTracer::render_raw(
+    const MaxDepthParams& md,
+    bool gamma_corr
+) {
+    min_max->x = ORDERED_INT_MAX;
+    min_max->y = 0;
+    size_t cached_size = std::max(2 * num_cache * sizeof(float4), sizeof(float4));
+    // if we have an illegal memory access here: check whether you have a valid emitter in the xml scene description file.
+    // it might be possible that having no valid emitter triggers an illegal memory access
+    accum_cnt ++;
+    render_depth_kernel<<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
+        *camera, verts, bvh_leaves, nodes, _cached_nodes, image, output_buffer,
+        min_max, accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache
+    ); 
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    false_color_mapping<<<dim3(w >> 5, h >> 3), dim3(32, 8)>>>(image, output_buffer, color_map_id, accum_cnt, *min_max);
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    return output_buffer;
+}

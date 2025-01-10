@@ -81,16 +81,31 @@ public:
         throw std::runtime_error("Not implemented.\n");
     }
 
+    // Render the scene once (1 spp) and output the output_buffer
+    CPT_CPU virtual float* render_raw(
+        const MaxDepthParams& md,
+        bool gamma_corr = false
+    ) {
+        throw std::runtime_error("Not implemented.\n");
+    }
+
     /**
      * @brief initialize graphics resources
      * @param executor the callback function pointer
      */
     void graphics_resc_init(
-        void (*executor) (float*, cudaGraphicsResource_t&, uint32_t&, uint32_t&, int, int)
+        void (*executor) (cudaGraphicsResource_t&, uint32_t&, uint32_t&, int, int)
     ) {
-        executor(output_buffer, pbo_resc, pbo_id, cuda_texture_id, w, h);
+        executor(pbo_resc, pbo_id, cuda_texture_id, w, h);
+        initialize_output_buffer();
     }
 
+    void initialize_output_buffer() {
+        // Allocate accumulation buffer
+        CUDA_CHECK_RETURN(cudaMalloc(&output_buffer, w * h * 4 * sizeof(float)));
+        CUDA_CHECK_RETURN(cudaMemset(output_buffer, 0, w * h * 4 * sizeof(float)));
+    }
+    
     CPT_CPU_INLINE void reset_out_buffer() {
         CUDA_CHECK_RETURN(cudaMemset(image.data(), 0, w * h * sizeof(float4)));    // reset image buffer
         accum_cnt = 0;                                                              // reset accumulation counter

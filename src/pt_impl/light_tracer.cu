@@ -71,3 +71,19 @@ CPT_CPU void LightTracer::render_online(
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
+
+CPT_CPU float* LightTracer::render_raw(
+    const MaxDepthParams& md,
+    bool gamma_corr
+) {
+    size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
+    accum_cnt ++;
+    render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
+        *camera, verts, norms, uvs, obj_info, 
+        emitter_prims, bvh_leaves, nodes, _cached_nodes,
+        image, md, output_buffer, num_prims, num_objs, num_emitter, 
+        accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
+    ); 
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    return output_buffer;
+}

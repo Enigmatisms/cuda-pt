@@ -55,7 +55,6 @@ struct GUIParams {
 
 // initialize GL texture and PBO (pixel buffer object)
 void init_texture_and_pbo(
-    float* output_buffer,
     cudaGraphicsResource_t& pbo_resc, 
     gl_uint& pbo_id, gl_uint& cuda_texture_id,
     int width, int height
