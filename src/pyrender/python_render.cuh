@@ -21,9 +21,9 @@ private:
     std::unique_ptr<Scene> scene;
     std::unique_ptr<TracerBase> rdr;
 public:
-    PythonRenderer(const nb::str& xml_path);
+    PythonRenderer(const nb::str& xml_path, int device_id);
 
-    nb::ndarray<nb::numpy, float> render(
+    nb::ndarray<nb::pytorch, float> render(
         int max_bounce,
         int max_diffuse,
         int max_specular,

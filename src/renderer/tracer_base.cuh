@@ -123,4 +123,8 @@ public:
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         return image.export_cpu(1.f / accum_cnt, gamma_cor);
     }
+
+    CPT_CPU int width()  const noexcept { return this->w; }
+    CPT_CPU int height() const noexcept { return this->h; }
+    CPT_CPU int cnt()    const noexcept { return this->accum_cnt; }
 };

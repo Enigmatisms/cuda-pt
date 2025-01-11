@@ -21,7 +21,7 @@ namespace nb = nanobind;
 
 NB_MODULE(pyrender, m) {
     nb::class_<PythonRenderer>(m, "PythonRenderer")
-        .def(nb::init<const nb::str &>(), CONSTRUCTOR_DOC)
+        .def(nb::init<const nb::str &, int>(), CONSTRUCTOR_DOC)
         .def("render", &PythonRenderer::render,
             nb::arg("max_bounces") = 6,
             nb::arg("max_diffuse") = 4,

@@ -23,8 +23,6 @@ protected:
     cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t nodes;
     int2* min_max;
-
-    float* output_buffer;                // output buffer for images
 public:
     DepthTracer(const Scene& scene);
 

@@ -28,7 +28,6 @@ protected:
     cudaTextureObject_t nodes;
     uint4* _cached_nodes;
 
-    float* output_buffer;                // output buffer for images
     int* emitter_prims;
 public:
     PathTracer(const Scene& scene);

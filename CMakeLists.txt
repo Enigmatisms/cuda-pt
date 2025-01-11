@@ -59,6 +59,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
+include_directories(
+	${CMAKE_CURRENT_LIST_DIR}/src 
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/glfw/include
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyxml2
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyobjloader
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/stb
+)
+
 add_subdirectory(src/ext/tinyxml2)
 add_subdirectory(src/ext/tinyobjloader)
 add_subdirectory(src/ext/imgui)
@@ -75,12 +84,6 @@ else()
 endif()
 
 include_directories(
-	${CMAKE_CURRENT_LIST_DIR}/src 
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/glfw/include
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyxml2
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyobjloader
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/stb
 	${GLEW_INCLUDE_DIRS}
 )
 

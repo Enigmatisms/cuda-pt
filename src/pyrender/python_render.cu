@@ -13,7 +13,22 @@
 #include "renderer/wf_path_tracer.cuh"
 #include "core/scene.cuh"
 
-nb::ndarray<nb::numpy, float> PythonRenderer::render(
+static nb::ndarray<nb::pytorch, float> gpu_ndarray_deep_copy(float* gpu_src_ptr, size_t width, size_t height) {
+    int num_elements = width * height * 4;
+
+    float* gpu_dst_ptr;
+    CUDA_CHECK_RETURN(cudaMalloc((void**)&gpu_dst_ptr, num_elements * sizeof(float)));
+
+    nb::capsule deleter(gpu_dst_ptr, [](void *p) noexcept {
+        delete (float*) p;
+    });
+
+    CUDA_CHECK_RETURN(cudaMemcpy(gpu_dst_ptr, gpu_src_ptr, num_elements * sizeof(float), cudaMemcpyDeviceToDevice));
+
+    return nb::ndarray<nb::pytorch, float>(gpu_dst_ptr, {width, height, 4}, deleter);
+}
+
+nb::ndarray<nb::pytorch, float> PythonRenderer::render(
     int max_bounce,
     int max_diffuse,
     int max_specular,
@@ -22,10 +37,13 @@ nb::ndarray<nb::numpy, float> PythonRenderer::render(
 ) {
     MaxDepthParams md_params(max_bounce, max_diffuse, max_specular, max_trans);
     float* gpu_ptr = rdr->render_raw(md_params, gamma_corr);
-    return {};
+    return gpu_ndarray_deep_copy(gpu_ptr, rdr->width(), rdr->height());
 }
 
-PythonRenderer::PythonRenderer(const nb::str& xml_path) {
+PythonRenderer::PythonRenderer(const nb::str& xml_path, int device_id) {
+    CUDA_CHECK_RETURN(cudaSetDevice(device_id));
+    CUDA_CHECK_RETURN(cudaFree(nullptr));           // initialize CUDA
+
     xyz_host = std::make_unique<ColorSpaceXYZ>();
     std::string path = std::string(xml_path.c_str());
     scene = std::make_unique<Scene>(path);
