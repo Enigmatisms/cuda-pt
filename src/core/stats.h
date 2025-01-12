@@ -11,20 +11,33 @@
 #include <chrono>
 #include <string>
 
+class TicTocLocal {
+private:
+    std::chrono::system_clock::time_point tp;
+public:
+    TicTocLocal(): tp(std::chrono::system_clock::now()) {}
+    void tic() {
+        tp = std::chrono::system_clock::now();
+    }
+    float toc() const noexcept {
+        auto dur = std::chrono::system_clock::now() - tp;
+        auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+        return static_cast<float>(count) / (1e3f);
+    }
+};
+
 class TicToc {
 private:
     std::string name;
     int num;
-    std::chrono::system_clock::time_point tp;
+    TicTocLocal tictoc;
 public:
-    TicToc(std::string name, int n = 1) : name(name), num(n), tp(std::chrono::system_clock::now()) {}
+    TicToc(std::string name, int n = 1) : name(name), num(n) {}
     void tic() {
-        tp = std::chrono::system_clock::now();
+        tictoc.tic();
     }
     ~TicToc() {
-        auto dur = std::chrono::system_clock::now() - tp;
-        auto count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
-        auto elapsed = static_cast<double>(count) / (1e3 * num);
-        printf("`%s` takes time: %.3lf ms per iteration (%d its)\n", name.c_str(), elapsed, num);
+        float elapsed = tictoc.toc();
+        printf("`%s` takes time: %.3lf ms per iteration (%d its)\n", name.c_str(), elapsed / float(num), num);
     }
 };

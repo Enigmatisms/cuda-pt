@@ -15,7 +15,10 @@ Parameters:
 Returns:
     torch.Tensor: A tensor containing the rendered image.
 )doc";
+const char* INFO_DOC       = "Print the basic settings of the PythonRenderer.";
 const char* RELEASE_DOC    = "Release the resource of the PythonRenderer.";
+const char* COUNTER_DOC    = "Return the frames accumulated of the current instance.";
+const char* FRAME_TIME_DOC = "Return the average frame time of the renderer (in milliseconds).";
 
 namespace nb = nanobind;
 
@@ -29,5 +32,8 @@ NB_MODULE(pyrender, m) {
             nb::arg("max_transmit") = 4,
             nb::arg("gamma_corr") = false, RENDER_DOC
         )
-        .def("release", &PythonRenderer::release, RELEASE_DOC);
+        .def("release", &PythonRenderer::release, RELEASE_DOC)
+        .def("counter", &PythonRenderer::counter, COUNTER_DOC)
+        .def("avg_frame_time", &PythonRenderer::avg_frame_time, FRAME_TIME_DOC)
+        .def("info", &PythonRenderer::info, INFO_DOC);
 }
