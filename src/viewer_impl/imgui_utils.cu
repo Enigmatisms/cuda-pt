@@ -515,7 +515,7 @@ void render_settings_interface(
                         params.serialized_update = true;
                     }
                     if (rdr_type == RendererType::BVHCostViz) {
-                        int max_query = std::ceilf(Serializer::get<float>(params.serialized_data, 2));
+                        int max_query = ceilf(Serializer::get<float>(params.serialized_data, 2));
                         ImGui::Text(("Max value: " + std::to_string(max_query)).c_str());
                         
                         int max_value = Serializer::get<int>(params.serialized_data, 1);

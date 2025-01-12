@@ -194,7 +194,7 @@ CPT_CPU void BVHCostVisualizer::render_online(
     int ordered_int = (*reduced_max >= 0) ? *reduced_max : *reduced_max ^ 0x7FFFFFFF;
     float max_query = *reinterpret_cast<float*>(&ordered_int);
     if (max_v == 0) {
-        max_v = std::ceilf(max_query);
+        max_v = ceilf(max_query);
         Serializer::set<int>(serialized_data, 1, max_v);
     }
     Serializer::set<float>(serialized_data, 2, max_query);
@@ -222,7 +222,7 @@ CPT_CPU float* BVHCostVisualizer::render_raw(
     int ordered_int = (*reduced_max >= 0) ? *reduced_max : *reduced_max ^ 0x7FFFFFFF;
     float max_query = *reinterpret_cast<float*>(&ordered_int);
     if (max_v == 0) {
-        max_v = std::ceilf(max_query);
+        max_v = ceilf(max_query);
         Serializer::set<int>(serialized_data, 1, max_v);
     }
     Serializer::set<float>(serialized_data, 2, max_query);

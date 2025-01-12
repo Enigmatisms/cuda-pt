@@ -181,5 +181,5 @@ void Texture<TexTy>::destroy() {
     CUDA_CHECK_RETURN(cudaDestroyTextureObject(_obj));
 }
 
-template Texture<float2>;
-template Texture<float4>;
+template class Texture<float2>;
+template class Texture<float4>;
