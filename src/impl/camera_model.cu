@@ -18,7 +18,7 @@ CPT_CPU float focal2fov(float inv_focal, float half_size) {
     return 360.f * M_1_Pi * atanf(half_size * inv_focal);
 }
 
-CPT_CPU static Vec3 parseVec3(const std::string& str) {
+CPT_CPU Vec3 parseVec3(const std::string& str) {
     std::stringstream ss(str);
     std::vector<float> values;
     float value;

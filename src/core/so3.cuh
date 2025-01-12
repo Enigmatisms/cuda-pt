@@ -195,7 +195,7 @@ public:
     friend CPT_GPU SO3 rotation_between(Vec3&& from, const Vec3& to);
 
     template <typename VecType>
-    friend CPT_GPU SO3 rotation_fixed_anchor(VecType&& to, bool l2w = true);
+    friend CPT_GPU SO3 rotation_fixed_anchor(VecType&& to, bool l2w);
 };
 
 CPT_CPU_GPU_INLINE SO3 skew_symmetry(const Vec3& v) {
@@ -251,6 +251,6 @@ CPT_GPU_INLINE Vec3 delocalize_rotate(VecType&& anchor, const Vec3& to, const Ve
 // Specialized, when the anchor is (0, 0, 1)
 CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
 CPT_GPU_INLINE Vec3 delocalize_rotate(VType1&& to, VType2&& input) {
-    return rotation_fixed_anchor(std::forward<VType1>(to))
+    return rotation_fixed_anchor(std::forward<VType1>(to), true)
           .rotate(std::forward<VType1>(input));
 }   

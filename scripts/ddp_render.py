@@ -1,19 +1,28 @@
 import os
 import sys
+import tqdm
 import torch
+import signal
 import shutil
-import datetime
 import configargparse
 import torch.distributed as dist
-sys.path.append("../build/Release")
+sys.path.append("../build/")
 from pyrender import PythonRenderer
 
 from pathlib import Path
+from datetime import datetime
 from rich.console import Console
-CONSOLE = Console(width = 128)
+
+CONSOLE   = Console(width = 128)
+EXIT_FLAG = False
 
 # TensorBoard
 from torch.utils.tensorboard import SummaryWriter
+
+def signal_handler(signum, frame):
+    global EXIT_FLAG
+    CONSOLE.log(f"[Rank={dist.get_rank()}] Received signal {signum}. Setting EXIT_FLAG to True.")
+    EXIT_FLAG = True
 
 def get_summary_writer(name: str, del_dir:bool):
     logdir = './logs/'
@@ -21,19 +30,18 @@ def get_summary_writer(name: str, del_dir:bool):
     if logdir_exist and del_dir:
         shutil.rmtree(logdir)
     elif not logdir_exist:
-        os.makedirs(logdir_exist)
-    time_stamp = "{0:%Y-%m-%d/%H-%M-%S}-{name}/".format(datetime.now(), name)
+        os.makedirs(logdir)
+    time_stamp = "{0:%Y-%m-%d/%H-%M-%S}-{1}/".format(datetime.now(), name)
     return SummaryWriter(log_dir = logdir + time_stamp)
 
 def parse_args():
     parser = configargparse.ArgumentParser()
+    parser.add_argument("-c", "--config",       is_config_file = True, help='Config file path')
     parser.add_argument("--local_rank",         type = int, default = 0,      help = "Local rank on the node")
     parser.add_argument("--reduce_interval",    type = int, default = 200,    help = "Interval for reduce/average")
     parser.add_argument("--ft_interval",        type = int, default = 64,     help = "Interval for recording the frame time")
     parser.add_argument("--max_iterations",     type = int, default = 100000, help = "Number of total iterations (render steps)")
     parser.add_argument("--device_id_offset",   type = int, default = 0,      help = "If an offset is needed.")
-    parser.add_argument("--log_dir", type=str, default="./tb_logs",
-                        help="Directory to store tensorboard logs")
 
     parser.add_argument("--scene_path",         type = str, required=True,  help="Path to the scene XML file.")
 
@@ -60,7 +68,20 @@ def ddp_main(local_rank, args):
 
     writer = get_summary_writer(scene_name, args.rm_logs)
 
-    for step in range(args.max_iterations):
+    is_main_proc = local_rank == args.device_id_offset
+
+    if is_main_proc:
+        signal.signal(signal.SIGINT, signal_handler)
+
+    pbar = tqdm.tqdm(
+        range(args.max_iterations),
+        disable=(local_rank != args.device_id_offset)
+    )
+    for step in pbar:
+        if EXIT_FLAG:
+            if is_main_proc:
+                CONSOLE.log("Main process exiting due to signaling...")
+            break
         image = renderer.render(
             max_bounces=6,
             max_diffuse=4,
@@ -85,7 +106,7 @@ def ddp_main(local_rank, args):
 
             if local_rank == args.device_id_offset:
                 image_avg = image_avg.clamp(0, 1)
-                image_avg_cpu = image_avg[..., :-1].detach().cpu().permute(2, 1, 0)  # (3, H, W)
+                image_avg_cpu = image_avg[..., :-1].detach().cpu().permute(2, 0, 1)  # (3, H, W)
                 writer.add_image("render/Image", image_avg_cpu, global_step = 0)
         
         if (step + 1) % args.ft_interval == 0:
@@ -105,7 +126,8 @@ def ddp_main(local_rank, args):
                 all_ft = torch.stack(gather_list)
                 avg_ft = all_ft.mean().item()
                 writer.add_scalar("Frame Time/AVG", avg_ft, step+1)
-
+    
+    renderer.release()
     dist.destroy_process_group()
 
 def main():

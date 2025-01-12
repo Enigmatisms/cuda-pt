@@ -19,6 +19,7 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 /g /Od /Zi /MDd")
 	else()
 		message(STATUS "GCC & G++: Building project in DEBUG mode.")
+		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -G -O0 -lineinfo -maxrregcount=40 -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
 	endif ()
@@ -40,6 +41,7 @@ ELSE()
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2")
 	else()
 		message(STATUS "GCC & G++: Building project in RELEASE mode.")
+		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --maxrregcount=40 -lineinfo -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 		if (OPENMP_FOUND)
@@ -147,6 +149,7 @@ add_executable(${EXEC2_NAME}
 target_link_libraries(
 	${EXEC2_NAME} PRIVATE
 	RenderCore
+	${OPENGL_LIBRARIES}
 )
 
 set_target_properties(
