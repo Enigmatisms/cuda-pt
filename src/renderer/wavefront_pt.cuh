@@ -308,7 +308,9 @@ template <bool render_once>
 CPT_KERNEL void radiance_splat(
     PayLoadBufferSoA payloads, DeviceImage image, 
     int stream_id, int x_patch, int y_patch, 
-    int accum_cnt = 0, float* output_buffer = nullptr,
+    int accum_cnt = 0, 
+    float* __restrict__ output_buffer = nullptr,
+    float* __restrict__ var_buffer = nullptr,
     bool gamma_corr = false
 );
 

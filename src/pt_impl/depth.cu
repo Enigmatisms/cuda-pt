@@ -228,7 +228,7 @@ CPT_CPU std::vector<uint8_t> DepthTracer::get_image_buffer(bool) const {
     return byte_buffer;
 }
 
-CPT_CPU float* DepthTracer::render_raw(
+CPT_CPU const float* DepthTracer::render_raw(
     const MaxDepthParams& md,
     bool gamma_corr
 ) {

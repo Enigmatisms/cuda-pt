@@ -8,8 +8,9 @@
                 "${workspaceFolder}/src/*",
                 "${workspaceFolder}/src/ext/**",
                 "${workspaceFolder}/src/ext/imgui",
-                "${workspaceFolder}/src/ext/glew/include",
-                "/usr/local/cuda-11.8/include/"
+                "${workspaceFolder}/src/ext/nanobind",
+                "/usr/local/cuda-*/include/",
+                "~/.conda/envs/ti/include/python3.10/"
             ],
             "defines": ["USE_SOA"],
             "compilerPath": "/usr/bin/gcc",

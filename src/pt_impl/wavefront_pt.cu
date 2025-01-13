@@ -357,8 +357,10 @@ CPT_KERNEL void miss_shader(
 template <bool render_once>
 CPT_KERNEL void radiance_splat(
     PayLoadBufferSoA payloads, DeviceImage image, 
-    int stream_id, int x_patch, int y_patch, 
-    int accum_cnt, float* output_buffer, bool gamma_corr
+    int stream_id, int x_patch, int y_patch, int accum_cnt, 
+    float* __restrict__ output_buffer, 
+    float* __restrict__ var_buffer, 
+    bool gamma_corr
 ) {
     // Nothing here, currently, if we decide not to support env lighting
     const int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -369,6 +371,8 @@ CPT_KERNEL void radiance_splat(
         // image will be the output buffer, there will be double buffering
         int img_x = px + x_patch * PATCH_X, img_y = py + y_patch * PATCH_Y;
         auto local_v = image(img_x, img_y) + L;
+        if (var_buffer)
+            estimate_variance(var_buffer, local_v, L, img_x, img_y, image.w(), accum_cnt);
         image(img_x, img_y) = local_v;
         local_v *= 1.f / float(accum_cnt);
         local_v = gamma_corr ? local_v.gamma_corr() : local_v;
@@ -380,12 +384,16 @@ CPT_KERNEL void radiance_splat(
 
 template CPT_KERNEL void radiance_splat<true>(
     PayLoadBufferSoA payloads, DeviceImage image, 
-    int stream_id, int x_patch, int y_patch,
-    int accum_cnt, float* output_buffer, bool gamma_corr
+    int stream_id, int x_patch, int y_patch, int accum_cnt, 
+    float* __restrict__ output_buffer, 
+    float* __restrict__ var_buffer, 
+    bool gamma_corr
 );
 
 template CPT_KERNEL void radiance_splat<false>(
     PayLoadBufferSoA payloads, DeviceImage image, 
-    int stream_id, int x_patch, int y_patch, 
-    int accum_cnt, float* output_bufferr, bool gamma_corr
+    int stream_id, int x_patch, int y_patch, int accum_cnt, 
+    float* __restrict__ output_buffer, 
+    float* __restrict__ var_buffer, 
+    bool gamma_corr
 );

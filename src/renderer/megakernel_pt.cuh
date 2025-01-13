@@ -51,6 +51,27 @@ CPT_GPU float ray_intersect_bvh(
     float min_dist = MAX_DIST
 );
 
+/**
+ * @brief online variance calculation via Welford's algorithm
+ * @param var_buffer    Biased variance buffer (float)
+ * @param local_v       Accumulation  (time step: accum_cnt - 1)
+ * @param radiance      Current input (time step: accum_cnt)
+ * @param px            Image buffer index (x)
+ * @param py            Image buffer index (y)
+ * @param img_w         Image buffer width
+ * @param accum_cnt     Current time step
+ * @note The variance is the Biased sample variance
+ */
+CPT_GPU void estimate_variance(
+    float* __restrict__ var_buffer,
+    const Vec4& local_v,
+    const Vec4& radiance,
+    int px, 
+    int py,
+    int img_w,
+    int accum_cnt
+);
+
 CPT_GPU Emitter* sample_emitter(Sampler& sampler, float& pdf, int num, int no_sample);
 
 /**
@@ -93,6 +114,7 @@ CPT_KERNEL void render_pt_kernel(
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
+    float* __restrict__ var_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,

@@ -1,3 +1,10 @@
+"""
+Distributed Rendering Via PyTorch DDP
+Use the following command for testing
+```
+torchrun --nproc_per_node=2 ddp_render.py --config ./configs/vader.conf
+```
+"""
 import os
 import sys
 import tqdm
@@ -35,11 +42,21 @@ def get_summary_writer(name: str, del_dir:bool):
     time_stamp = "{0:%Y-%m-%d/%H-%M-%S}-{1}/".format(datetime.now(), name)
     return SummaryWriter(log_dir = logdir + time_stamp)
 
+def reduce_rendered_image(img: torch.Tensor, this_spp: int, device) -> torch.Tensor:
+    spp_tensor  = torch.tensor([float(this_spp)], dtype=torch.float32, device = device)
+    image_sum   = img * spp_tensor
+    dist.all_reduce(image_sum, op=dist.ReduceOp.SUM)
+    dist.all_reduce(spp_tensor, op=dist.ReduceOp.SUM)
+    spp_total = spp_tensor.item()
+    if spp_total > 0:
+        return image_sum / spp_total
+    return image_sum
+
 def parse_args():
     parser = configargparse.ArgumentParser()
     parser.add_argument("-c", "--config",       is_config_file = True, help='Config file path')
     parser.add_argument("--local_rank",         type = int, default = 0,      help = "Local rank on the node")
-    parser.add_argument("--reduce_interval",    type = int, default = 200,    help = "Interval for reduce/average")
+    parser.add_argument("--reduce_interval",    type = int, default = 128,    help = "Interval for reduce/average")
     parser.add_argument("--ft_interval",        type = int, default = 64,     help = "Interval for recording the frame time")
     parser.add_argument("--max_iterations",     type = int, default = 100000, help = "Number of total iterations (render steps)")
     parser.add_argument("--device_id_offset",   type = int, default = 0,      help = "If an offset is needed.")
@@ -47,6 +64,7 @@ def parse_args():
     parser.add_argument("--scene_path",         type = str, required=True,  help="Path to the scene XML file.")
 
     parser.add_argument("--rm_logs",            default = False, action = "store_true", help = "Remove previous logs")
+    parser.add_argument("--record_var",         default = False, action = "store_true", help = "Record variance curves")
     return parser.parse_args()
 
 
@@ -91,24 +109,25 @@ def ddp_main(local_rank, args):
             gamma_corr=True
         )
 
-        # reduce
         if (step + 1) % args.reduce_interval == 0:
-            current_spp = renderer.counter() 
-            spp_tensor  = torch.tensor([float(current_spp)], dtype=torch.float32, device=device)
-            image_sum   = image * spp_tensor
-            dist.all_reduce(image_sum, op=dist.ReduceOp.SUM)
-            dist.all_reduce(spp_tensor, op=dist.ReduceOp.SUM)
-
-            spp_total = spp_tensor.item()
-            if spp_total > 0:
-                image_avg: torch.Tensor = image_sum / spp_total
-            else:
-                image_avg: torch.Tensor = image_sum
+            image_avg: torch.Tensor = reduce_rendered_image(image, renderer.counter(), device)
 
             if local_rank == args.device_id_offset:
                 image_avg = image_avg.clamp(0, 1)
                 image_avg_cpu = image_avg[..., :-1].detach().cpu().permute(2, 0, 1)  # (3, H, W)
                 writer.add_image("render/Image", image_avg_cpu, global_step = 0)
+
+            if args.record_var:
+                var_image: torch.Tensor = renderer.variance()
+                if var_image.numel() > 0:
+                    var_avg: torch.Tensor = reduce_rendered_image(image, renderer.counter(), device)
+
+                    if local_rank == args.device_id_offset:
+                        writer.add_scalar("variance/Average Variance", var_avg.mean(), step+1)
+
+                        var_avg /= max(var_avg.max(), 1e-5)
+                        var_avg  = var_avg[..., :-1].detach().cpu().permute(2, 0, 1)  # (1, H, W)
+                        writer.add_image("variance/Image", var_avg, global_step = 0)
         
         if (step + 1) % args.ft_interval == 0:
             local_ft = renderer.avg_frame_time() 

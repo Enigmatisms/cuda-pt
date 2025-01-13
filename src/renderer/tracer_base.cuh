@@ -22,6 +22,7 @@ protected:
 
     DeviceCamera* camera;
     float* output_buffer;                // output buffer for images
+    float* var_buffer;                   // variance buffer
     
     // IMGUI related 
     int accum_cnt;
@@ -48,6 +49,7 @@ public:
        h(scene.config.height),
        seed_offset(0),
        output_buffer(nullptr),
+       var_buffer(nullptr),
        accum_cnt(0),
        cuda_texture_id(0), pbo_id(0)
     {
@@ -84,28 +86,38 @@ public:
     }
 
     // Render the scene once (1 spp) and output the output_buffer
-    CPT_CPU virtual float* render_raw(
+    CPT_CPU virtual const float* render_raw(
         const MaxDepthParams& md,
         bool gamma_corr = false
     ) {
         throw std::runtime_error("Not implemented.\n");
     }
 
+    CPT_CPU virtual const float* get_variance_buffer() const {
+        return var_buffer;
+    }
+
     /**
      * @brief initialize graphics resources
      * @param executor the callback function pointer
      */
-    void graphics_resc_init(
+    CPT_CPU void graphics_resc_init(
         void (*executor) (cudaGraphicsResource_t&, uint32_t&, uint32_t&, int, int)
     ) {
         executor(pbo_resc, pbo_id, cuda_texture_id, w, h);
         initialize_output_buffer();
     }
 
-    void initialize_output_buffer() {
+    CPT_CPU void initialize_output_buffer() {
         // Allocate accumulation buffer
         CUDA_CHECK_RETURN(cudaMalloc(&output_buffer, w * h * 4 * sizeof(float)));
         CUDA_CHECK_RETURN(cudaMemset(output_buffer, 0, w * h * 4 * sizeof(float)));
+    }
+
+    CPT_CPU void initialize_var_buffer() {
+        // Allocate variance buffer
+        CUDA_CHECK_RETURN(cudaMalloc(&var_buffer, w * h * sizeof(float)));
+        CUDA_CHECK_RETURN(cudaMemset(var_buffer, 0, w * h * sizeof(float)));
     }
     
     CPT_CPU_INLINE void reset_out_buffer() {

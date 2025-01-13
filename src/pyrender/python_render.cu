@@ -13,8 +13,9 @@
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
-static nb::ndarray<nb::pytorch, float> gpu_ndarray_deep_copy(float* gpu_src_ptr, size_t width, size_t height, int dev_id = 0) {
-    int num_elements = width * height * 4;
+template <size_t Ndim>
+static nb::ndarray<nb::pytorch, float> gpu_ndarray_deep_copy(const float* gpu_src_ptr, size_t width, size_t height, int dev_id = 0) {
+    int num_elements = width * height * Ndim;
 
     float* gpu_dst_ptr;
     CUDA_CHECK_RETURN(cudaMalloc((void**)&gpu_dst_ptr, num_elements * sizeof(float)));
@@ -24,7 +25,7 @@ static nb::ndarray<nb::pytorch, float> gpu_ndarray_deep_copy(float* gpu_src_ptr,
     });
 
     CUDA_CHECK_RETURN(cudaMemcpy(gpu_dst_ptr, gpu_src_ptr, num_elements * sizeof(float), cudaMemcpyDeviceToDevice));
-    return nb::ndarray<nb::pytorch, float>(gpu_dst_ptr, {height, width, 4}, deleter, {}, nb::dtype<float>(), nb::device::cuda::value, dev_id);
+    return nb::ndarray<nb::pytorch, float>(gpu_dst_ptr, {height, width, Ndim}, deleter, {}, nb::dtype<float>(), nb::device::cuda::value, dev_id);
 }
 
 nb::ndarray<nb::pytorch, float> PythonRenderer::render(
@@ -36,9 +37,17 @@ nb::ndarray<nb::pytorch, float> PythonRenderer::render(
 ) {
     MaxDepthParams md_params(max_diffuse, max_specular, max_trans, max_bounce);
     TicTocLocal timer;
-    float* gpu_ptr = rdr->render_raw(md_params, gamma_corr);
+    const float* gpu_ptr = rdr->render_raw(md_params, gamma_corr);
     ftimer->record(timer.toc());
-    return gpu_ndarray_deep_copy(gpu_ptr, rdr->width(), rdr->height(), device_id);
+    return gpu_ndarray_deep_copy<4>(gpu_ptr, rdr->width(), rdr->height(), device_id);
+}
+
+nb::ndarray<nb::pytorch, float> PythonRenderer::variance() {
+    const float* var_buffer = rdr->get_variance_buffer();
+    if (var_buffer) {
+        return gpu_ndarray_deep_copy<1>(var_buffer, rdr->width(), rdr->height(), device_id);
+    }
+    return {};
 }
 
 PythonRenderer::PythonRenderer(const nb::str& xml_path, int _device_id, int seed_offset): valid(true), device_id(_device_id) {

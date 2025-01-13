@@ -65,6 +65,8 @@ public:
         bool gamma_corr
     );
 
+    nb::ndarray<nb::pytorch, float> variance();
+
     // don't know if this is useful
     void release(); 
     void info() const;

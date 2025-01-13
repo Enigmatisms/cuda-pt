@@ -104,7 +104,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
         // step8: accumulating radiance to the rgb buffer
         radiance_splat<true><<<GRID, BLOCK, 0, cur_stream>>>(
-            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer, gamma_corr
+            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer, var_buffer, gamma_corr
         );
     }
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
@@ -215,7 +215,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
     return image.export_cpu(1.f / num_iter, gamma_correction);
 }
 
-CPT_CPU float* WavefrontPathTracer::render_raw(
+CPT_CPU const float* WavefrontPathTracer::render_raw(
     const MaxDepthParams& md,
     bool gamma_corr
 ) {
@@ -293,7 +293,7 @@ CPT_CPU float* WavefrontPathTracer::render_raw(
 
         // step8: accumulating radiance to the rgb buffer
         radiance_splat<true><<<GRID, BLOCK, 0, cur_stream>>>(
-            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer, gamma_corr
+            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer, var_buffer, gamma_corr
         );
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());

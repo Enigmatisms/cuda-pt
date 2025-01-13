@@ -9,6 +9,25 @@
 static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
 
+CPT_GPU void estimate_variance(
+    float* __restrict__ var_buffer,
+    const Vec4& local_v,
+    const Vec4& radiance,
+    int px, 
+    int py,
+    int img_w,
+    int accum_cnt
+) {
+    float cur_val  = (radiance.x() + radiance.y() + radiance.z()) * 0.33333333f,
+            old_mean = (local_v.x() + local_v.y() + local_v.z()) * 0.33333333f,
+            new_mean = old_mean + cur_val, rcp_cnt = 1.f / float(accum_cnt);
+    old_mean  = accum_cnt > 1 ? old_mean / float(accum_cnt - 1) : 0;
+    new_mean *= rcp_cnt;
+    int index = px + py * img_w;
+    // this is biased sample variance
+    var_buffer[index] = (float(accum_cnt - 1) * var_buffer[index] + (cur_val - old_mean) * (cur_val - new_mean)) * rcp_cnt;
+}
+
 // occlusion test is any hit shader
 CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,
@@ -164,6 +183,7 @@ CPT_KERNEL void render_pt_kernel(
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
+    float* __restrict__ var_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
@@ -284,8 +304,10 @@ CPT_KERNEL void render_pt_kernel(
     }
     if constexpr (render_once) {
         // image will be the output buffer, there will be double buffering
-        auto local_v = image(px, py) + radiance;
-        image(px, py) = local_v;
+        auto local_v = image(px, py);
+        if (var_buffer)
+            estimate_variance(var_buffer, local_v, radiance, px, py, image.w(), accum_cnt);
+        image(px, py) = local_v + radiance;
         local_v *= 1.f / float(accum_cnt);
         local_v = gamma_corr ? local_v.gamma_corr() : local_v;
         FLOAT4(output_buffer[(px + py * image.w()) << 2]) = float4(local_v); 
@@ -307,6 +329,7 @@ template CPT_KERNEL void render_pt_kernel<true>(
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
+    float* __restrict__ var_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,
@@ -331,6 +354,7 @@ template CPT_KERNEL void render_pt_kernel<false>(
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
+    float* __restrict__ var_buffer,
     int num_prims,
     int num_objects,
     int num_emitter,

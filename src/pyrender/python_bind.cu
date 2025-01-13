@@ -29,6 +29,7 @@ const char* INFO_DOC       = "Print the basic settings of the PythonRenderer.";
 const char* RELEASE_DOC    = "Release the resource of the PythonRenderer.";
 const char* COUNTER_DOC    = "Return the frames accumulated of the current instance.";
 const char* FRAME_TIME_DOC = "Return the average frame time of the renderer (in milliseconds).";
+const char* VARIANCE_DOC   = "Return the variance estimation buffer (single channel float32).";
 
 namespace nb = nanobind;
 
@@ -44,6 +45,7 @@ NB_MODULE(pyrender, m) {
         )
         .def("release", &PythonRenderer::release, RELEASE_DOC)
         .def("counter", &PythonRenderer::counter, COUNTER_DOC)
+        .def("variance", &PythonRenderer::variance, VARIANCE_DOC)
         .def("avg_frame_time", &PythonRenderer::avg_frame_time, FRAME_TIME_DOC)
         .def("info", &PythonRenderer::info, INFO_DOC);
 }

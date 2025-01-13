@@ -201,7 +201,7 @@ CPT_CPU void BVHCostVisualizer::render_online(
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
 
-CPT_CPU float* BVHCostVisualizer::render_raw(
+CPT_CPU const float* BVHCostVisualizer::render_raw(
     const MaxDepthParams& md,
     bool gamma_corr
 ) {
