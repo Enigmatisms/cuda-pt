@@ -15,6 +15,7 @@ from rich.console import Console
 
 CONSOLE   = Console(width = 128)
 EXIT_FLAG = False
+OFFSET_SCALER = 4201
 
 # TensorBoard
 from torch.utils.tensorboard import SummaryWriter
@@ -63,7 +64,7 @@ def ddp_main(local_rank, args):
 
     world_size = dist.get_world_size()
     device = torch.device(f"cuda:{local_rank}")
-    renderer = PythonRenderer(args.scene_path, local_rank)
+    renderer = PythonRenderer(args.scene_path, local_rank, local_rank * OFFSET_SCALER)
     scene_name = Path(args.scene_path).stem
 
     writer = get_summary_writer(scene_name, args.rm_logs)
@@ -83,11 +84,11 @@ def ddp_main(local_rank, args):
                 CONSOLE.log("Main process exiting due to signaling...")
             break
         image = renderer.render(
-            max_bounces=6,
+            max_bounces=16,
             max_diffuse=4,
-            max_specular=2,
-            max_transmit=4,
-            gamma_corr=False
+            max_specular=16,
+            max_transmit=16,
+            gamma_corr=True
         )
 
         # reduce

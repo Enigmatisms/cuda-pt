@@ -18,6 +18,7 @@ protected:
     int num_prims;
     int w;
     int h;
+    int seed_offset;
 
     DeviceCamera* camera;
     float* output_buffer;                // output buffer for images
@@ -45,6 +46,7 @@ public:
        num_prims(scene.num_prims), 
        w(scene.config.width), 
        h(scene.config.height),
+       seed_offset(0),
        output_buffer(nullptr),
        accum_cnt(0),
        cuda_texture_id(0), pbo_id(0)
@@ -127,4 +129,5 @@ public:
     CPT_CPU int width()  const noexcept { return this->w; }
     CPT_CPU int height() const noexcept { return this->h; }
     CPT_CPU int cnt()    const noexcept { return this->accum_cnt; }
+    CPT_CPU void set_seed_offset(int val) { this->seed_offset = val; }
 };

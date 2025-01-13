@@ -1,7 +1,17 @@
 #include <nanobind/nanobind.h>
 #include "./python_render.cuh"
 
-const char* CONSTRUCTOR_DOC = "Initialize the renderer with the given scene path to an XML scene file.";
+const char* CONSTRUCTOR_DOC = 
+R"doc(
+Initialize the renderer with the given scene path to an XML scene file.
+
+Parameters:
+    scene_path (str): Path to the XML scene file.
+    device_id (int): CUDA device ID.
+    seed_offset (int): For different process, different seed offset should be used
+        so that the rendering output is different
+)doc";
+
 const char* RENDER_DOC      = \
 R"doc(
 Render a frame using the specified path tracer settings.
@@ -24,7 +34,7 @@ namespace nb = nanobind;
 
 NB_MODULE(pyrender, m) {
     nb::class_<PythonRenderer>(m, "PythonRenderer")
-        .def(nb::init<const nb::str &, int>(), CONSTRUCTOR_DOC)
+        .def(nb::init<const nb::str &, int, int>(), CONSTRUCTOR_DOC)
         .def("render", &PythonRenderer::render,
             nb::arg("max_bounces") = 6,
             nb::arg("max_diffuse") = 4,

@@ -78,7 +78,7 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(
             *camera, verts, norms, uvs, obj_info, 
             emitter_prims, bvh_leaves, nodes, _cached_nodes,
             image, md, output_buffer, num_prims, num_objs, num_emitter, 
-            i * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id
+            i * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, envmap_id
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
@@ -101,7 +101,7 @@ CPT_CPU void PathTracer::render_online(
         *camera, verts, norms, uvs, obj_info, 
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, md, output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
+        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
@@ -116,7 +116,7 @@ CPT_CPU float* PathTracer::render_raw(
         *camera, verts, norms, uvs, obj_info, 
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, md, output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
+        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return output_buffer;

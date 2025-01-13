@@ -50,7 +50,7 @@ private:
 public:
     int device_id;
 public:
-    PythonRenderer(const nb::str& xml_path, int _device_id);
+    PythonRenderer(const nb::str& xml_path, int _device_id, int seed_offset);
     ~PythonRenderer() {
         if (valid) {
             release();

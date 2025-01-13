@@ -24,7 +24,7 @@ static nb::ndarray<nb::pytorch, float> gpu_ndarray_deep_copy(float* gpu_src_ptr,
     });
 
     CUDA_CHECK_RETURN(cudaMemcpy(gpu_dst_ptr, gpu_src_ptr, num_elements * sizeof(float), cudaMemcpyDeviceToDevice));
-    return nb::ndarray<nb::pytorch, float>(gpu_dst_ptr, {width, height, 4}, deleter, {}, nb::dtype<float>(), nb::device::cuda::value, dev_id);
+    return nb::ndarray<nb::pytorch, float>(gpu_dst_ptr, {height, width, 4}, deleter, {}, nb::dtype<float>(), nb::device::cuda::value, dev_id);
 }
 
 nb::ndarray<nb::pytorch, float> PythonRenderer::render(
@@ -34,14 +34,14 @@ nb::ndarray<nb::pytorch, float> PythonRenderer::render(
     int max_trans,
     bool gamma_corr
 ) {
-    MaxDepthParams md_params(max_bounce, max_diffuse, max_specular, max_trans);
+    MaxDepthParams md_params(max_diffuse, max_specular, max_trans, max_bounce);
     TicTocLocal timer;
     float* gpu_ptr = rdr->render_raw(md_params, gamma_corr);
     ftimer->record(timer.toc());
     return gpu_ndarray_deep_copy(gpu_ptr, rdr->width(), rdr->height(), device_id);
 }
 
-PythonRenderer::PythonRenderer(const nb::str& xml_path, int _device_id): valid(true), device_id(_device_id) {
+PythonRenderer::PythonRenderer(const nb::str& xml_path, int _device_id, int seed_offset): valid(true), device_id(_device_id) {
     CUDA_CHECK_RETURN(cudaSetDevice(_device_id));
     CUDA_CHECK_RETURN(cudaFree(nullptr));           // initialize CUDA
 
@@ -94,6 +94,7 @@ PythonRenderer::PythonRenderer(const nb::str& xml_path, int _device_id): valid(t
         }
     }
     scene->free_resources();
+    rdr->set_seed_offset(seed_offset);
     rdr->update_camera(scene->cam);
     rdr->initialize_output_buffer();
 }

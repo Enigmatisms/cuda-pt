@@ -27,7 +27,7 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
                 *camera, verts, norms, uvs, obj_info, emitter_prims,
                 bvh_leaves, nodes, _cached_nodes, image, md,
                 output_buffer, num_prims, num_objs, num_emitter, 
-                accum_cnt * SEED_SCALER, num_nodes, accum_cnt
+                accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
@@ -35,7 +35,7 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
             *camera, verts, norms, uvs, obj_info,
             emitter_prims, bvh_leaves, nodes, _cached_nodes, 
             image, md, nullptr, num_prims, num_objs, num_emitter, 
-            i * SEED_SCALER, num_nodes, spec_constraint
+            i * SEED_SCALER + seed_offset, num_nodes, spec_constraint
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
@@ -58,7 +58,7 @@ CPT_CPU void LightTracer::render_online(
             *camera, verts, norms, uvs, obj_info, emitter_prims,
             bvh_leaves, nodes, _cached_nodes, image, md,
             output_buffer, num_prims, num_objs, num_emitter, 
-            accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, false
+            accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, false
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
@@ -66,7 +66,7 @@ CPT_CPU void LightTracer::render_online(
         *camera, verts, norms, uvs, obj_info, emitter_prims,
         bvh_leaves, nodes, _cached_nodes, image, md, 
         output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER, num_nodes, accum_cnt, 
+        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, 
         num_cache, spec_constraint, caustic_scaling, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
@@ -82,7 +82,7 @@ CPT_CPU float* LightTracer::render_raw(
         *camera, verts, norms, uvs, obj_info, 
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, md, output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
+        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return output_buffer;
