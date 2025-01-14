@@ -13,3 +13,6 @@
 [submodule "src/ext/stb"]
 	path = src/ext/stb
 	url = git@github.com:Enigmatisms/stb.git
+[submodule "src/ext/nanobind"]
+	path = src/ext/nanobind
+	url = git@github.com:wjakob/nanobind.git

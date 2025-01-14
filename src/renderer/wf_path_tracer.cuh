@@ -69,4 +69,9 @@ public:
         const MaxDepthParams& md,
         bool gamma_corr = false
     ) override;
+
+    CPT_CPU virtual const float* render_raw(
+        const MaxDepthParams& md,
+        bool gamma_corr = false
+    ) override;
 };

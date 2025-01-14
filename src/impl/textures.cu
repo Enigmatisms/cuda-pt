@@ -133,8 +133,8 @@ static cudaTextureObject_t createTexture2D(const TexType* host_data, int width, 
 
     cudaTextureDesc tex_desc;
     memset(&tex_desc, 0, sizeof(tex_desc));
-    tex_desc.addressMode[0] = cudaAddressModeClamp;      
-    tex_desc.addressMode[1] = cudaAddressModeClamp;      
+    tex_desc.addressMode[0] = cudaAddressModeWrap;      
+    tex_desc.addressMode[1] = cudaAddressModeWrap;      
     tex_desc.filterMode = cudaFilterModeLinear;           
     tex_desc.readMode = cudaReadModeElementType;         
     tex_desc.normalizedCoords = 1;                       
@@ -181,5 +181,5 @@ void Texture<TexTy>::destroy() {
     CUDA_CHECK_RETURN(cudaDestroyTextureObject(_obj));
 }
 
-template Texture<float2>;
-template Texture<float4>;
+template class Texture<float2>;
+template class Texture<float4>;

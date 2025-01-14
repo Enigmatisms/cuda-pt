@@ -19,6 +19,7 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 /g /Od /Zi /MDd")
 	else()
 		message(STATUS "GCC & G++: Building project in DEBUG mode.")
+		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -G -O0 -lineinfo -maxrregcount=40 -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
 	endif ()
@@ -40,6 +41,7 @@ ELSE()
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2")
 	else()
 		message(STATUS "GCC & G++: Building project in RELEASE mode.")
+		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --maxrregcount=40 -lineinfo -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 		if (OPENMP_FOUND)
@@ -61,14 +63,18 @@ set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 include_directories(
 	${CMAKE_CURRENT_LIST_DIR}/src 
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/glfw/include
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyxml2
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyobjloader
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/stb
 )
 
 add_subdirectory(src/ext/tinyxml2)
 add_subdirectory(src/ext/tinyobjloader)
 add_subdirectory(src/ext/imgui)
 add_subdirectory(src/ext/glfw)
+add_subdirectory(src/ext/nanobind)
 
 find_package(OpenGL REQUIRED)
 if (MSVC)
@@ -79,20 +85,48 @@ else()
 	find_package(GLEW REQUIRED)
 endif()
 
+include_directories(
+	${GLEW_INCLUDE_DIRS}
+)
+
 aux_source_directory(src/impl CPT_IMPL_SRC)
 aux_source_directory(src/pt_impl CPT_PT_IMPL_SRC)
 aux_source_directory(src/viewer_impl CPT_VIEWER_IMPL_SRC)
 
+set(RENDER_CORE_SRC
+    ${CPT_IMPL_SRC}
+    ${CPT_PT_IMPL_SRC}
+)
+
+add_library(RenderCore STATIC
+    ${RENDER_CORE_SRC}
+)
+
+set_target_properties(RenderCore PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_ARCHITECTURES native
+)
+target_compile_options(RenderCore PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
+)
+
+target_link_libraries(RenderCore PRIVATE
+    tinyxml2
+    tinyobjloader
+    GLEW::glew
+    glfw
+    imgui
+    ${OPENGL_gl_LIBRARY}
+)
+
 set(EXEC1_NAME "pt")
 add_executable(${EXEC1_NAME}
 	app/pt_renderer.cu
-	${CPT_IMPL_SRC}
-	${CPT_PT_IMPL_SRC}
 )
 
 target_link_libraries(
 	${EXEC1_NAME} PRIVATE
-	tinyxml2 tinyobjloader
+	RenderCore
 )
 
 set_target_properties(
@@ -110,17 +144,12 @@ set(EXEC2_NAME "cpt")
 add_executable(${EXEC2_NAME}
 	app/viewer.cu
 	${CPT_VIEWER_IMPL_SRC}
-	${CPT_IMPL_SRC}
-	${CPT_PT_IMPL_SRC}
 )
 
 target_link_libraries(
 	${EXEC2_NAME} PRIVATE
-	tinyxml2 tinyobjloader
-	GLEW::glew
-	glfw
-	imgui
-	${OPENGL_gl_LIBRARY}
+	RenderCore
+	${OPENGL_LIBRARIES}
 )
 
 set_target_properties(
@@ -133,6 +162,69 @@ target_compile_options(
 	${EXEC2_NAME} PRIVATE
 	$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
 )
+
+# ============================ Python Bindings ============================
+find_package(Python REQUIRED COMPONENTS Development)
+find_package(CUDAToolkit REQUIRED)
+if (Python_FOUND AND CUDAToolkit_FOUND)
+	message(STATUS "Python found: Version: ${Python_VERSION}")
+	message(STATUS "CUDAToolkit found: Version: ${CUDAToolkit_VERSION}")
+	message(STATUS "Building remote distributed rendering code and nanobind python binds...")
+	enable_language(CUDA)
+
+	set(NANOBIND_NDARRAY_SRC_FILES
+		src/ext/nanobind/src/nb_func.cpp
+		src/ext/nanobind/src/common.cpp
+		src/ext/nanobind/src/error.cpp
+		src/ext/nanobind/src/nb_internals.cpp
+		src/ext/nanobind/src/nb_type.cpp
+		src/ext/nanobind/src/nb_static_property.cpp
+		src/ext/nanobind/src/implicit.cpp
+		src/ext/nanobind/src/nb_ndarray.cpp
+	)
+
+	add_library(pyrender MODULE
+		src/pyrender/python_render.cu
+		src/pyrender/python_bind.cu
+		${NANOBIND_NDARRAY_SRC_FILES}
+	)
+
+	target_include_directories(pyrender PRIVATE
+		${CMAKE_CURRENT_LIST_DIR}/src 
+		${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/include
+		${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/ext/robin_map/include/
+		${Python_INCLUDE_DIRS}
+	)
+
+	target_link_libraries(pyrender PRIVATE
+		${Python_LIBRARIES}
+		RenderCore
+	)
+
+	if (MSVC)
+		set(MODULE_SUFFIX ".pyd")
+	else()
+		set(MODULE_SUFFIX ".so")
+	endif()
+
+	set_target_properties(pyrender PROPERTIES
+		PREFIX ""
+		SUFFIX ${MODULE_SUFFIX}
+		CUDA_SEPARABLE_COMPILATION ON
+		CUDA_ARCHITECTURES native
+	)
+
+	target_compile_options(pyrender PRIVATE
+		$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
+	)
+else()
+	if (Python_FOUND)
+		message(WARNING "Python Package not found. Without Python Package, remote distributed rendering can not be compiled.")
+	else()
+		message(WARNING "CUDAToolkit not found. Without CUDAToolkit, remote distributed rendering can not be compiled.")
+	endif()
+endif()
+
 
 # CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate
 # https://developer.nvidia.com/blog/separate-compilation-linking-cuda-device-code/

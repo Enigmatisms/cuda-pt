@@ -23,8 +23,6 @@ protected:
     cudaTextureObject_t bvh_leaves;
     cudaTextureObject_t nodes;
     int2* min_max;
-
-    float* output_buffer;                // output buffer for images
 public:
     DepthTracer(const Scene& scene);
 
@@ -46,6 +44,16 @@ public:
     CPT_CPU void param_setter(const std::vector<char>& bytes);
 
     CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const override;
+
+    virtual CPT_CPU const float* render_raw(
+        const MaxDepthParams& md,
+        bool gamma_corr = false
+    ) override;
+
+    // depth tracer does not support variance buffer (variance can not be estimated online)
+    CPT_CPU const float* get_variance_buffer() const override {
+        return nullptr;
+    }
 };
 
 extern CPT_GPU_CONST cudaTextureObject_t COLOR_MAPS[3];

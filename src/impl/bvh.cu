@@ -118,7 +118,7 @@ int recursive_bvh_SAH(BVHNode* const cur_node, std::vector<BVHInfo>& bvh_infos, 
         // Step 2: binning the space
         std::array<AxisBins, num_bins> idx_bins;
         for (int i = base; i < max_pos; i++) {
-            int index = std::min((int)std::floorf((bvh_infos[i].centroid[max_axis] - min_range) / interval), num_bins - 1);
+            int index = std::min((int)floorf((bvh_infos[i].centroid[max_axis] - min_range) / interval), num_bins - 1);
             idx_bins[index].push(bvh_infos[i]);
         }
 

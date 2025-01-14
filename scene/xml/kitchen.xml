@@ -41,7 +41,7 @@
 		<film type="film">
 			<integer name="width" value="960"/>
 			<!-- Benchmark: 960 * 540, FOV: 48 -->
-			<integer name="height" value="540"/>		
+			<integer name="height" value="640"/>		
 			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>
@@ -92,6 +92,7 @@
 		<float name="trans_scaler" value="1"/>
 		<float name="thickness" value="1"/>
 		<float name="ior" value="1.2"/>
+		<bool name="penetrable" value="true"/>
 	</brdf>
 
     <brdf type="plastic" id="green-apples">
@@ -239,8 +240,8 @@
 	</brdf>
 
 	<brdf type="det-refraction" id="glass">
-		<rgb name="k_d" value="1.6"/>
-		<rgb name="k_s" value="0.98, 0.98, 0.98"/>
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.95, 0.95, 0.95"/>
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
@@ -325,7 +326,7 @@
 
     <emitter type="area" id="lamp">
 		<rgb name="emission" value="#ffee80"/>
-		<rgb name="scaler" value="200.0"/>
+		<rgb name="scaler" value="2.0"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -338,6 +339,12 @@
     <emitter type="area" id="area2">
 		<rgb name="emission" value="#ffc330"/>
 		<rgb name="scaler" value="6.0"/>
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="sign-emitter">
+		<rgb name="emission" value="#ffffff"/>
+		<rgb name="scaler" value="0.7"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -436,6 +443,11 @@
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/glass.obj"/>
         <ref type="material" id="glass"/>
+    </shape>
+	<shape type="obj">
+        <string name="filename" value="../meshes/kitchen/glow-signs.obj"/>
+        <ref type="material" id="white"/>
+        <ref type="emitter" id="sign-emitter"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/green-apple-bars.obj"/>

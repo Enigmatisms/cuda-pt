@@ -32,7 +32,7 @@ public:
         const Vec3& in,
         const Vec4& ks,
         const float eta,
-        bool is_radiance = true
+        bool is_radiance = false
     ) {
         float dot_normal = in.dot(normal);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
@@ -57,7 +57,7 @@ public:
         Sampler& sp,
         float& pdf,
         BSDFFlag& samp_lobe, 
-        bool is_radiance = true
+        bool is_radiance = false
     ) {
         float dot_normal = indir.dot(normal);
         // at least according to pbrt-v3, ni / nr is computed as the following (using shading normal)
@@ -79,7 +79,7 @@ public:
         return ret_dir;
     }
 
-    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = true) const override {
+    CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = false) const override {
         const Vec3 normal = c_textures.eval_normal(it, index);
         const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
         const Vec4 ks = c_textures.eval(spec_tex, it.uv_coord, k_s);
@@ -89,7 +89,7 @@ public:
 
     CPT_GPU Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = false
     ) const override {
         const Vec3 normal = c_textures.eval_normal(it, index);
         const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];

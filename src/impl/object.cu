@@ -12,6 +12,7 @@
 
 CPT_CPU void ObjInfo::setup(const std::array<std::vector<Vec3>, 3>& prims, bool is_polygon) {
     int ub = prim_offset + prim_num;
+    inv_area = 0;
     for (int i = prim_offset; i < ub; i++) {
         if (is_polygon) {
             _aabb.mini.minimized(prims[0][i]);

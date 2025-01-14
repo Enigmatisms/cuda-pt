@@ -28,7 +28,6 @@ protected:
     cudaTextureObject_t nodes;
     uint4* _cached_nodes;
 
-    float* output_buffer;                // output buffer for images
     int* emitter_prims;
 public:
     PathTracer(const Scene& scene);
@@ -42,6 +41,11 @@ public:
     ) override;
 
     virtual CPT_CPU void render_online(
+        const MaxDepthParams& md,
+        bool gamma_corr = false
+    ) override;
+
+    CPT_CPU virtual const float* render_raw(
         const MaxDepthParams& md,
         bool gamma_corr = false
     ) override;

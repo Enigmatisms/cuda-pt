@@ -100,7 +100,6 @@ static void setup_imgui_style( bool dark_style, float alpha_  ) {
 
 // initialize GL texture and PBO (pixel buffer object)
 void init_texture_and_pbo(
-    float* output_buffer,
     cudaGraphicsResource_t& pbo_resc, 
     gl_uint& pbo_id, gl_uint& cuda_texture_id,
     int width, int height
@@ -120,10 +119,6 @@ void init_texture_and_pbo(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
-
-    // Allocate accumulation buffer
-    CUDA_CHECK_RETURN(cudaMalloc(&output_buffer, width * height * 4 * sizeof(float)));
-    CUDA_CHECK_RETURN(cudaMemset(output_buffer, 0, width * height * 4 * sizeof(float)));
 }
 
 void sub_window_render(std::string sub_win_name, gl_uint cuda_texture_id, int width, int height) {
@@ -199,7 +194,7 @@ std::unique_ptr<GLFWwindow, GLFWWindowDeleter> create_window(int width, int heig
     // initialize GLFW
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
-        return false;
+        return nullptr;
     }
 
     // OPENGL window
@@ -405,7 +400,9 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
             continue;
         }
         if (ImGui::CollapsingHeader(header_name.c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
-            bool local_update = draw_selection_menu(BSDF_NAMES, "##" + info.name + "-mat", "BSDF", reinterpret_cast<uint8_t&>(info.type));
+            bool local_update = draw_selection_menu<BSDFType::NumSupportedBSDF>(
+                BSDF_NAMES, "##" + info.name + "-mat", "BSDF", reinterpret_cast<uint8_t&>(info.type)
+            );
             info.bsdf_changed = local_update;
             if (info.bsdf_changed) {
                 updated = true;
@@ -416,7 +413,7 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
             }
             if (info.type == BSDFType::GGXConductor) {
                 local_update |= draw_color_picker(info.name + "-kd", "Albedo", &info.bsdf.k_g.x());
-                local_update |= draw_selection_menu(METAL_NAMES, "##" + info.name + "-type", "Metal Type", info.bsdf.mtype);
+                local_update |= draw_selection_menu<MetalType::NumMetalType>(METAL_NAMES, "##" + info.name + "-type", "Metal Type", info.bsdf.mtype);
                 local_update |= draw_coupled_slider_input(info.name + "rx", "roughness X", info.bsdf.roughness_x());
                 local_update |= draw_coupled_slider_input(info.name + "ry", "roughness Y", info.bsdf.roughness_y());
             } else if (info.type == BSDFType::Plastic || info.type == BSDFType::PlasticForward) {
@@ -440,7 +437,9 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
                 local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
             } else if (info.type == BSDFType::Dispersion) {
                 local_update |= draw_color_picker(info.name + "-ks", "Specular", &info.bsdf.k_s.x());
-                local_update |= draw_selection_menu(DISPERSION_NAMES, "##" + info.name + "-type", "Dispersion Type", info.bsdf.mtype);
+                local_update |= draw_selection_menu<DispersionType::NumDispersionType>(
+                    DISPERSION_NAMES, "##" + info.name + "-type", "Dispersion Type", info.bsdf.mtype
+                );
             }
             info.updated = local_update;
             updated |= local_update;
@@ -513,14 +512,14 @@ void render_settings_interface(
                 if (rdr_type == RendererType::DepthTracing || rdr_type == RendererType::BVHCostViz) {
                     uint8_t update_v = Serializer::get<int>(params.serialized_data, 0) & 0x7f;
                     if (ImGui::Checkbox("Log2 Transform", &params.log2_output) ||
-                        draw_selection_menu(COLOR_MAP_NAMES, "##color-map", "Color Map", update_v)
+                        draw_selection_menu<4>(COLOR_MAP_NAMES, "##color-map", "Color Map", update_v)
                     ) {
                         int data = params.log2_output ? (update_v | 0x80) : update_v;
                         Serializer::set<int>(params.serialized_data, 0, data);
                         params.serialized_update = true;
                     }
                     if (rdr_type == RendererType::BVHCostViz) {
-                        int max_query = std::ceilf(Serializer::get<float>(params.serialized_data, 2));
+                        int max_query = ceilf(Serializer::get<float>(params.serialized_data, 2));
                         ImGui::Text(("Max value: " + std::to_string(max_query)).c_str());
                         
                         int max_value = Serializer::get<int>(params.serialized_data, 1);
