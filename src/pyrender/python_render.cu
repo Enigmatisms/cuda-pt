@@ -28,16 +28,9 @@ static nb::ndarray<nb::pytorch, float> gpu_ndarray_deep_copy(const float* gpu_sr
     return nb::ndarray<nb::pytorch, float>(gpu_dst_ptr, {height, width, Ndim}, deleter, {}, nb::dtype<float>(), nb::device::cuda::value, dev_id);
 }
 
-nb::ndarray<nb::pytorch, float> PythonRenderer::render(
-    int max_bounce,
-    int max_diffuse,
-    int max_specular,
-    int max_trans,
-    bool gamma_corr
-) {
-    MaxDepthParams md_params(max_diffuse, max_specular, max_trans, max_bounce);
+nb::ndarray<nb::pytorch, float> PythonRenderer::render() {
     TicTocLocal timer;
-    const float* gpu_ptr = rdr->render_raw(md_params, gamma_corr);
+    const float* gpu_ptr = rdr->render_raw(scene->config.md, scene->config.gamma_correction);
     ftimer->record(timer.toc());
     return gpu_ndarray_deep_copy<4>(gpu_ptr, rdr->width(), rdr->height(), device_id);
 }
@@ -67,11 +60,13 @@ PythonRenderer::PythonRenderer(const nb::str& xml_path, int _device_id, int seed
     switch (scene->rdr_type) {
         case RendererType::MegaKernelPT: {
             rdr = std::make_unique<PathTracer>(*scene); 
+            rdr->initialize_var_buffer();
             std::cout << "\tMegakernel Path Tracing.\n";
             break;
         }
         case RendererType::WavefrontPT: {
             rdr = std::make_unique<WavefrontPathTracer>(*scene);
+            rdr->initialize_var_buffer();
             std::cout << "\tWavefront Path Tracing..\n";
             break;
         }

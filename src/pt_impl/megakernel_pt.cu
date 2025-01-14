@@ -19,8 +19,8 @@ CPT_GPU void estimate_variance(
     int accum_cnt
 ) {
     float cur_val  = (radiance.x() + radiance.y() + radiance.z()) * 0.33333333f,
-            old_mean = (local_v.x() + local_v.y() + local_v.z()) * 0.33333333f,
-            new_mean = old_mean + cur_val, rcp_cnt = 1.f / float(accum_cnt);
+          old_mean = (local_v.x() + local_v.y() + local_v.z()) * 0.33333333f,
+          new_mean = old_mean + cur_val, rcp_cnt = 1.f / float(accum_cnt);
     old_mean  = accum_cnt > 1 ? old_mean / float(accum_cnt - 1) : 0;
     new_mean *= rcp_cnt;
     int index = px + py * img_w;

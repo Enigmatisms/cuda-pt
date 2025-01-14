@@ -57,13 +57,7 @@ public:
         }
     }
 
-    nb::ndarray<nb::pytorch, float> render(
-        int max_bounce,
-        int max_diffuse,
-        int max_specular,
-        int max_trans,
-        bool gamma_corr
-    );
+    nb::ndarray<nb::pytorch, float> render();
 
     nb::ndarray<nb::pytorch, float> variance();
 

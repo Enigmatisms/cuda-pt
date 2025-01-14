@@ -58,11 +58,13 @@ int main(int argc, char** argv) {
     switch (scene.rdr_type) {
         case RendererType::MegaKernelPT: {
             renderer = std::make_unique<PathTracer>(scene); 
+            renderer->initialize_var_buffer();
             std::cout << "\tMegakernel Path Tracing.\n";
             break;
         }
         case RendererType::WavefrontPT: {
             renderer = std::make_unique<WavefrontPathTracer>(scene);
+            renderer->initialize_var_buffer();
             std::cout << "\tWavefront Path Tracing..\n";
             break;
         }

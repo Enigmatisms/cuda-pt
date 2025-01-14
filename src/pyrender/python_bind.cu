@@ -36,13 +36,7 @@ namespace nb = nanobind;
 NB_MODULE(pyrender, m) {
     nb::class_<PythonRenderer>(m, "PythonRenderer")
         .def(nb::init<const nb::str &, int, int>(), CONSTRUCTOR_DOC)
-        .def("render", &PythonRenderer::render,
-            nb::arg("max_bounces") = 6,
-            nb::arg("max_diffuse") = 4,
-            nb::arg("max_specular") = 2,
-            nb::arg("max_transmit") = 4,
-            nb::arg("gamma_corr") = false, RENDER_DOC
-        )
+        .def("render", &PythonRenderer::render, RENDER_DOC)
         .def("release", &PythonRenderer::release, RELEASE_DOC)
         .def("counter", &PythonRenderer::counter, COUNTER_DOC)
         .def("variance", &PythonRenderer::variance, VARIANCE_DOC)

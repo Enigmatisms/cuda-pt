@@ -2,7 +2,7 @@
 Distributed Rendering Via PyTorch DDP
 Use the following command for testing
 ```
-torchrun --nproc_per_node=2 ddp_render.py --config ./configs/vader.conf
+torchrun --nproc_per_node=2 ddp_render.py --config ./configs/run.conf
 ```
 """
 import os
@@ -42,15 +42,16 @@ def get_summary_writer(name: str, del_dir:bool):
     time_stamp = "{0:%Y-%m-%d/%H-%M-%S}-{1}/".format(datetime.now(), name)
     return SummaryWriter(log_dir = logdir + time_stamp)
 
-def reduce_rendered_image(img: torch.Tensor, this_spp: int, device) -> torch.Tensor:
-    spp_tensor  = torch.tensor([float(this_spp)], dtype=torch.float32, device = device)
-    image_sum   = img * spp_tensor
+def reduce_rendered_image(img: torch.Tensor, this_spp: int, device, spp_total = None) -> torch.Tensor:
+    image_sum   = img * this_spp
     dist.all_reduce(image_sum, op=dist.ReduceOp.SUM)
-    dist.all_reduce(spp_tensor, op=dist.ReduceOp.SUM)
-    spp_total = spp_tensor.item()
+    if spp_total is None:
+        spp_tensor  = torch.tensor([float(this_spp)], dtype=torch.float32, device = device)
+        dist.all_reduce(spp_tensor, op=dist.ReduceOp.SUM)
+        spp_total = spp_tensor.item()
     if spp_total > 0:
-        return image_sum / spp_total
-    return image_sum
+        return image_sum / spp_total, spp_total
+    return image_sum, 0
 
 def parse_args():
     parser = configargparse.ArgumentParser()
@@ -101,16 +102,10 @@ def ddp_main(local_rank, args):
             if is_main_proc:
                 CONSOLE.log("Main process exiting due to signaling...")
             break
-        image = renderer.render(
-            max_bounces=16,
-            max_diffuse=4,
-            max_specular=16,
-            max_transmit=16,
-            gamma_corr=True
-        )
+        image = renderer.render()
 
         if (step + 1) % args.reduce_interval == 0:
-            image_avg: torch.Tensor = reduce_rendered_image(image, renderer.counter(), device)
+            image_avg, spp_total = reduce_rendered_image(image, renderer.counter(), device)
 
             if local_rank == args.device_id_offset:
                 image_avg = image_avg.clamp(0, 1)
@@ -119,14 +114,13 @@ def ddp_main(local_rank, args):
 
             if args.record_var:
                 var_image: torch.Tensor = renderer.variance()
-                if var_image.numel() > 0:
-                    var_avg: torch.Tensor = reduce_rendered_image(image, renderer.counter(), device)
-
+                if var_image.numel() is not None:
+                    var_avg, _ = reduce_rendered_image(var_image, renderer.counter(), device, spp_total)
                     if local_rank == args.device_id_offset:
-                        writer.add_scalar("variance/Average Variance", var_avg.mean(), step+1)
+                        writer.add_scalar("variance/Average Variance", var_avg.mean() * world_size / spp_total, step+1)
 
-                        var_avg /= max(var_avg.max(), 1e-5)
-                        var_avg  = var_avg[..., :-1].detach().cpu().permute(2, 0, 1)  # (1, H, W)
+                        var_avg /= torch.quantile(var_avg, 0.99)
+                        var_avg  = var_avg.detach().cpu().permute(2, 0, 1)  # (1, H, W)
                         writer.add_image("variance/Image", var_avg, global_step = 0)
         
         if (step + 1) % args.ft_interval == 0:
