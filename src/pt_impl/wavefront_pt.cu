@@ -370,9 +370,10 @@ CPT_KERNEL void radiance_splat(
     if constexpr (render_once) {
         // image will be the output buffer, there will be double buffering
         int img_x = px + x_patch * PATCH_X, img_y = py + y_patch * PATCH_Y;
-        auto local_v = image(img_x, img_y) + L;
+        auto local_v = image(img_x, img_y);
         if (var_buffer)
             estimate_variance(var_buffer, local_v, L, img_x, img_y, image.w(), accum_cnt);
+        local_v += L;
         image(img_x, img_y) = local_v;
         local_v *= 1.f / float(accum_cnt);
         local_v = gamma_corr ? local_v.gamma_corr() : local_v;

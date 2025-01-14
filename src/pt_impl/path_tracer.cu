@@ -100,7 +100,7 @@ CPT_CPU void PathTracer::render_online(
     render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
         *camera, verts, norms, uvs, obj_info, 
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
-        image, md, output_buffer, var_buffer, num_prims, num_objs, num_emitter, 
+        image, md, output_buffer, nullptr, num_prims, num_objs, num_emitter, 
         accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));

@@ -307,7 +307,8 @@ CPT_KERNEL void render_pt_kernel(
         auto local_v = image(px, py);
         if (var_buffer)
             estimate_variance(var_buffer, local_v, radiance, px, py, image.w(), accum_cnt);
-        image(px, py) = local_v + radiance;
+        local_v += radiance;
+        image(px, py) = local_v;
         local_v *= 1.f / float(accum_cnt);
         local_v = gamma_corr ? local_v.gamma_corr() : local_v;
         FLOAT4(output_buffer[(px + py * image.w()) << 2]) = float4(local_v); 

@@ -33,11 +33,11 @@ public:
 
     CPT_GPU virtual float pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const = 0;
 
-    CPT_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = true) const = 0;
+    CPT_GPU virtual Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = false) const = 0;
 
     CPT_GPU virtual Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = false
     ) const = 0;
 
     CPT_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {

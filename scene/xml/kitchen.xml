@@ -24,16 +24,16 @@
 	</accelerator>
 	
 	<sensor type="perspective">
-		<!-- <float name="fov" value="48"/> -->
-		<float name="fov" value="32"/>
+		<float name="fov" value="48"/>
+		<!-- <float name="fov" value="32"/> -->
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
-			<lookat target="3.214929, 1.259441, 6.739809" origin="3.098763, 1.222549, 7.732354" up="-0.004290, 0.999319, 0.036641"/>
+			<!-- <lookat target="3.214929, 1.259441, 6.739809" origin="3.098763, 1.222549, 7.732354" up="-0.004290, 0.999319, 0.036641"/> -->
 			<!-- <lookat target="3.205850, 1.401939, 3.542233" origin="2.971070, 1.398597, 4.514276" up="-0.000784, 0.999994, 0.003249"/> -->
 
 			<!-- Benchmark -->
-			<!-- <lookat target="4.386742, 1.350119, 0.887063" origin="4.053925, 1.291838, 1.828252" up="-0.019840, 0.998300, 0.054801"/> -->
+			<lookat target="4.386742, 1.350119, 0.887063" origin="4.053925, 1.291838, 1.828252" up="-0.019840, 0.998300, 0.054801"/>
 			<!-- <lookat target="2.708319, 1.561703, 2.233381" origin="2.228504, 1.735339, 3.093398" up="0.086427, 0.984808, -0.150612"/> -->
 			<!-- <lookat target="5.630173, 0.919332, -0.246719" origin="5.039186, 1.054056, 0.548633" up="0.080328, 0.990883, -0.108158"/> -->
 		</transform>
@@ -92,6 +92,7 @@
 		<float name="trans_scaler" value="1"/>
 		<float name="thickness" value="1"/>
 		<float name="ior" value="1.2"/>
+		<bool name="penetrable" value="true"/>
 	</brdf>
 
     <brdf type="plastic" id="green-apples">
@@ -239,8 +240,8 @@
 	</brdf>
 
 	<brdf type="det-refraction" id="glass">
-		<rgb name="k_d" value="1.6"/>
-		<rgb name="k_s" value="0.98, 0.98, 0.98"/>
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.95, 0.95, 0.95"/>
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
@@ -341,6 +342,12 @@
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
+	<emitter type="area" id="sign-emitter">
+		<rgb name="emission" value="#ffffff"/>
+		<rgb name="scaler" value="0.7"/>
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/apples.obj"/>
         <ref type="material" id="tomato"/>
@@ -436,6 +443,11 @@
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/glass.obj"/>
         <ref type="material" id="glass"/>
+    </shape>
+	<shape type="obj">
+        <string name="filename" value="../meshes/kitchen/glow-signs.obj"/>
+        <ref type="material" id="white"/>
+        <ref type="emitter" id="sign-emitter"/>
     </shape>
     <shape type="obj">
         <string name="filename" value="../meshes/kitchen/green-apple-bars.obj"/>
