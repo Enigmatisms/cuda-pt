@@ -346,8 +346,6 @@ void parseEmitter(
     scaler.w() = scaler.x();
     e_props.emplace_back(id, Vec4(emission.xyz(), scaler.x()));
 
-    printf("Emitter: %s, scaler: %f, RGB: %f, %f, %f\n", id.c_str(), scaler.x(), emission.x(), emission.y(), emission.z());
-
     cudaTextureObject_t tex_obj = 0;
     element = emitter_elem->FirstChildElement("ref");
     if (element) {
