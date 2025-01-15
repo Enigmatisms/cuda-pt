@@ -9,6 +9,7 @@ import os
 import sys
 import tqdm
 import torch
+import random
 import signal
 import shutil
 import configargparse
@@ -83,7 +84,7 @@ def ddp_main(local_rank, args):
 
     world_size = dist.get_world_size()
     device = torch.device(f"cuda:{local_rank}")
-    renderer = PythonRenderer(args.scene_path, local_rank, local_rank * OFFSET_SCALER)
+    renderer = PythonRenderer(args.scene_path, local_rank, local_rank * OFFSET_SCALER + random.randint(0, 1e8))
     scene_name = Path(args.scene_path).stem
 
     writer = get_summary_writer(scene_name, args.rm_logs)

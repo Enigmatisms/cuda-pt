@@ -3,6 +3,8 @@
 
 **Software** Path Tracing renderer implemented in **CUDA**, **from scratch**.
 
+Distributed parallel rendering supported, via [nanobind](https://github.com/wjakob/nanobind) and PyTorch DDP.
+
 
 ![sports-cars](./assets/cars.jpg)
 
@@ -12,45 +14,78 @@
 
 ![dispersion](./assets/dispersion.jpg)
 
-##### Compile & Run
+| Variance                           | Depth                   | BVH cost                   |
+| ---------------------------------- | ----------------------- | -------------------------- |
+| ![](./assets/kitchen-variance.jpg) | ![](./assets/depth.jpg) | ![](./assets/bvh-cost.jpg) |
+
+#### Compile & Run
 
 The repo contains several external dependencies, therefore, using the following command:
 ```
 git clone https://github.com/Enigmatisms/cuda-pt.git --recursive
 ```
 
-Dependent on GLEW for the interactive viewer (`./build/xx/cpt`). If GLEW is not installed, only offline application is available (`./build/xx/pt`). Initially, this code base can be run on Linux (tested on Ubuntu 22.04) but I haven't try that since the day my Ubuntu machine broke down. Currently, using MSVC (VS2022) with CMake:
+##### windows
+
+Dependent on GLEW for the interactive viewer (`./build/xx/cpt`). If GLEW is not installed, only offline application is available (`./build/xx/pt`). GLEW should be manually installed. Initially, this code base can be run on Linux (tested on Ubuntu 22.04) but I haven't try that since the day my Ubuntu machine broke down. Currently, using MSVC (VS2022) with CMake (3.24+):
+
 ```shell
 mkdir build && cd build
 cmake --DCMAKE_BUILD_TYPE=release ..
-cmake --build . --config Release
+cmake --build . --config Release --parallel 7 -j 7
 ```
 
 (`./build/xx/cpt.exe`) and (`./build/xx/pt.exe`) will be the executable files. To run the code, an example is:
 
 ```
 cd build/Release
-./cpt.exe ../../scene/xml/bunny.xml
+./cpt.exe ../../scene/xml/vader.xml
 ```
 
-##### More info
+Note that, if you have built the code and you have changed the code in `src` afterwards, on windows, you may have to use `./rm_devlink_obj.sh` to delete all the `.device-link.obj` files in the build folder and build it again (it is strange that those compiled `.obj` files won't update, which might cause linking problem).
 
-This repo currently **has no plan for OptiX**, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated in the experimental path tracer AdaPT. Check my github homepage for more information.
+##### Linux
 
-The scalability of this repo might be worse than that of AdaPT, but it will improve over time, since I plan to migrate from Taichi Lang to a pure-CUDA code base. Currently, this repo supports:
+The following dependencies should be satisified:
 
-- [x] Toy CUDA depth renderer with profiling
-- [x] Megakernel unidirectional path tracing. Two major ray-scene intersection schemes are employed: shared-memory based AABB culling, and GPU BVH (see below).
+```shell
+sudo apt install libglew-dev libwayland-dev libxkbcommon-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+```
+
+Then run the following command with CMake (3.24+) and make:
+
+```shell
+mkdir build && cd build
+cmake --DCMAKE_BUILD_TYPE=release ..
+make -j7
+```
+
+---
+
+##### Test the code
+
+After successfully building the project, you will have three *executables*:
+
+- `pt(.exe)`: Single GPU offline rendering.
+- `cpt(.exe)`: Single GPU online rendering, GUI visualization and parameter tweaking.
+- `pyrender`: Python import-able: use `help(PythonRenderer)` to see what functionalities can be used.
+
+#### More info
+
+This repo currently **has no plan for OptiX**, since I am experiencing how to build the wheel and make it fast, instead of implementing some useful features. Useful features are incorporated (though now AdaPT is forsaken) in the experimental path tracer AdaPT. Check my github homepage for more information.
+
+Currently, this repo supports:
+
+- [x] Megakernel unidirectional path tracing.
 - [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is not as fast as megakernel PT due to the simplicity of the test scenes (and maybe, coalesced GMEM access problems, being working on this).
-- [x] GPU BVH: A stackless GPU surface area heuristic BVH. The current implementation is not optimal (since the ordering of left-child and right child is left unaccounted for, and there is no 'look-back' op), but fast enough. Profiling for this part is not every complete. 1D CUDA texture is used to store the BVH nodes, for better cache performance.
+- [x] BVH cost visualizer and depth renderer.
+- [x] GPU BVH: A stackless GPU surface area heuristic BVH. 
 - [x] CUDA pitched textures for environment maps, normal, roughness, index of refraction and albedo.
 - [x] Online modification of the scene. Check out the video down below.
 
 <div align="center">
   <video src="https://github.com/user-attachments/assets/d805af5b-179a-4730-bebe-9307d0afd262"/>
 </div>
-
-
 ##### TODO
 
 - [x] (Recent) An `imgui` based interactive UI.
@@ -69,7 +104,7 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 - [x] Avoiding bank conflicts & Use vectorized load / store
 - [x] IMC (constant cache miss): when should you use constant cache
 - [x] CPU multi-threading and GPU stream-based concurrency (maybe Hyper-Q).
-- [ ] (More in-depth reading on this topic) What makes a good GPU based spatially-partitioning data structures (like BVH): well I am no expert in this, should more papers on this topic.
+- [x] (More in-depth reading on this topic) What makes a good GPU based spatially-partitioning data structures (like BVH): well I am no expert in this, should more papers on this topic.
 
 ---
 
@@ -85,7 +120,3 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 ### Visualizer Notes
 - [x] `imgui` has no CMakeLists.txt so we should write it ourselves.
 - [x] I think it is painful to use GLEW for windows: after compilation, `glew32.dll` should be manually copied to `Windows/System32`. Also, we should build GLEW manually.   
-
-### Misc
-
-This repo originated from: [w3ntao/smallpt-megakernel](https://github.com/w3ntao/smallpt-megakernel), but now it is very different from it. I answered [his question on stackexchange computer graphics](https://computergraphics.stackexchange.com/questions/14000/why-is-my-ray-tracer-not-accelerated-by-cuda/14003#14003) and tweaked his code, so I thought to myself... why not base on this repo and try to make it better (though, I won't call it small-pt, since it definitely won't be small after I heavily optimize the code).
