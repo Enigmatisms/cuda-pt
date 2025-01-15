@@ -84,8 +84,9 @@ Currently, this repo supports:
 - [x] Online modification of the scene. Check out the video down below.
 
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/d805af5b-179a-4730-bebe-9307d0afd262"/>
+  <video src="https://github.com/user-attachments/assets/fc098d93-7acb-4232-8a7e-c39518af2db4"/>
 </div>
+
 ##### TODO
 
 - [x] (Recent) An `imgui` based interactive UI.
