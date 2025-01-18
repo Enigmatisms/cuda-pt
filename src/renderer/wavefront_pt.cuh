@@ -45,18 +45,15 @@
 #define partition_func(...) thrust::partition(__VA_ARGS__)
 #endif    // STABLE_PARTITION
 
-namespace {
-    constexpr int BLOCK_X = 16;
-    constexpr int BLOCK_Y = 16;
-    constexpr int THREAD_X = 16;
-    constexpr int THREAD_Y = 16;
-    constexpr int PATCH_X = BLOCK_X * THREAD_X;
-    constexpr int PATCH_Y = BLOCK_Y * THREAD_Y;
-    constexpr int TOTAL_RAY = PATCH_X * PATCH_Y;
+using IndexBuffer = uint32_t* const __restrict__;
 
-    using IndexBuffer = uint32_t* const __restrict__;
-}
-
+/**
+ * Ray Pool, 96 Bytes Per Ray, which means
+ * 2880 * 1920 image: only less than half a GB
+ * 
+ * So, accounting for index buffer (int) and ray tag buffer (for ray sorting, int)
+ * Together with output buffer, only 102 Byte per Ray 
+ */
 class PayLoadBufferSoA {
 public:
     struct RayOrigin {
@@ -92,22 +89,22 @@ public:
         }
     };
 public:
-    Vec4* thps;             // direct malloc
-    Vec4* Ls;               // direct malloc
+    // 6 float4 -> 96 Bytes in total
+    Vec4* thps;                 // (float4)
+    Vec4* Ls;                   // (float4)
     
-    RayOrigin* ray_os;
-    RayDirTag* ray_ds;
-    Interaction* interactions;
+    RayOrigin* ray_os;          // (float4)
+    RayDirTag* ray_ds;          // (float4)
+    Interaction* interactions;  // (float4)
     uint2* samplers;
-    float* pdfs;
+    // note that index buffer is excluded from PayLoadBufferSoA
+    // but it takes up 4 Bytes, so
 
-    int    _width;       
+    float* pdfs;
 
     CPT_CPU_GPU PayLoadBufferSoA() {}
 
-    CPT_CPU void init(int width, int height) {
-        _width = width;
-        int full_size = width * height;
+    CPT_CPU void init(int full_size) {
         CUDA_CHECK_RETURN(cudaMalloc(&thps, sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMalloc(&Ls,   sizeof(Vec4) * full_size));
         CUDA_CHECK_RETURN(cudaMalloc(&ray_os, sizeof(Vec4) * full_size));
@@ -117,71 +114,64 @@ public:
         CUDA_CHECK_RETURN(cudaMalloc(&pdfs, sizeof(float) * full_size));
     }
 
-    CPT_CPU_GPU_INLINE Vec4& thp(int col, int row) { return thps[col + row * _width]; }
-    CPT_CPU_GPU_INLINE const Vec4& thp(int col, int row) const { return thps[col + row * _width]; }
+    CPT_GPU_INLINE Vec4& thp(int index) { return thps[index]; }
+    CPT_GPU_INLINE const Vec4& thp(int index) const { return thps[index]; }
 
-    CPT_CPU_GPU_INLINE Vec4& L(int col, int row) { return Ls[col + row * _width]; }
-    CPT_CPU_GPU_INLINE const Vec4& L(int col, int row) const { return Ls[col + row * _width]; }
+    CPT_GPU_INLINE Vec4& L(int index) { return Ls[index]; }
+    CPT_GPU_INLINE const Vec4& L(int index) const { return Ls[index]; }
 
     CONDITION_TEMPLATE(RayType, Ray)
-    CPT_CPU_GPU_INLINE void set_ray(int col, int row, RayType&& ray) { 
-        int index = col + row * _width;
+    CPT_GPU_INLINE void set_ray(int index, RayType&& ray) { 
         ray_os[index].set(ray);
         ray_ds[index].set(ray);
     }
 
-    CPT_CPU_GPU_INLINE Ray get_ray(int col, int row) const { 
+    CPT_GPU_INLINE Ray get_ray(int index) const { 
         Ray ray;
-        int index = col + row * _width;
         ray_os[index].get(ray);
         ray_ds[index].get(ray);
         return ray; 
     }
 
-    CPT_CPU_GPU_INLINE void set_active(int col, int row, bool v) noexcept {
-        int index = col + row * _width;
+    CPT_GPU_INLINE void set_active(int index, bool v) noexcept {
         ray_ds[index].set_active(v);
     }
 
-    CPT_CPU_GPU_INLINE bool is_hit(int col, int row) const noexcept {
-        int index = col + row * _width;
+    CPT_GPU_INLINE bool is_hit(int index) const noexcept {
         return ray_ds[index].is_hit();
     }
 
-    CPT_CPU_GPU_INLINE void get_ray_d(int col, int row, Vec3& dir, bool& is_active) const noexcept {
-        int index = col + row * _width;
+    CPT_GPU_INLINE void get_ray_d(int index, Vec3& dir, bool& is_active) const noexcept {
         auto temp = ray_ds[index];
         dir = temp.d;
         is_active = temp.is_active();
     }
 
-    CPT_CPU_GPU_INLINE Sampler get_sampler(int col, int row) const { 
+    CPT_GPU_INLINE Sampler get_sampler(int index) const { 
         Sampler samp;
-        int index = col + row * _width;
         UINT2(samp._get_d_front()) = samplers[index];
         return samp; 
     }
 
     CONDITION_TEMPLATE(SamplerType, Sampler)
-    CPT_CPU_GPU_INLINE void set_sampler(int col, int row, SamplerType&& sampler) { 
-        int index = col + row * _width;
+    CPT_GPU_INLINE void set_sampler(int index, SamplerType&& sampler) { 
         samplers[index] = CONST_UINT2(sampler._get_d_front());
     }
 
-    CPT_CPU_GPU_INLINE Interaction interaction(int col, int row) const { 
-        return interactions[col + row * _width]; 
+    CPT_GPU_INLINE Interaction interaction(int index) const { 
+        return interactions[index]; 
     }
 
-    CPT_CPU_GPU_INLINE Interaction& interaction(int col, int row) { 
-        return interactions[col + row * _width]; 
+    CPT_GPU_INLINE Interaction& interaction(int index) { 
+        return interactions[index]; 
     }
 
-    CPT_CPU_GPU_INLINE float pdf(int col, int row) const { 
-        return pdfs[col + row * _width]; 
+    CPT_GPU_INLINE float pdf(int index) const { 
+        return pdfs[index]; 
     }
 
-    CPT_CPU_GPU_INLINE float& pdf(int col, int row) { 
-        return pdfs[col + row * _width]; 
+    CPT_GPU_INLINE float& pdf(int index) { 
+        return pdfs[index]; 
     }
 
     CPT_CPU void destroy() {
@@ -196,13 +186,7 @@ public:
 };
 
 /**
- * @brief ray generation kernel 
- * note that, all the kernels are called per stream, each stream can have multiple blocks (since it is a kernel call)
- * let's say, for example, a 4 * 4 block for one kernel call. These 16 blocks should be responsible for 
- * one image patch, offseted by the stream_offset.
- * @note we first consider images that have width and height to be the multiple of 128
- * to avoid having to consider the border problem
- * @note we pass payloads in by value
+ * @brief ray generation kernel, fusing a closest hit shader (for primary ray)
 */ 
 CPT_KERNEL void raygen_primary_hit_shader(
     const DeviceCamera& dev_cam,
@@ -214,42 +198,42 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
-    const IndexBuffer idx_buffer,
-    int stream_offset, int num_prims,
-    int x_patch, int y_patch, int iter,
-    int stream_id, int width, 
-    int node_num = -1, int cache_num = 0
+    IndexBuffer idx_buffer,
+    int num_prims,
+    int width, 
+    int node_num, 
+    int cache_num,
+    int accum_cnt,
+    int seed_offset
 );
 
 /**
- * @brief find ray intersection for next hit pos
- * We first start with small pool size (4096), which can comprise at most 16 blocks
- * The ray pool is stream-compacted (with thrust::parition to remove the finished)
- * Note that we need an index buffer, since the Ray and Sampler are coupled
- * and we need the index to port the 
+ * @brief Fused shader: closest hit and miss shader
+ * Except from raygen shader, all other shaders have very different shapes:
+ * For example: <gridDim 1D, blockDim 1D>
+ * gridDim: num_ray_payload / blockDim, blockDim = 128
 */ 
-CPT_KERNEL void closesthit_shader(
+CPT_KERNEL void fused_closesthit_shader(
     PayLoadBufferSoA payloads,
     const PrecomputedArray verts,
     const NormalArray norms, 
     const ConstBuffer<PackedHalf2> uvs,
-    ConstObjPtr objects,
     const cudaTextureObject_t bvh_leaves,
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
-    const IndexBuffer idx_buffer,
-    int stream_offset,
+    IndexBuffer idx_buffer,
     int num_prims,
-    int num_valid,
-    int node_num = -1,
-    int cache_num = 0
+    int node_num,
+    int cache_num,
+    int bounce,
+    int envmap_id
 );
 
 /***
- * For non-delta hit (shading point), direct component should be evaluated:
- * we sample a light source then start ray intersection test
+ * Fusing NEE / Ray Scattering
+ * 
 */
-CPT_KERNEL void nee_shader(
+CPT_KERNEL void fused_ray_bounce_shader(
     PayLoadBufferSoA payloads,
     const PrecomputedArray verts,
     const NormalArray norms, 
@@ -260,74 +244,30 @@ CPT_KERNEL void nee_shader(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
-    int stream_offset,
     int num_prims,
     int num_objects,
     int num_emitter,
-    int num_valid,
-    int node_num = -1,
-    int cache_num = 0
-);
-
-
-/**
- * BSDF sampling & direct shading shader
-*/
-CPT_KERNEL void bsdf_local_shader(
-    PayLoadBufferSoA payloads,
-    const cudaTextureObject_t bvh_leaves,
-    ConstObjPtr objects,
-    const IndexBuffer idx_buffer,
-    int stream_offset,
-    int num_prims, 
-    int num_valid,
+    int node_num,
+    int cache_num,
     bool secondary_bounce
-);
-
-/**
- * Purpose of the miss shader: if ray hits nothing in closesthit shader
- * the we will set the hit status (flag) to be false
- * in this shader, we find the rays marked as no-hit, and check the
- * availability of environment map (currently not supported)
- * after processing the env-map lighting, we mark the ray as inactive
- * before stream compaction. Then stream compaction will 'remove' all these
- * rays (and the threads)
- * 
- * MISS_SHADER is the only place where you mark a ray as inactive
-*/
-CPT_KERNEL void miss_shader(
-    PayLoadBufferSoA payloads,
-    const IndexBuffer idx_buffer,
-    const int bounce,
-    int stream_offset,
-    int num_valid,
-    int envmap_id
 );
 
 template <bool render_once>
 CPT_KERNEL void radiance_splat(
     PayLoadBufferSoA payloads, DeviceImage image, 
-    int stream_id, int x_patch, int y_patch, 
+    float* __restrict__ output_buffer = nullptr, 
+    float* __restrict__ var_buffer = nullptr, 
     int accum_cnt = 0, 
-    float* __restrict__ output_buffer = nullptr,
-    float* __restrict__ var_buffer = nullptr,
     bool gamma_corr = false
 );
 
 /**
  * This functor is used for stream compaction
 */
-struct ActiveRayFunctor
-{
-    const int width;
-    const PayLoadBufferSoA::RayDirTag* const dir_tags;
-
-    CPT_CPU_GPU ActiveRayFunctor(PayLoadBufferSoA::RayDirTag* tags, int w): width(w), dir_tags(tags) {}
-
+struct ActiveRayFunctor {
     CPT_GPU_INLINE bool operator()(uint32_t index) const
     {
-        uint32_t py = index >> 16, px = index & 0x0000ffff;
-        return (dir_tags[px + py * width].ray_tag & 0x10000000) > 0;
+        return index < 0x80000000;
     }
 };
 

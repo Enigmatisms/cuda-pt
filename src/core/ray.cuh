@@ -59,8 +59,9 @@ struct Ray {
         ray_tag &= 0xdfffffff;      // clear bit 29
     }
 
-    CPT_CPU_GPU_INLINE void set_hit() noexcept {
-        ray_tag |= 1 << 29;         // set bit 29
+    CPT_CPU_GPU_INLINE void set_hit(bool is_hit = true) noexcept {
+        // set bit 29 or clear bit 29
+        ray_tag = is_hit ? ray_tag | (1 << 29) : ray_tag & 0xdfffffff;
     }
 
     CPT_CPU_GPU_INLINE bool non_delta() const noexcept {

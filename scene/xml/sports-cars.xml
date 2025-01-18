@@ -6,16 +6,16 @@
 <scene version="1.2">
 	<renderer type="pt">
 		<integer name="sample_count" value="128"/>
-        <integer name="max_bounce"   value="8"/>
-        <integer name="max_diffuse"  value="8"/>
-        <integer name="max_specular" value="8"/>
-        <integer name="max_transmit" value="8"/>
+        <integer name="max_bounce"   value="6"/>
+        <integer name="max_diffuse"  value="6"/>
+        <integer name="max_specular" value="6"/>
+        <integer name="max_transmit" value="6"/>
 	</renderer>
 
 	<accelerator type="bvh">
-		<integer name="cache_level" value="8"/>
-        <integer name="max_node_num" value="32"/>
-		<float name="overlap_w" value="0.6"/>
+		<integer name="cache_level" value="4"/>
+        <integer name="max_node_num" value="16"/>
+		<float name="overlap_w" value="1.0"/>
 	</accelerator>
 	
 	<sensor type="perspective">
@@ -27,19 +27,20 @@
 		
 		<transform name="toWorld">
 			<!-- Normal red front blue back -->
-			<!-- <lookat target="1.200387, 10.882613, 17.502499" origin="1.410909, 11.424319, 18.316277" up="-0.176330, 0.839822, -0.513427"/> -->
-			<lookat target="12.146734, 8.753668, 7.775066" origin="12.966362, 9.231473, 8.091156" up="-0.442718, 0.878434, -0.179873"/>
+			<lookat target="1.200387, 10.882613, 17.502499" origin="1.410909, 11.424319, 18.316277" up="-0.176330, 0.839822, -0.513427"/>
+			<!-- New red back blue front -->
+			<!-- <lookat target="-8.583218, 13.913410, -15.904566" origin="-8.814958, 14.519581, -16.665390" up="0.178721, 0.795333, 0.579228"/> -->
 		</transform>
 
 		<film type="film">
 			<integer name="width" value="960"/>
-			<integer name="height" value="640"/>
-			<bool name="gamma_correction" value="false"/>
+			<integer name="height" value="540"/>
+			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>
 
 	<brdf type="lambertian" id="light">
-		<rgb name="k_d" value="#030303"/>
+		<rgb name="k_d" value="#555555"/>
 		<rgb name="k_g" value="1.0"/>
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
@@ -50,16 +51,9 @@
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
 
-	<brdf type="conductor-ggx" id="floor">
-		<string name="conductor" value="Cr"/>
-		<float name="roughness_x" value="0.005"/>
-		<float name="roughness_y" value="0.005"/>
-		<rgb name="k_g" value="#808080"/>
-	</brdf>
-
 	<emitter type="area" id="area">
 		<rgb name="emission" value="1, 1, 1"/>
-		<rgb name="scaler" value="20.0"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -71,7 +65,7 @@
 
     <shape type="obj">
 		<string name="filename" value="../meshes/cars/floor.obj"/>
-		<ref type="material" id="floor"/>
+		<ref type="material" id="white"/>
 	</shape>
 
 	<!-- Starting here is the Red Lamborghini -->
@@ -130,13 +124,13 @@
 
 	<emitter type="area" id="lambo-front1">
 		<rgb name="emission" value="1, 1, 1"/>
-		<rgb name="scaler" value="200.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="80.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="lambo-front2">
 		<rgb name="emission" value="1, 1, 0.75"/>
-		<rgb name="scaler" value="20"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="1.2"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -159,7 +153,7 @@
 	</emitter> -->
 
 	<emitter type="envmap" id="env">
-		<float name="scaler" value="4.0"/>		
+		<float name="scaler" value="0.15"/>		
 		<float name="azimuth" value="12"/>			
 		<float name="zenith" value="90"/>			
 		<ref type="texture" id="envmap"/>
@@ -284,8 +278,8 @@
 
 	<brdf type="conductor-ggx" id="shell">
 		<string name="conductor" value="Cr"/>
-		<float name="roughness_x" value="0.002"/>
-		<float name="roughness_y" value="0.002"/>
+		<float name="roughness_x" value="0.003"/>
+		<float name="roughness_y" value="0.003"/>
 		<rgb name="k_g" value="#0022EE"/>
 	</brdf>
 
