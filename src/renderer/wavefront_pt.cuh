@@ -34,10 +34,7 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
-// #define NO_STREAM_COMPACTION
 // #define STABLE_PARTITION
-#define NO_RAY_SORTING
-// #define FUSED_MISS_SHADER
 
 #ifdef STABLE_PARTITION
 #define partition_func(...) thrust::stable_partition(__VA_ARGS__)
@@ -268,23 +265,5 @@ struct ActiveRayFunctor {
     CPT_GPU_INLINE bool operator()(uint32_t index) const
     {
         return index < 0x80000000;
-    }
-};
-
-
-/**
- * This functor is used for ray index sorting
-*/
-struct RaySortFunctor
-{
-    const int width;
-    const PayLoadBufferSoA::RayDirTag* const dir_tags;
-
-    CPT_CPU_GPU RaySortFunctor(PayLoadBufferSoA::RayDirTag* tags, int w): width(w), dir_tags(tags) {}
-
-    CPT_GPU_INLINE bool operator()(uint32_t idx1, uint32_t idx2) const
-    {
-        return (dir_tags[(idx1 & 0x0000ffff) + (idx1 >> 16) * width].ray_tag & 0x0fffffff) <
-               (dir_tags[(idx2 & 0x0000ffff) + (idx2 >> 16) * width].ray_tag & 0x0fffffff);
     }
 };

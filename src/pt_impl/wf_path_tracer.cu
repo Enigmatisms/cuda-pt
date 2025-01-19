@@ -6,15 +6,15 @@
  * @copyright Copyright (c) 2024
  */
 
+#include <thrust/binary_search.h>
 #include "renderer/wf_path_tracer.cuh"
-
 
 static constexpr int SHFL_THREAD_X = 5;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 2;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
 
 WavefrontPathTracer::WavefrontPathTracer(const Scene& scene): 
     PathTracer(scene),
-    GRID(w >> SHFL_THREAD_X, h >> SHFL_THREAD_X), 
+    GRID(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), 
     BLOCK(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y),
     NUM_THREADS(1 << (SHFL_THREAD_X + SHFL_THREAD_Y))
 {
@@ -43,23 +43,22 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
     int num_valid_ray = w * h;
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-        num_valid_ray = partition_func(
-            index_buffer.begin(), 
-            index_buffer.begin() + num_valid_ray,
-            ActiveRayFunctor()
-        ) - index_buffer.begin();
+// #ifdef NO_RAY_SORTING
+//         num_valid_ray = partition_func(
+//             index_buffer.begin(), 
+//             index_buffer.begin() + num_valid_ray,
+//             ActiveRayFunctor()
+//         ) - index_buffer.begin();
+// #else
+//         thrust::sort(
+//             index_buffer.begin(), index_buffer.begin() + num_valid_ray
+//         );
+//         num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+//                         index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+// #endif  // NO_RAY_SORTING
 
-#ifndef NO_RAY_SORTING
-        // sort the ray (indices) by their ray tag (hit object)
-        // ray sorting is extremely slow
-        thrust::sort(
-            start_iter, start_iter + num_valid_ray,
-            RaySortFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
-        );
-#endif
-
-        // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
-        if (!num_valid_ray) break;
+//         // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
+//         if (!num_valid_ray) break;
         int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
 
         fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
@@ -101,26 +100,22 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             idx_buffer, num_prims, image.w(), 
             num_nodes, num_cache, accum_cnt, seed_offset
         );
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
         int num_valid_ray = w * h;
         for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-            // step4: thrust stream compaction (optional)
+#ifdef NO_RAY_SORTING
             num_valid_ray = partition_func(
                 index_buffer.begin(), 
                 index_buffer.begin() + num_valid_ray,
                 ActiveRayFunctor()
             ) - index_buffer.begin();
-            CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-    #ifndef NO_RAY_SORTING
-            // sort the ray (indices) by their ray tag (hit object)
-            // ray sorting is extremely slow
+#else
             thrust::sort(
-                start_iter, start_iter + num_valid_ray,
-                RaySortFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
+                index_buffer.begin(), index_buffer.begin() + num_valid_ray
             );
-    #endif
+            num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+                            index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+#endif  // NO_RAY_SORTING
 
             // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
             if (!num_valid_ray) break;
@@ -131,7 +126,6 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
                 bvh_leaves, nodes, _cached_nodes, idx_buffer, 
                 num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
             );
-            CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
             if (bounce + 1 >= md.max_depth) break;
             fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
@@ -139,7 +133,6 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
                 bvh_leaves, nodes, _cached_nodes, idx_buffer, 
                 num_prims, num_nodes, num_cache, bounce, envmap_id
             );
-            CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
 
         radiance_splat<false><<<GRID, BLOCK>>>(
@@ -173,20 +166,19 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
     
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
         // step4: thrust stream compaction (optional)
+#ifdef NO_RAY_SORTING
         num_valid_ray = partition_func(
             index_buffer.begin(), 
             index_buffer.begin() + num_valid_ray,
             ActiveRayFunctor()
         ) - index_buffer.begin();
-
-#ifndef NO_RAY_SORTING
-        // sort the ray (indices) by their ray tag (hit object)
-        // ray sorting is extremely slow
+#else
         thrust::sort(
-            start_iter, start_iter + num_valid_ray,
-            RaySortFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
+            index_buffer.begin(), index_buffer.begin() + num_valid_ray
         );
-#endif
+        num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+                        index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+#endif  // NO_RAY_SORTING
 
         // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
         if (!num_valid_ray) break;

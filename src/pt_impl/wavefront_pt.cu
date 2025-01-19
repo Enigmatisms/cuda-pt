@@ -8,13 +8,12 @@
 static constexpr int SEED_SCALER = 11467;       //-4!
 static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
-static constexpr int BLOCK_SIZE = 128;
 
 static CPT_GPU_INLINE uint8_t compose_ray_stat(int obj_idx, bool is_active, bool is_media = false) {
     // store object index (0-62), media flag and whether it is invalid
     // the object index stored here does not consider whether the object is sphere or mesh based
     obj_idx = obj_idx >= 0 ? obj_idx : -obj_idx - 1;        // tackle the sphere object index (negative)
-    return (is_active ? obj_idx % 64 : 0x3f) + (is_media << 6) + (uint8_t(!is_active) << 7);
+    return (is_active ? obj_idx % 64 : 0x3f) + (is_media << 6) + (is_active ? 0 : 0x80);
 }
 
 /**
@@ -26,12 +25,6 @@ static CPT_GPU_INLINE uint8_t compose_ray_stat(int obj_idx, bool is_active, bool
  * 
  * lower 24 bits: index buffer (our image won't be bigger than 4800 * 3200) 
  */
-
-static CPT_GPU_INLINE void get_image_coords(const IndexBuffer idxs, int index, int width, int& px, int& py) {
-        uint32_t data = idxs[index] & 0x00ffffff;
-        px = data % width;
-        py = data / width;
-    }
 
 static CPT_GPU_INLINE uint32_t get_index(const IndexBuffer idxs, int gmem_addr, uint8_t& ray_stat) {
     uint32_t index = idxs[gmem_addr];
@@ -135,14 +128,15 @@ CPT_KERNEL void fused_closesthit_shader(
     int bounce,
     int envmap_id
 ) {
+    uint8_t ray_stat = 0;
     const uint32_t gmem_addr = blockDim.x * blockIdx.x + threadIdx.x;
-    uint8_t ray_stat   = 0, gidx = get_index(idx_buffer, gmem_addr, ray_stat);
+    uint32_t gidx = get_index(idx_buffer, gmem_addr, ray_stat);
 
     // cache near root level BVH nodes for faster traversal
     extern __shared__ uint4 s_cached[];
     if (threadIdx.x < cache_num) {      // no more than 256 nodes will be cached
         s_cached[threadIdx.x] = cached_nodes[threadIdx.x];
-        int offset_tid = threadIdx.x + BLOCK_SIZE;
+        int offset_tid = threadIdx.x + blockDim.x;
         if (offset_tid < cache_num)
             s_cached[offset_tid] = cached_nodes[offset_tid];
     }
@@ -213,14 +207,15 @@ CPT_KERNEL void fused_ray_bounce_shader(
     int cache_num,
     bool secondary_bounce
 ) {
+    uint8_t ray_stat = 0;
     uint32_t gmem_addr = blockDim.x * blockIdx.x + threadIdx.x;
-    uint8_t ray_stat   = 0, gidx = get_index(idx_buffer, gmem_addr, ray_stat);
+    uint32_t gidx = get_index(idx_buffer, gmem_addr, ray_stat);
 
     // cache near root level BVH nodes for faster traversal
     extern __shared__ uint4 s_cached[];
     if (threadIdx.x < cache_num) {      // no more than 256 nodes will be cached
         s_cached[threadIdx.x] = cached_nodes[threadIdx.x];
-        int offset_tid = threadIdx.x + BLOCK_SIZE;
+        int offset_tid = threadIdx.x + blockDim.x;
         if (offset_tid < cache_num)
             s_cached[offset_tid] = cached_nodes[offset_tid];
     }
