@@ -43,22 +43,24 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
     int num_valid_ray = w * h;
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-// #ifdef NO_RAY_SORTING
-//         num_valid_ray = partition_func(
-//             index_buffer.begin(), 
-//             index_buffer.begin() + num_valid_ray,
-//             ActiveRayFunctor()
-//         ) - index_buffer.begin();
-// #else
-//         thrust::sort(
-//             index_buffer.begin(), index_buffer.begin() + num_valid_ray
-//         );
-//         num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
-//                         index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
-// #endif  // NO_RAY_SORTING
+#ifdef NO_RAY_SORTING
+        num_valid_ray = partition_func(
+            index_buffer.begin(), 
+            index_buffer.begin() + num_valid_ray,
+            ActiveRayFunctor()
+        ) - index_buffer.begin();
+#else
+        thrust::sort(
+            index_buffer.begin(), index_buffer.begin() + num_valid_ray
+        );
+        num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+                        index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+#endif  // NO_RAY_SORTING
 
-//         // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
-//         if (!num_valid_ray) break;
+        // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
+        if (!num_valid_ray) {
+            break;
+        }
         int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
 
         fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
@@ -100,7 +102,6 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             idx_buffer, num_prims, image.w(), 
             num_nodes, num_cache, accum_cnt, seed_offset
         );
-
         int num_valid_ray = w * h;
         for (int bounce = 0; bounce < md.max_depth; bounce ++) {
 #ifdef NO_RAY_SORTING
