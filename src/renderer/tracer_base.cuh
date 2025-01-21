@@ -37,11 +37,9 @@ public:
      * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
      * @param camera    GPU camera model (constant memory)
      * @param image     GPU image buffer
-     * @param skip_vertex_loading For OptiX renderer, if true, verts will be destroyed
     */
     TracerBase(
-        const Scene& scene,
-        bool skip_vertex_loading = false
+        const Scene& scene
     ): verts(scene.num_prims), norms(scene.num_prims), uvs(scene.num_prims),
        image(scene.config.width, scene.config.height), 
        num_prims(scene.num_prims), 
@@ -67,9 +65,9 @@ public:
     CPT_CPU uint32_t& get_pbo_id()     noexcept { return this->pbo_id; }
 
     // set parameters with serialized data
-    CPT_CPU virtual void param_setter(const std::vector<char>& bytes) {}
+    virtual CPT_CPU void param_setter(const std::vector<char>& bytes) {}
 
-    CPT_CPU virtual std::vector<uint8_t> render(
+    virtual CPT_CPU std::vector<uint8_t> render(
         const MaxDepthParams& md,
         int num_iter  = 64,
         bool gamma_correction = true
@@ -78,7 +76,7 @@ public:
         return {};
     }
 
-    CPT_CPU virtual void render_online(
+    virtual CPT_CPU void render_online(
         const MaxDepthParams& md,
         bool gamma_corr = false     /* whether to enable gamma correction*/
     ) {
@@ -86,16 +84,18 @@ public:
     }
 
     // Render the scene once (1 spp) and output the output_buffer
-    CPT_CPU virtual const float* render_raw(
+    virtual CPT_CPU const float* render_raw(
         const MaxDepthParams& md,
         bool gamma_corr = false
     ) {
         throw std::runtime_error("Not implemented.\n");
     }
 
-    CPT_CPU virtual const float* get_variance_buffer() const {
+    virtual CPT_CPU const float* get_variance_buffer() const {
         return var_buffer;
     }
+
+    virtual CPT_CPU void prepare_for_rendering() {  /** do nothing, currently only WFPT will do something. */ }
 
     /**
      * @brief initialize graphics resources
@@ -121,11 +121,12 @@ public:
     }
     
     CPT_CPU_INLINE void reset_out_buffer() {
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         CUDA_CHECK_RETURN(cudaMemset(image.data(), 0, w * h * sizeof(float4)));    // reset image buffer
         accum_cnt = 0;                                                              // reset accumulation counter
     }
 
-    CPT_CPU void update_camera(const DeviceCamera* const cam) {
+    virtual CPT_CPU void update_camera(const DeviceCamera* const cam) {
         CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
     }
 
@@ -133,7 +134,7 @@ public:
         return accum_cnt;
     }
 
-    CPT_CPU virtual std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
+    virtual CPT_CPU std::vector<uint8_t> get_image_buffer(bool gamma_cor) const {
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         return image.export_cpu(1.f / accum_cnt, gamma_cor);
     }
