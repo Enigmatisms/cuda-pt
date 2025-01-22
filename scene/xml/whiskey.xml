@@ -6,7 +6,7 @@
 <scene version="1.2">
 	<renderer type="wfpt">
 		<integer name="sample_count" value="128"/>
-        <integer name="max_bounce"   value="16"/>
+        <integer name="max_bounce"   value="1"/>
         <integer name="max_diffuse"  value="16"/>
         <integer name="max_specular" value="16"/>
         <integer name="max_transmit" value="16"/>

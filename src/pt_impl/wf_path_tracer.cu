@@ -73,19 +73,19 @@ CPT_CPU void WavefrontPathTracer::render_online(
     int num_valid_ray = w * h, cur_traced_pool = _cur_traced_pool;
     auto index_buffer = index_buffers[cur_traced_pool];
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-// #ifdef NO_RAY_SORTING
-//         num_valid_ray = partition_func(
-//             index_buffer.begin(), 
-//             index_buffer.begin() + num_valid_ray,
-//             ActiveRayFunctor()
-//         ) - index_buffer.begin();
-// #else
-//         thrust::sort(
-//             index_buffer.begin(), index_buffer.begin() + num_valid_ray
-//         );
-//         num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
-//                         index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
-// #endif  // NO_RAY_SORTING
+#ifdef NO_RAY_SORTING
+        num_valid_ray = partition_func(
+            index_buffer.begin(), 
+            index_buffer.begin() + num_valid_ray,
+            ActiveRayFunctor()
+        ) - index_buffer.begin();
+#else
+        thrust::sort(
+            index_buffer.begin(), index_buffer.begin() + num_valid_ray
+        );
+        num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+                        index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+#endif  // NO_RAY_SORTING
 
         // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
         if (!num_valid_ray) {

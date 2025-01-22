@@ -105,6 +105,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
 
     payloads.set_ray(gidx, ray);
     payloads.interaction(gidx) = it;
+    payloads.pdf(gidx) = 1.f;
 }
 
 /**
@@ -297,6 +298,10 @@ CPT_KERNEL void radiance_splat(
 
     Vec4 L = payloads.L(gmem_addr);         // To local register
     L = L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
+    if (px == 512 && py == 900) {
+        auto local_v = image(px, py);
+        printf("L(%d): %f, %f, %f, %f, image: %f, %f, %f\n", accum_cnt, L.x(), L.y(), L.z(), L.w(), local_v.x(), local_v.y(), local_v.z(), local_v.w());
+    }
 
     if constexpr (render_once) {
         // image will be the output buffer, there will be double buffering
