@@ -99,7 +99,6 @@ int main(int argc, char** argv) {
     auto window = gui::create_window(scene.config.width, scene.config.height);
     renderer->graphics_resc_init(gui::init_texture_and_pbo);
     renderer->update_camera(scene.cam);
-    renderer->prepare_for_rendering();
     gui::GUIParams params(renderer->serialized_data);
     Serializer::push<int>(params.serialized_data, 1);
     params.gamma_corr   = scene.config.gamma_correction;

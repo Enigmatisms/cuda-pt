@@ -101,7 +101,6 @@ PythonRenderer::PythonRenderer(const nb::str& xml_path, int _device_id, int seed
     rdr->set_seed_offset(seed_offset);
     rdr->update_camera(scene->cam);
     rdr->initialize_output_buffer();
-    rdr->prepare_for_rendering();
 }
 
 void PythonRenderer::release() {

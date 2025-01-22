@@ -95,8 +95,6 @@ public:
         return var_buffer;
     }
 
-    virtual CPT_CPU void prepare_for_rendering() {  /** do nothing, currently only WFPT will do something. */ }
-
     /**
      * @brief initialize graphics resources
      * @param executor the callback function pointer
@@ -126,7 +124,7 @@ public:
         accum_cnt = 0;                                                              // reset accumulation counter
     }
 
-    virtual CPT_CPU void update_camera(const DeviceCamera* const cam) {
+    CPT_CPU void update_camera(const DeviceCamera* const cam) {
         CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
     }
 
