@@ -96,6 +96,6 @@ public:
             std::lock_guard<std::mutex> local(_mtx);
             _buffer_ready = false;
         }
-        CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice, _nb_stream));
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
     }
 };

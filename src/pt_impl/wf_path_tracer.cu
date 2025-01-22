@@ -5,7 +5,6 @@
  * @date 2024.10.10
  * @copyright Copyright (c) 2024
  */
-#include <thrust/shuffle.h>
 #include <thrust/binary_search.h>
 #include "renderer/wf_path_tracer.cuh"
 
@@ -51,12 +50,10 @@ CPT_CPU void WavefrontPathTracer::double_buffering_thread() {
          * during the `raygen_primary_hit_shader`, the following load will check out
          */
         if (_cam_st.load() != local_st) continue;       // bypass the stale frame
-        {
-            std::lock_guard<std::mutex> lock(_mtx);
-            _cur_traced_pool = cur_traced_pool;
-            _buffer_ready = true;
-            _cv.notify_one();
-        }
+        std::lock_guard<std::mutex> lock(_mtx);
+        _cur_traced_pool = cur_traced_pool;
+        _buffer_ready = true;
+        _cv.notify_one();
         cur_traced_pool = 1 - cur_traced_pool;
     }
 }
@@ -74,7 +71,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
     int num_valid_ray = w * h, cur_traced_pool = _cur_traced_pool;
-    auto& index_buffer = index_buffers[cur_traced_pool];
+    auto index_buffer = index_buffers[cur_traced_pool];
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
 // #ifdef NO_RAY_SORTING
 //         num_valid_ray = partition_func(
@@ -89,10 +86,6 @@ CPT_CPU void WavefrontPathTracer::render_online(
 //         num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
 //                         index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
 // #endif  // NO_RAY_SORTING
-        thrust::shuffle(
-                index_buffer.begin(), 
-                index_buffer.begin() + num_valid_ray, thrust::default_random_engine()
-        );
 
         // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
         if (!num_valid_ray) {
@@ -116,12 +109,12 @@ CPT_CPU void WavefrontPathTracer::render_online(
 
     accum_cnt ++;
     radiance_splat<true><<<GRID, BLOCK>>>(
-        payload_buffers[cur_traced_pool], image, 
+        payload_buffers[_cur_traced_pool], image, 
         output_buffer, var_buffer, accum_cnt, gamma_corr
     );
+    ul.unlock();
     _buffer_ready = false;
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
-    ul.unlock();
 }
 
 CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
@@ -139,8 +132,8 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
         _cv.wait(ul, [this]{ return _buffer_ready || !_rdr_valid.load(); });
         if (!_rdr_valid.load()) break;
 
-        auto& index_buffer = index_buffers[_cur_traced_pool];
         for (int bounce = 0; bounce < md.max_depth; bounce ++) {
+            auto index_buffer = index_buffers[_cur_traced_pool];
 #ifdef NO_RAY_SORTING
             num_valid_ray = partition_func(
                 index_buffer.begin(), 
@@ -198,8 +191,8 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
 
     accum_cnt ++;
     int num_valid_ray = w * h;
-    auto& index_buffer = index_buffers[_cur_traced_pool];
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
+        auto index_buffer = index_buffers[_cur_traced_pool];
 #ifdef NO_RAY_SORTING
         num_valid_ray = partition_func(
             index_buffer.begin(), 
