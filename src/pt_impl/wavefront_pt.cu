@@ -90,7 +90,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
                     prim_u, prim_v, node_num, cache_num, MAX_DIST);
 
     // ============= step 2: local shading for indirect bounces ================
-    payloads.L(gidx)   = Vec4(0, 0, 0, 1);
+    payloads.L(gidx) = Vec4(0, 1);
     payloads.set_sampler(gidx, sg);
     if (min_index >= 0) {
         // if the ray hits nothing, or the path throughput is 0, then the ray will be inactive
@@ -106,6 +106,10 @@ CPT_KERNEL void raygen_primary_hit_shader(
     payloads.set_ray(gidx, ray);
     payloads.interaction(gidx) = it;
     payloads.pdf(gidx) = 1.f;
+
+    // if (px == 100 && py == 900) {
+    //     printf("ray gen (%d | %d): %d, %x\n", accum_cnt, gidx, int(min_index >= 0), compose_ray_stat(min_object_id, min_index >= 0));
+    // }
 }
 
 /**
@@ -276,6 +280,14 @@ CPT_KERNEL void fused_ray_bounce_shader(
         );
         ray.set_delta((sampled_lobe & BSDFFlag::BSDF_SPECULAR) > 0);
 
+        // if (gidx == 921700) {
+        //     auto dir_e = payloads.L(gidx);
+        //     Ray ray = payloads.get_ray(gidx);
+        //     printf("bounce: %d, %d, %d, %x. thp: %f, %f, %f, dir: %f, %f, %f, ew: %f\n", gidx, (int)ray.is_hit(), (int)ray.is_active(), ray_stat,
+        //         thp.x(), thp.y(), thp.z(), dir_e.x(), dir_e.y(), dir_e.z(), emission_weight
+        //     );
+        // }
+
         payloads.thp(gidx) = thp;
         payloads.set_sampler(gidx, sg);
         payloads.set_ray(gidx, ray);
@@ -298,10 +310,15 @@ CPT_KERNEL void radiance_splat(
 
     Vec4 L = payloads.L(gmem_addr);         // To local register
     L = L.numeric_err() ? Vec4(0, 0, 0, 1) : L;
-    if (px == 512 && py == 900) {
-        auto local_v = image(px, py);
-        printf("L(%d): %f, %f, %f, %f, image: %f, %f, %f\n", accum_cnt, L.x(), L.y(), L.z(), L.w(), local_v.x(), local_v.y(), local_v.z(), local_v.w());
-    }
+    // if (px == 100 && py == 900) {
+    //     auto local_v = image(px, py);
+    //     auto thp = payloads.thp(gmem_addr);
+    //     printf("splat: L(%d | %d): %f, %f, %f, %f, image: %f, %f, %f, %f, thp: %f, %f, %f\n", accum_cnt, gmem_addr,
+    //         L.x(), L.y(), L.z(), L.w(), 
+    //         local_v.x(), local_v.y(), local_v.z(), local_v.w(),
+    //         thp.x(), thp.y(), thp.z()
+    //     );
+    // }
 
     if constexpr (render_once) {
         // image will be the output buffer, there will be double buffering

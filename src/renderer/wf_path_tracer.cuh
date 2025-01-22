@@ -35,23 +35,21 @@ private:
 
     // double buffering related
     int _cur_traced_pool;           // index for the current path-traced ray pool
-    bool _buffer_ready;             // in case the path tracer gets the lock first
 
     std::condition_variable _cv;
     std::mutex              _mtx;
     std::thread             _th;
+
     cudaStream_t            _nb_stream;     // non-blocking stream
     std::atomic<bool>       _rdr_valid;     // stop flag
+    std::atomic<bool>       _buffer_ready;  // in case the path tracer gets the lock first
     std::atomic<uint64_t>   _cam_st;        // camera time stamp: used for discarding stale frames
 public:
     WavefrontPathTracer(const Scene& scene);
 
     ~WavefrontPathTracer() {
         _rdr_valid.store(false);
-        {   
-            std::lock_guard<std::mutex> ul(_mtx);
-            _buffer_ready = false;
-        }
+        _buffer_ready.store(false);
         _cv.notify_all();
         if (_th.joinable())
             _th.join();
@@ -91,11 +89,10 @@ public:
 
     CPT_CPU void update_camera(const DeviceCamera* const cam) override {
         // I have to use .time_since_epoch().count(), though it is not a good practice
-        _cam_st.store(std::chrono::steady_clock::now().time_since_epoch().count());
-        {
-            std::lock_guard<std::mutex> local(_mtx);
-            _buffer_ready = false;
-        }
         CUDA_CHECK_RETURN(cudaMemcpyAsync(camera, cam, sizeof(DeviceCamera), cudaMemcpyHostToDevice));
+        _cam_st.store(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::lock_guard<std::mutex> local(_mtx);
+        _buffer_ready.store(false);
+        _cv.notify_all();
     }
 };

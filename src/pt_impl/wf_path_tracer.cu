@@ -33,7 +33,7 @@ WavefrontPathTracer::WavefrontPathTracer(const Scene& scene):
 CPT_CPU void WavefrontPathTracer::double_buffering_thread() {
     const size_t cached_size = num_cache * sizeof(uint4);
     int cur_traced_pool = 0;
-    for(int local_cnt; _rdr_valid.load(); local_cnt ++) {
+    for(int local_cnt = 0; _rdr_valid.load(); local_cnt ++) {
         uint64_t local_st = _cam_st.load();
         raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, _nb_stream>>>(
             *camera, payload_buffers[cur_traced_pool], verts, norms, uvs,
@@ -49,10 +49,18 @@ CPT_CPU void WavefrontPathTracer::double_buffering_thread() {
          * there will be some phantom on the rendered image. If there is no camera update
          * during the `raygen_primary_hit_shader`, the following load will check out
          */
+        std::unique_lock<std::mutex> ul(_mtx);
+        _cv.wait(ul, [this, local_st](){ 
+            return !_buffer_ready.load() || 
+                   !_rdr_valid.load() || 
+                   _cam_st.load() != local_st; 
+        });
+        
+        if (!_rdr_valid.load()) return;
         if (_cam_st.load() != local_st) continue;       // bypass the stale frame
-        std::lock_guard<std::mutex> lock(_mtx);
+
         _cur_traced_pool = cur_traced_pool;
-        _buffer_ready = true;
+        _buffer_ready.store(true);
         _cv.notify_one();
         cur_traced_pool = 1 - cur_traced_pool;
     }
@@ -63,7 +71,9 @@ CPT_CPU void WavefrontPathTracer::render_online(
     bool gamma_corr
 ) {
     std::unique_lock<std::mutex> ul(_mtx);
-    _cv.wait(ul, [this]{ return _buffer_ready || !_rdr_valid.load(); });
+    _cv.wait(ul, [this](){ 
+        return _buffer_ready.load() || !_rdr_valid.load(); 
+    });
     if (!_rdr_valid.load()) return;
 
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
@@ -71,7 +81,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
     int num_valid_ray = w * h, cur_traced_pool = _cur_traced_pool;
-    auto index_buffer = index_buffers[cur_traced_pool];
+    auto& index_buffer = index_buffers[cur_traced_pool];
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
 #ifdef NO_RAY_SORTING
         num_valid_ray = partition_func(
@@ -112,8 +122,10 @@ CPT_CPU void WavefrontPathTracer::render_online(
         payload_buffers[_cur_traced_pool], image, 
         output_buffer, var_buffer, accum_cnt, gamma_corr
     );
+    CUDA_CHECK_RETURN(cudaStreamSynchronize(cudaStreamDefault));
+    _buffer_ready.store(false);
+    _cv.notify_one();
     ul.unlock();
-    _buffer_ready = false;
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
 
@@ -126,14 +138,16 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
     
     uint32_t cached_size = num_cache * sizeof(uint4);
     for (int i = 0; i < num_iter; i++) {
-        int num_valid_ray = w * h;
 
         std::unique_lock<std::mutex> ul(_mtx);
-        _cv.wait(ul, [this]{ return _buffer_ready || !_rdr_valid.load(); });
+        _cv.wait(ul, [this](){ 
+            return _buffer_ready.load() || !_rdr_valid.load(); 
+        });
         if (!_rdr_valid.load()) break;
 
+        int num_valid_ray = w * h, cur_traced_pool = _cur_traced_pool;
+        auto& index_buffer = index_buffers[cur_traced_pool];
         for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-            auto index_buffer = index_buffers[_cur_traced_pool];
 #ifdef NO_RAY_SORTING
             num_valid_ray = partition_func(
                 index_buffer.begin(), 
@@ -152,15 +166,15 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
 
             fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
-                payload_buffers[_cur_traced_pool], verts, norms, uvs, obj_info, emitter_prims,
-                bvh_leaves, nodes, _cached_nodes, idx_buffer[_cur_traced_pool], 
+                payload_buffers[cur_traced_pool], verts, norms, uvs, obj_info, emitter_prims,
+                bvh_leaves, nodes, _cached_nodes, idx_buffer[cur_traced_pool], 
                 num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
             );
 
             if (bounce + 1 >= md.max_depth) break;
             fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
-                payload_buffers[_cur_traced_pool], verts, norms, uvs, 
-                bvh_leaves, nodes, _cached_nodes, idx_buffer[_cur_traced_pool], 
+                payload_buffers[cur_traced_pool], verts, norms, uvs, 
+                bvh_leaves, nodes, _cached_nodes, idx_buffer[cur_traced_pool], 
                 num_prims, num_nodes, num_cache, bounce, envmap_id
             );
         }
@@ -169,8 +183,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             payload_buffers[_cur_traced_pool], image, output_buffer, var_buffer, i, gamma_correction
         );
         CUDA_CHECK_RETURN(cudaStreamSynchronize(cudaStreamDefault));
-
-        _buffer_ready = false;
+        _buffer_ready.store(false);
         ul.unlock();
         printProgress(i, num_iter);
     }
@@ -186,13 +199,15 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
     const size_t cached_size = num_cache * sizeof(uint4);
 
     std::unique_lock<std::mutex> ul(_mtx);
-    _cv.wait(ul, [this]{ return _buffer_ready || !_rdr_valid.load(); });
+    _cv.wait(ul, [this](){ 
+        return _buffer_ready.load() || !_rdr_valid.load(); 
+    });
     if (!_rdr_valid.load()) return output_buffer;
 
     accum_cnt ++;
-    int num_valid_ray = w * h;
+    int num_valid_ray = w * h, cur_traced_pool = _cur_traced_pool;
+    auto& index_buffer = index_buffers[cur_traced_pool];
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-        auto index_buffer = index_buffers[_cur_traced_pool];
 #ifdef NO_RAY_SORTING
         num_valid_ray = partition_func(
             index_buffer.begin(), 
@@ -213,25 +228,25 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
 
         // step5: NEE shader
         fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
-            payload_buffers[_cur_traced_pool], verts, norms, uvs, obj_info, emitter_prims,
-            bvh_leaves, nodes, _cached_nodes, idx_buffer[_cur_traced_pool], 
+            payload_buffers[cur_traced_pool], verts, norms, uvs, obj_info, emitter_prims,
+            bvh_leaves, nodes, _cached_nodes, idx_buffer[cur_traced_pool], 
             num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
         );
 
         if (bounce + 1 >= md.max_depth) break;
         fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
-            payload_buffers[_cur_traced_pool], verts, norms, uvs, 
-            bvh_leaves, nodes, _cached_nodes, idx_buffer[_cur_traced_pool], 
+            payload_buffers[cur_traced_pool], verts, norms, uvs, 
+            bvh_leaves, nodes, _cached_nodes, idx_buffer[cur_traced_pool], 
             num_prims, num_nodes, num_cache, bounce, envmap_id
         );
     }
 
     // step8: accumulating radiance to the rgb buffer
     radiance_splat<true><<<GRID, BLOCK>>>(
-        payload_buffers[_cur_traced_pool], image, output_buffer, var_buffer, accum_cnt, gamma_corr
+        payload_buffers[cur_traced_pool], image, output_buffer, var_buffer, accum_cnt, gamma_corr
     );
 
     CUDA_CHECK_RETURN(cudaStreamSynchronize(cudaStreamDefault));
-    _buffer_ready = false;
+    _buffer_ready.store(false);
     return output_buffer;
 }
