@@ -41,7 +41,7 @@
 		<film type="film">
 			<integer name="width" value="960"/>
 			<!-- Benchmark: 960 * 540, FOV: 48 -->
-			<integer name="height" value="640"/>		
+			<integer name="height" value="540"/>		
 			<bool name="gamma_correction" value="true"/>
 		</film>
 	</sensor>

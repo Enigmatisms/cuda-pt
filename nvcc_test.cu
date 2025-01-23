@@ -28,6 +28,7 @@ int main() {
     std::cout << "maxBlocksPerMultiProcessor: " << prop.maxBlocksPerMultiProcessor << std::endl;
     std::cout << "multiProcessorCount: " << prop.multiProcessorCount << std::endl;
     std::cout << "totalConstMem: " << prop.totalConstMem << " bytes"<< std::endl;
+    std::cout << "multiProcessorCount: " << prop.multiProcessorCount << std::endl;
 
     constexpr Vec3 data(1, 2, 3);
     std::cout << data.x() << ", " << data.y() << ", " << data.z() << std::endl;

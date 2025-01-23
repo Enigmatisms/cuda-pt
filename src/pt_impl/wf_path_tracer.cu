@@ -6,21 +6,27 @@
  * @copyright Copyright (c) 2024
  */
 
+#include <thrust/binary_search.h>
 #include "renderer/wf_path_tracer.cuh"
+
+static constexpr int SHFL_THREAD_X = 5;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
+static constexpr int SHFL_THREAD_Y = 2;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
+static constexpr int BLOCK_LIMIT = 12;      // Note: Related to occupancy, should be obtained from profiler
 
 WavefrontPathTracer::WavefrontPathTracer(const Scene& scene): 
     PathTracer(scene),
-    x_patches(w / PATCH_X), y_patches(h / PATCH_Y),
-    num_patches(x_patches * y_patches), 
-    GRID(BLOCK_X, BLOCK_Y), 
-    BLOCK(THREAD_X, THREAD_Y)
+    GRID(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), 
+    BLOCK(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y),
+    NUM_THREADS(1 << (SHFL_THREAD_X + SHFL_THREAD_Y))
 {
-    for (int i = 0; i < NUM_STREAM; i++)
-        cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking);
-    payload_buffer.init(NUM_STREAM * PATCH_X, PATCH_Y);
-    index_buffer.resize(NUM_STREAM * TOTAL_RAY);
-    ray_idx_buffer = thrust::raw_pointer_cast(index_buffer.data());
-    omp_set_num_threads(NUM_STREAM);
+    int image_size = image.w() * image.h();
+    payload_buffer.init(image_size);
+    index_buffer.resize(image_size);
+    idx_buffer = thrust::raw_pointer_cast(index_buffer.data());
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    WAVE_SIZE = prop.multiProcessorCount * BLOCK_LIMIT;
 }
 
 CPT_CPU void WavefrontPathTracer::render_online(
@@ -32,81 +38,54 @@ CPT_CPU void WavefrontPathTracer::render_online(
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer((void**)&output_buffer, &_num_bytes, pbo_resc));
 
     accum_cnt ++;
+    // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
+    raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
+        *camera, payload_buffer, verts, norms, uvs,
+        obj_info, bvh_leaves, nodes, _cached_nodes, 
+        idx_buffer, num_prims, image.w(), num_nodes, 
+        num_cache, accum_cnt, seed_offset, envmap_id
+    );
 
-    #pragma omp parallel for num_threads(NUM_STREAM)
-    for (int p_idx = 0; p_idx < num_patches; p_idx++) {
-        int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
-        int stream_offset = stream_id * TOTAL_RAY;
-        auto cur_stream = streams[stream_id];
-
-        // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
-        raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-            *camera, payload_buffer, verts, norms, uvs,
-            obj_info, bvh_leaves, nodes, _cached_nodes, 
-            ray_idx_buffer, stream_offset, num_prims, patch_x, 
-            patch_y, accum_cnt, stream_id, image.w(), num_nodes, num_cache);
-        int num_valid_ray = TOTAL_RAY;
-        auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
-        for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-            
-            // step3: miss shader (ray inactive and Russian Roulette)
-#ifndef FUSED_MISS_SHADER
-            miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, ray_idx_buffer, bounce, stream_offset, num_valid_ray, envmap_id
-            );
-#endif  // FUSED_MISS_SHADER
-            
-            // step4: thrust stream compaction (optional)
-#ifndef NO_STREAM_COMPACTION
-            num_valid_ray = partition_func(
-                thrust::cuda::par.on(cur_stream), 
-                start_iter, start_iter + num_valid_ray,
-                ActiveRayFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
-            ) - start_iter;
+    int num_valid_ray = w * h, max_grid_num = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+    for (int bounce = 0; bounce < md.max_depth; bounce ++) {
+#ifdef NO_RAY_SORTING
+        num_valid_ray = partition_func(
+            index_buffer.begin(), 
+            index_buffer.begin() + num_valid_ray,
+            ActiveRayFunctor()
+        ) - index_buffer.begin();
 #else
-            num_valid_ray = TOTAL_RAY;    
-#endif  // NO_STREAM_COMPACTION
+        thrust::sort(
+            index_buffer.begin(), index_buffer.begin() + num_valid_ray
+        );
+        num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+                        index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+#endif  // NO_RAY_SORTING
 
-#ifndef NO_RAY_SORTING
-            // sort the ray (indices) by their ray tag (hit object)
-            // ray sorting is extremely slow
-            thrust::sort(
-                thrust::cuda::par.on(cur_stream), 
-                start_iter, start_iter + num_valid_ray,
-                RaySortFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
-            );
-#endif
-
-            // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
-            if (!num_valid_ray) break;
-
-            // step5: NEE shader
-            nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
-                bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, stream_offset, 
-                num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
-            );
-
-            // step6: emission shader + ray update shader
-            bsdf_local_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, bvh_leaves, obj_info, ray_idx_buffer,
-                stream_offset, num_prims, num_valid_ray, bounce > 0
-            );
-
-            // step2: closesthit shader
-            if (bounce + 1 >= md.max_depth) break;
-            closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                payload_buffer, verts, norms, uvs, obj_info, 
-                bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, 
-                stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
-            );
+        // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
+        if (!num_valid_ray) {
+            break;
         }
+        int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+        NUM_GRID = padded_grid(NUM_GRID, max_grid_num);
 
-        // step8: accumulating radiance to the rgb buffer
-        radiance_splat<true><<<GRID, BLOCK, 0, cur_stream>>>(
-            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer, var_buffer, gamma_corr
+        fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
+            payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
+            bvh_leaves, nodes, _cached_nodes, idx_buffer, 
+            num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
+        );
+
+        if (bounce + 1 >= md.max_depth) break;
+        fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
+            payload_buffer, verts, norms, uvs, 
+            bvh_leaves, nodes, _cached_nodes, idx_buffer, 
+            num_prims, num_nodes, num_cache, bounce, envmap_id
         );
     }
+
+    radiance_splat<true><<<GRID, BLOCK>>>(
+        payload_buffer, image, output_buffer, var_buffer, accum_cnt, gamma_corr
+    );
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
 
@@ -117,100 +96,62 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
 ) {
     TicToc _timer("render_pt_kernel()", num_iter);
     
-    const int x_patches = w / PATCH_X, y_patches = h / PATCH_Y;
-    const int num_patches = x_patches * y_patches;
     // step 1, allocate 2D array of CUDA memory to hold: PathPayLoad
     uint32_t* const ray_idx_buffer = thrust::raw_pointer_cast(index_buffer.data()),
                 cached_size = num_cache * sizeof(uint4);
-    const dim3 GRID(BLOCK_X, BLOCK_Y), BLOCK(THREAD_X, THREAD_Y);
 
+    int num_valid_ray = w * h, max_grid_num = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
     for (int i = 0; i < num_iter; i++) {
-        // here, we should use multi threading to submit the kernel call
-        // each thread is responsible for only one stream (and dedicated to that stream only)
-        // If we decide to use 8 streams, then we will use 8 CPU threads
-        // Using multi-threading to submit kernel, we can avoid stucking on just one stream
-        // This can be extended even further: use a high performance thread pool
-        #pragma omp parallel for num_threads(NUM_STREAM)
-        for (int p_idx = 0; p_idx < num_patches; p_idx++) {
-            int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
-            int stream_offset = stream_id * TOTAL_RAY;
-            auto cur_stream = streams[stream_id];
-
-            // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
-            raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                *camera, payload_buffer, verts, norms, uvs,
-                obj_info, bvh_leaves, nodes, _cached_nodes, 
-                ray_idx_buffer, stream_offset, num_prims, patch_x, 
-                patch_y, i, stream_id, image.w(), num_nodes, num_cache);
-            int num_valid_ray = TOTAL_RAY;
-            auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
-            for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-                
-                // step3: miss shader (ray inactive)
-#ifndef FUSED_MISS_SHADER
-                miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer, ray_idx_buffer, bounce, stream_offset, num_valid_ray, envmap_id
-                );
-#endif  // FUSED_MISS_SHADER
-                
-                // step4: thrust stream compaction (optional)
-#ifndef NO_STREAM_COMPACTION
-                num_valid_ray = partition_func(
-                    thrust::cuda::par.on(cur_stream), 
-                    start_iter, start_iter + num_valid_ray,
-                    ActiveRayFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
-                ) - start_iter;
+        // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
+        raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
+            *camera, payload_buffer, verts, norms, uvs,
+            obj_info, bvh_leaves, nodes, _cached_nodes, 
+            idx_buffer, num_prims, image.w(), num_nodes, 
+            num_cache, i, seed_offset, envmap_id
+        );
+        for (int bounce = 0; bounce < md.max_depth; bounce ++) {
+#ifdef NO_RAY_SORTING
+            num_valid_ray = partition_func(
+                index_buffer.begin(), 
+                index_buffer.begin() + num_valid_ray,
+                ActiveRayFunctor()
+            ) - index_buffer.begin();
 #else
-                num_valid_ray = TOTAL_RAY;    
-#endif  // NO_STREAM_COMPACTION
+            thrust::sort(
+                index_buffer.begin(), index_buffer.begin() + num_valid_ray
+            );
+            num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+                            index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+#endif  // NO_RAY_SORTING
 
-#ifndef NO_RAY_SORTING
-                // sort the ray (indices) by their ray tag (hit object)
-                // ray sorting is extremely slow
-                thrust::sort(
-                    thrust::cuda::par.on(cur_stream), 
-                    start_iter, start_iter + num_valid_ray,
-                    RaySortFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
-                );
-#endif
+            // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
+            if (!num_valid_ray) break;
+            int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+            NUM_GRID = padded_grid(NUM_GRID, max_grid_num);
 
-                // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
-                if (!num_valid_ray) break;
+            fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
+                payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
+                bvh_leaves, nodes, _cached_nodes, idx_buffer, 
+                num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
+            );
 
-                // step5: NEE shader
-                nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                    payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
-                    bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, stream_offset, 
-                    num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
-                );
-
-                // step6: emission shader + ray update shader
-                bsdf_local_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                    payload_buffer, bvh_leaves, obj_info, ray_idx_buffer,
-                    stream_offset, num_prims, num_valid_ray, bounce > 0
-                );
-
-                // step2: closesthit shader
-                if (bounce + 1 >= md.max_depth) break;
-                closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                    payload_buffer, verts, norms, uvs, obj_info, 
-                    bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, 
-                    stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
-                );
-            }
-
-            // step8: accumulating radiance to the rgb buffer
-            radiance_splat<false><<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, image, stream_id, patch_x, patch_y, false
+            if (bounce + 1 >= md.max_depth) break;
+            fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
+                payload_buffer, verts, norms, uvs, 
+                bvh_leaves, nodes, _cached_nodes, idx_buffer, 
+                num_prims, num_nodes, num_cache, bounce, envmap_id
             );
         }
 
+        radiance_splat<false><<<GRID, BLOCK>>>(
+            payload_buffer, image, output_buffer, var_buffer, accum_cnt, gamma_correction
+        );
         // should we synchronize here? Yes, host end needs this
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
+        num_valid_ray = w * h;
     }
     printf("\n");
-
     // TODO: wavefront path tracing does not support online visualization yet
     return image.export_cpu(1.f / num_iter, gamma_correction);
 }
@@ -222,80 +163,55 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
     size_t cached_size = num_cache * sizeof(uint4);
     accum_cnt ++;
 
-    #pragma omp parallel for num_threads(NUM_STREAM)
-    for (int p_idx = 0; p_idx < num_patches; p_idx++) {
-        int patch_x = p_idx % x_patches, patch_y = p_idx / x_patches, stream_id = omp_get_thread_num();
-        int stream_offset = stream_id * TOTAL_RAY;
-        auto cur_stream = streams[stream_id];
+    // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
+    raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
+        *camera, payload_buffer, verts, norms, uvs,
+        obj_info, bvh_leaves, nodes, _cached_nodes, 
+        idx_buffer, num_prims, image.w(), num_nodes, 
+        num_cache, accum_cnt, seed_offset, envmap_id
+    );
 
-        // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
-        raygen_primary_hit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-            *camera, payload_buffer, verts, norms, uvs,
-            obj_info, bvh_leaves, nodes, _cached_nodes, 
-            ray_idx_buffer, stream_offset, num_prims, patch_x, 
-            patch_y, accum_cnt, stream_id, image.w(), num_nodes, num_cache);
-        int num_valid_ray = TOTAL_RAY;
-        auto start_iter = index_buffer.begin() + stream_id * TOTAL_RAY;
-        for (int bounce = 0; bounce < md.max_depth; bounce ++) {
-            
-            // step3: miss shader (ray inactive and Russian Roulette)
-#ifndef FUSED_MISS_SHADER
-            miss_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, ray_idx_buffer, bounce, stream_offset, num_valid_ray, envmap_id
-            );
-#endif  // FUSED_MISS_SHADER
-            
-            // step4: thrust stream compaction (optional)
-#ifndef NO_STREAM_COMPACTION
-            num_valid_ray = partition_func(
-                thrust::cuda::par.on(cur_stream), 
-                start_iter, start_iter + num_valid_ray,
-                ActiveRayFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
-            ) - start_iter;
+    int num_valid_ray = w * h, max_grid_num = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+    for (int bounce = 0; bounce < md.max_depth; bounce ++) {
+        // step4: thrust stream compaction (optional)
+#ifdef NO_RAY_SORTING
+        num_valid_ray = partition_func(
+            index_buffer.begin(), 
+            index_buffer.begin() + num_valid_ray,
+            ActiveRayFunctor()
+        ) - index_buffer.begin();
 #else
-            num_valid_ray = TOTAL_RAY;    
-#endif  // NO_STREAM_COMPACTION
+        thrust::sort(
+            index_buffer.begin(), index_buffer.begin() + num_valid_ray
+        );
+        num_valid_ray = thrust::lower_bound(index_buffer.begin(), 
+                        index_buffer.begin() + num_valid_ray, 0x80000000) - index_buffer.begin();
+#endif  // NO_RAY_SORTING
 
-#ifndef NO_RAY_SORTING
-            // sort the ray (indices) by their ray tag (hit object)
-            // ray sorting is extremely slow
-            thrust::sort(
-                thrust::cuda::par.on(cur_stream), 
-                start_iter, start_iter + num_valid_ray,
-                RaySortFunctor(payload_buffer.ray_ds, NUM_STREAM * PATCH_X)
-            );
-#endif
+        // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
+        if (!num_valid_ray) break;
+        int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+        NUM_GRID = padded_grid(NUM_GRID, max_grid_num);
 
-            // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
-            if (!num_valid_ray) break;
+        // step5: NEE shader
+        fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
+            payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
+            bvh_leaves, nodes, _cached_nodes, idx_buffer, 
+            num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
+        );
 
-            // step5: NEE shader
-            nee_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
-                bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, stream_offset, 
-                num_prims, num_objs, num_emitter, num_valid_ray, num_nodes, num_cache
-            );
-
-            // step6: emission shader + ray update shader
-            bsdf_local_shader<<<GRID, BLOCK, 0, cur_stream>>>(
-                payload_buffer, bvh_leaves, obj_info, ray_idx_buffer,
-                stream_offset, num_prims, num_valid_ray, bounce > 0
-            );
-
-            // step2: closesthit shader
-            if (bounce + 1 >= md.max_depth) break;
-            closesthit_shader<<<GRID, BLOCK, cached_size, cur_stream>>>(
-                payload_buffer, verts, norms, uvs, obj_info, 
-                bvh_leaves, nodes, _cached_nodes, ray_idx_buffer, 
-                stream_offset, num_prims, num_valid_ray, num_nodes, num_cache
-            );
-        }
-
-        // step8: accumulating radiance to the rgb buffer
-        radiance_splat<true><<<GRID, BLOCK, 0, cur_stream>>>(
-            payload_buffer, image, stream_id, patch_x, patch_y, accum_cnt, output_buffer, var_buffer, gamma_corr
+        if (bounce + 1 >= md.max_depth) break;
+        fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
+            payload_buffer, verts, norms, uvs, 
+            bvh_leaves, nodes, _cached_nodes, idx_buffer, 
+            num_prims, num_nodes, num_cache, bounce, envmap_id
         );
     }
+
+    // step8: accumulating radiance to the rgb buffer
+    radiance_splat<true><<<GRID, BLOCK>>>(
+        payload_buffer, image, output_buffer, var_buffer, accum_cnt, gamma_corr
+    );
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return output_buffer;
 }

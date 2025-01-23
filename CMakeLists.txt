@@ -163,67 +163,75 @@ target_compile_options(
 	$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
 )
 
-# ============================ Python Bindings ============================
-find_package(Python REQUIRED COMPONENTS Development)
-find_package(CUDAToolkit REQUIRED)
-if (Python_FOUND AND CUDAToolkit_FOUND)
-	message(STATUS "Python found: Version: ${Python_VERSION}")
-	message(STATUS "CUDAToolkit found: Version: ${CUDAToolkit_VERSION}")
-	message(STATUS "Building remote distributed rendering code and nanobind python binds...")
-	enable_language(CUDA)
+option(BUILD_PYTHON_MODULE "Build Python Module" ON)
+if (BUILD_PYTHON_MODULE)
+	message(STATUS "Building Python Module via Nanobind...")
+	# ============================ Python Bindings ============================
+	find_package(Python REQUIRED COMPONENTS Development)
+	find_package(CUDAToolkit REQUIRED)
+	if (Python_FOUND AND CUDAToolkit_FOUND)
+		message(STATUS "Python found: Version: ${Python_VERSION}")
+		message(STATUS "CUDAToolkit found: Version: ${CUDAToolkit_VERSION}")
+		message(STATUS "Building remote distributed rendering code and nanobind python binds...")
+		enable_language(CUDA)
 
-	set(NANOBIND_NDARRAY_SRC_FILES
-		src/ext/nanobind/src/nb_func.cpp
-		src/ext/nanobind/src/common.cpp
-		src/ext/nanobind/src/error.cpp
-		src/ext/nanobind/src/nb_internals.cpp
-		src/ext/nanobind/src/nb_type.cpp
-		src/ext/nanobind/src/nb_static_property.cpp
-		src/ext/nanobind/src/implicit.cpp
-		src/ext/nanobind/src/nb_ndarray.cpp
-	)
+		set(NANOBIND_NDARRAY_SRC_FILES
+			src/ext/nanobind/src/nb_func.cpp
+			src/ext/nanobind/src/common.cpp
+			src/ext/nanobind/src/error.cpp
+			src/ext/nanobind/src/nb_internals.cpp
+			src/ext/nanobind/src/nb_type.cpp
+			src/ext/nanobind/src/nb_static_property.cpp
+			src/ext/nanobind/src/implicit.cpp
+			src/ext/nanobind/src/nb_ndarray.cpp
+		)
 
-	add_library(pyrender MODULE
-		src/pyrender/python_render.cu
-		src/pyrender/python_bind.cu
-		${NANOBIND_NDARRAY_SRC_FILES}
-	)
+		add_library(pyrender MODULE
+			src/pyrender/python_render.cu
+			src/pyrender/python_bind.cu
+			${NANOBIND_NDARRAY_SRC_FILES}
+		)
 
-	target_include_directories(pyrender PRIVATE
-		${CMAKE_CURRENT_LIST_DIR}/src 
-		${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/include
-		${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/ext/robin_map/include/
-		${Python_INCLUDE_DIRS}
-	)
+		target_include_directories(pyrender PRIVATE
+			${CMAKE_CURRENT_LIST_DIR}/src 
+			${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/include
+			${CMAKE_CURRENT_LIST_DIR}/src/ext/nanobind/ext/robin_map/include/
+			${Python_INCLUDE_DIRS}
+		)
 
-	target_link_libraries(pyrender PRIVATE
-		${Python_LIBRARIES}
-		RenderCore
-	)
+		target_link_libraries(pyrender PRIVATE
+			${Python_LIBRARIES}
+			RenderCore
+		)
 
-	if (MSVC)
-		set(MODULE_SUFFIX ".pyd")
+		if (MSVC)
+			set(MODULE_SUFFIX ".pyd")
+		else()
+			set(MODULE_SUFFIX ".so")
+		endif()
+
+		set_target_properties(pyrender PROPERTIES
+			PREFIX ""
+			SUFFIX ${MODULE_SUFFIX}
+			CUDA_SEPARABLE_COMPILATION ON
+			CUDA_ARCHITECTURES native
+		)
+
+		target_compile_options(pyrender PRIVATE
+			$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
+		)
 	else()
-		set(MODULE_SUFFIX ".so")
+		if (Python_FOUND)
+			message(WARNING "Python Package not found. Without Python Package, remote distributed rendering can not be compiled.")
+		else()
+			message(WARNING "CUDAToolkit not found. Without CUDAToolkit, remote distributed rendering can not be compiled.")
+		endif()
 	endif()
-
-	set_target_properties(pyrender PROPERTIES
-		PREFIX ""
-		SUFFIX ${MODULE_SUFFIX}
-		CUDA_SEPARABLE_COMPILATION ON
-		CUDA_ARCHITECTURES native
-	)
-
-	target_compile_options(pyrender PRIVATE
-		$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>
-	)
-else()
-	if (Python_FOUND)
-		message(WARNING "Python Package not found. Without Python Package, remote distributed rendering can not be compiled.")
-	else()
-		message(WARNING "CUDAToolkit not found. Without CUDAToolkit, remote distributed rendering can not be compiled.")
-	endif()
+else ()
+	message(STATUS "Python Module building disabled.")
 endif()
+
+
 
 
 # CUDA_SEPARABLE_COMPILATION ON: member function declaration and implementation can be separate
