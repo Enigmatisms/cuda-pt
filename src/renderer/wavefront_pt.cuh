@@ -201,7 +201,8 @@ CPT_KERNEL void raygen_primary_hit_shader(
     int node_num, 
     int cache_num,
     int accum_cnt,
-    int seed_offset
+    int seed_offset,
+    int envmap_id
 );
 
 /**

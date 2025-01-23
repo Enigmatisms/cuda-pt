@@ -58,7 +58,8 @@ CPT_KERNEL void raygen_primary_hit_shader(
     int node_num, 
     int cache_num,
     int accum_cnt,
-    int seed_offset
+    int seed_offset,
+    int envmap_id
 ) {
     const int px   = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     const int gidx = px + py * width;
@@ -85,13 +86,14 @@ CPT_KERNEL void raygen_primary_hit_shader(
             s_cached[offset_tid] = cached_nodes[offset_tid];
     }
     __syncthreads();
+    payloads.L(gidx) = Vec4(0, 1);
+    payloads.pdf(gidx) = 1.f;
+    payloads.set_sampler(gidx, sg);
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
                     s_cached, verts, min_index, min_object_id, 
                     prim_u, prim_v, node_num, cache_num, MAX_DIST);
 
     // ============= step 2: local shading for indirect bounces ================
-    payloads.L(gidx) = Vec4(0, 1);
-    payloads.set_sampler(gidx, sg);
     if (min_index >= 0) {
         // if the ray hits nothing, or the path throughput is 0, then the ray will be inactive
         // inactive rays will only be processed in the miss_shader
@@ -99,13 +101,14 @@ CPT_KERNEL void raygen_primary_hit_shader(
         ray.set_active(true);
         ray.set_hit_index(min_index);
         it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+    } else {
+        payloads.L(gidx) = c_emitter[envmap_id]->eval_le(&ray.d);
     }
 
     set_index(idx_buffer, gidx, gidx, compose_ray_stat(min_object_id, min_index >= 0));
 
     payloads.set_ray(gidx, ray);
     payloads.interaction(gidx) = it;
-    payloads.pdf(gidx) = 1.f;
 }
 
 /**
@@ -243,7 +246,8 @@ CPT_KERNEL void fused_ray_bounce_shader(
         int emit_prim_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sg.discrete1D(), direct_pdf);
         emit_prim_id = emitter_prims[emit_prim_id];               // extra mapping, introduced after BVH primitive reordering
         Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
-        // use ray.o to avoid creating another shadow_int variable
+        ray.o = shadow_ray.o;
+
         Vec4 direct_comp(0, 0, 0, 1);
         shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sg.next2D(), verts, norms, uvs, emit_prim_id) - shadow_ray.o;
 
@@ -269,7 +273,6 @@ CPT_KERNEL void fused_ray_bounce_shader(
         // (2) account for emission, and accumulate to payload buffer
         payloads.L(gidx) = (thp * c_emitter[emitter_id]->eval_le(&ray.d, &it)) * emission_weight + rdc;
         
-        ray.o = ray.advance(ray.hit_t);
         BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;                            
         ray.d = c_material[material_id]->sample_dir(
             ray.d, it, thp, pdf, sg, sampled_lobe, material_id

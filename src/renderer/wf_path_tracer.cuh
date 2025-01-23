@@ -28,6 +28,8 @@ private:
 
     const dim3 GRID, BLOCK;
     const int NUM_THREADS;
+
+    int WAVE_SIZE;
 public:
     WavefrontPathTracer(const Scene& scene);
 
@@ -51,4 +53,9 @@ public:
         const MaxDepthParams& md,
         bool gamma_corr = false
     ) override;
+
+    // eliminating tail effect for small grids
+    CPT_CPU_INLINE int padded_grid(int num_grid, int max_grid) const {
+        return std::min(max_grid, ((num_grid + WAVE_SIZE - 1) / WAVE_SIZE) * WAVE_SIZE);
+    }
 };

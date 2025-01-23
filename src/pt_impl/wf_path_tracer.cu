@@ -11,6 +11,7 @@
 
 static constexpr int SHFL_THREAD_X = 5;     // blockDim.x: 1 << SHFL_THREAD_X, by default, SHFL_THREAD_X is 4: 16 threads
 static constexpr int SHFL_THREAD_Y = 2;     // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16 threads
+static constexpr int BLOCK_LIMIT = 12;      // Note: Related to occupancy, should be obtained from profiler
 
 WavefrontPathTracer::WavefrontPathTracer(const Scene& scene): 
     PathTracer(scene),
@@ -22,6 +23,10 @@ WavefrontPathTracer::WavefrontPathTracer(const Scene& scene):
     payload_buffer.init(image_size);
     index_buffer.resize(image_size);
     idx_buffer = thrust::raw_pointer_cast(index_buffer.data());
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    WAVE_SIZE = prop.multiProcessorCount * BLOCK_LIMIT;
 }
 
 CPT_CPU void WavefrontPathTracer::render_online(
@@ -37,11 +42,11 @@ CPT_CPU void WavefrontPathTracer::render_online(
     raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
         *camera, payload_buffer, verts, norms, uvs,
         obj_info, bvh_leaves, nodes, _cached_nodes, 
-        idx_buffer, num_prims, image.w(), 
-        num_nodes, num_cache, accum_cnt, seed_offset
+        idx_buffer, num_prims, image.w(), num_nodes, 
+        num_cache, accum_cnt, seed_offset, envmap_id
     );
 
-    int num_valid_ray = w * h;
+    int num_valid_ray = w * h, max_grid_num = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
 #ifdef NO_RAY_SORTING
         num_valid_ray = partition_func(
@@ -62,6 +67,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
             break;
         }
         int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+        NUM_GRID = padded_grid(NUM_GRID, max_grid_num);
 
         fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
             payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
@@ -94,15 +100,15 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
     uint32_t* const ray_idx_buffer = thrust::raw_pointer_cast(index_buffer.data()),
                 cached_size = num_cache * sizeof(uint4);
 
+    int num_valid_ray = w * h, max_grid_num = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
     for (int i = 0; i < num_iter; i++) {
         // step1: ray generator, generate the rays and store them in the PayLoadBuffer of a stream
         raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
             *camera, payload_buffer, verts, norms, uvs,
             obj_info, bvh_leaves, nodes, _cached_nodes, 
-            idx_buffer, num_prims, image.w(), 
-            num_nodes, num_cache, i, seed_offset
+            idx_buffer, num_prims, image.w(), num_nodes, 
+            num_cache, i, seed_offset, envmap_id
         );
-        int num_valid_ray = w * h;
         for (int bounce = 0; bounce < md.max_depth; bounce ++) {
 #ifdef NO_RAY_SORTING
             num_valid_ray = partition_func(
@@ -121,6 +127,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
             if (!num_valid_ray) break;
             int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+            NUM_GRID = padded_grid(NUM_GRID, max_grid_num);
 
             fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
                 payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
@@ -142,6 +149,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
         // should we synchronize here? Yes, host end needs this
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
+        num_valid_ray = w * h;
     }
     printf("\n");
     // TODO: wavefront path tracing does not support online visualization yet
@@ -159,12 +167,11 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
     raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
         *camera, payload_buffer, verts, norms, uvs,
         obj_info, bvh_leaves, nodes, _cached_nodes, 
-        idx_buffer, num_prims, image.w(), 
-        num_nodes, num_cache, accum_cnt, seed_offset
+        idx_buffer, num_prims, image.w(), num_nodes, 
+        num_cache, accum_cnt, seed_offset, envmap_id
     );
 
-    int num_valid_ray = w * h;
-    
+    int num_valid_ray = w * h, max_grid_num = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
     for (int bounce = 0; bounce < md.max_depth; bounce ++) {
         // step4: thrust stream compaction (optional)
 #ifdef NO_RAY_SORTING
@@ -184,6 +191,7 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
         // here, if after partition, there is no valid PathPayLoad in the buffer, then we break from the for loop
         if (!num_valid_ray) break;
         int NUM_GRID = (num_valid_ray + NUM_THREADS - 1) / NUM_THREADS;
+        NUM_GRID = padded_grid(NUM_GRID, max_grid_num);
 
         // step5: NEE shader
         fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
