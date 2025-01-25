@@ -196,7 +196,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     IndexBuffer idx_buffer,
-    int num_prims,
     int width, 
     int node_num, 
     int cache_num,
@@ -220,7 +219,6 @@ CPT_KERNEL void fused_closesthit_shader(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     IndexBuffer idx_buffer,
-    int num_prims,
     int node_num,
     int cache_num,
     int bounce,
@@ -242,8 +240,6 @@ CPT_KERNEL void fused_ray_bounce_shader(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int node_num,
     int cache_num,
@@ -257,6 +253,49 @@ CPT_KERNEL void radiance_splat(
     float* __restrict__ var_buffer = nullptr, 
     int accum_cnt = 0, 
     bool gamma_corr = false
+);
+
+/**
+ * @brief This shader is used in path guiding enabled WFPT
+ * This kernel handles NEE and the ray hitting an emitter
+ * 
+ * TODO: in this kernel, we must fill in the query 
+ * so that the neural network can eval the NASG params for us
+ * before we execute the next kernel (`guided_ray_scatter_shader`)
+ */
+CPT_KERNEL void nee_direct_shader(
+    PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const NormalArray norms, 
+    const ConstBuffer<PackedHalf2> uvs,
+    ConstObjPtr objects,
+    ConstIndexPtr emitter_prims,
+    const cudaTextureObject_t bvh_leaves,
+    const cudaTextureObject_t nodes,
+    ConstF4Ptr cached_nodes,
+    const IndexBuffer idx_buffer,
+    int num_emitter,
+    int node_num,
+    int cache_num,
+    bool secondary_bounce
+);
+
+/**
+ * @brief This kernel handles path guiding. Here
+ * NASG [SIGGRAPH 2024] paper is reproduced (TODO)
+ * For this kernel, we will wait until the neural network 
+ * outputs the evaluation. Note that the problem is:
+ * (1) We should use multi-stream, to split up the evaluation
+ * so that it won't be too memory-hungry, and this will also help
+ * concurrency
+ * 
+ * TODO: major refactoring here
+ */
+CPT_KERNEL void guided_ray_scatter_shader(
+    PayLoadBufferSoA payloads,
+    ConstObjPtr objects,
+    const cudaTextureObject_t bvh_leaves,
+    const IndexBuffer idx_buffer
 );
 
 /**
