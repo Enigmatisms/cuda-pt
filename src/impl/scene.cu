@@ -8,6 +8,7 @@
 #include "core/scene.cuh"
 
 static constexpr int MAX_PRIMITIVE_NUM = 64000000;
+static constexpr int MAX_ALLOWED_BSDF = 48;
 static constexpr const char* SCENE_VERSION = "1.2";
 
 const std::unordered_map<std::string, MetalType> conductor_mapping = {
@@ -679,7 +680,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     std::vector<std::string> emitter_names;
     emitter_names.reserve(9);
     emitter_map.reserve(9);
-    bsdf_map.reserve(32);
+    bsdf_map.reserve(48);
 
 
     // ------------------------- (0) parse the renderer -------------------------
@@ -700,6 +701,10 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
         ptr = ptr->NextSiblingElement("brdf");
+    if (num_bsdfs > MAX_ALLOWED_BSDF) {
+        std::cerr << "Number of materials more than allowed. Max: " << MAX_ALLOWED_BSDF << std::endl;
+        throw std::runtime_error("Too many BSDF defined.");
+    }
     CUDA_CHECK_RETURN(cudaMalloc(&bsdfs, sizeof(BSDF*) * num_bsdfs));
 
     textures.init(num_bsdfs);
