@@ -25,10 +25,12 @@
 	
 	<sensor type="perspective">
 		<float name="fov" value="60"/>
+		<!-- <float name="fov" value="45"/> -->
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
 			<lookat target="2.664588, 2.311200, 3.139999" origin="2.889686, 2.829585, 3.964989" up="-0.135046, 0.855147, -0.500487"/>
+			<!-- <lookat target="3.244630, 3.023399, 4.929405" origin="3.485915, 3.471950, 5.789976" up="-0.093059, 0.893380, -0.439560"/> -->
 		</transform>
 
 		<film type="film">
@@ -51,31 +53,28 @@
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
 
-	<emitter type="area" id="area">
-		<!-- <float name="angle" value="10"/> -->
+	<!-- <emitter type="area" id="area">
 		<rgb name="emission" value="1, 1, 1"/>
-		<rgb name="scaler" value="7.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="7.0"/>
 		<string name="bind_type" value="triangle"/>
-
-		<!-- <ref type="texture" id="emitter"/> -->
-	</emitter>
+	</emitter> -->
 
 	<emitter type="area" id="vision/front-light">
 		<rgb name="emission" value="0.6, 0.6, 1"/>
-		<rgb name="scaler" value="2.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="vision/tail-light">
 		<rgb name="emission" value="1, 0, 0"/>
-		<rgb name="scaler" value="10.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="50.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="envmap" id="env">
-		<float name="scaler" value="0.4"/>		
-		<float name="azimuth" value="140"/>			
-		<float name="zenith" value="90"/>			
+		<float name="scaler" value="1.5"/>		
+		<float name="azimuth" value="93"/>			
+		<float name="zenith" value="80"/>			
 		<ref type="texture" id="envmap"/>
 	</emitter>
 
@@ -84,11 +83,11 @@
 		<ref type="material" id="floor"/>
 	</shape>
 
-	<shape type="obj">
+	<!-- <shape type="obj">
 		<string name="filename" value="../meshes/rich/emitters.obj"/>
 		<ref type="material" id="light"/>
 		<ref type="emitter" id="area"/>
-	</shape>
+	</shape> -->
 
 	<brdf type="conductor-ggx" id="vision/back-wheel-shell">
 		<string name="conductor" value="Cr"/>
@@ -153,8 +152,8 @@
 
 	<brdf type="conductor-ggx" id="vision/shell">
 		<string name="conductor" value="Al"/>
-		<float name="roughness_x" value="0.02"/>
-		<float name="roughness_y" value="0.02"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
 		<rgb name="k_g" value="#949C5A"/>
 	</brdf>
 
@@ -207,12 +206,12 @@
 	</brdf>
 
 	<brdf type="plastic" id="vision/wind-shield">
-		<rgb name="k_d" value="#050505"/>
+		<rgb name="k_d" value="#212121"/>
 		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
 		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
 		<float name="trans_scaler" value="1"/>
-		<float name="thickness" value="1"/>
-		<float name="ior" value="1.8"/>
+		<float name="thickness" value="0.2"/>
+		<float name="ior" value="2.2"/>
 	</brdf>
 
 	<!-- Vision on the left -->
@@ -358,12 +357,19 @@
 
 	<brdf type="plastic" id="terzo/shell">
 		<rgb name="k_d" value="#050A12"/>
-		<rgb name="k_s" value="0.99"/>
+		<rgb name="k_s" value="0.5"/>
 		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
 		<float name="trans_scaler" value="1"/>
 		<float name="thickness" value="0.2"/>
 		<float name="ior" value="1.7"/>
 	</brdf>
+
+	<!-- <brdf type="conductor-ggx" id="terzo/shell">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.005"/>
+		<float name="roughness_y" value="0.005"/>
+		<rgb name="k_g" value="#213555"/>
+	</brdf> -->
 
 	<brdf type="conductor-ggx" id="terzo/lighter-base">
 		<string name="conductor" value="Cr"/>
@@ -442,25 +448,25 @@
 
 	<emitter type="area" id="terzo/front-light">
 		<rgb name="emission" value="0.6, 0.6, 1"/>
-		<rgb name="scaler" value="2.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="terzo/tail-light">
 		<rgb name="emission" value="1, 0, 0"/>
-		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="200.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="terzo/wheel-orange-emitter">
 		<rgb name="emission" value="#F26B0F"/>
-		<rgb name="scaler" value="8.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="12.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<emitter type="area" id="terzo/inner-emitter">
 		<rgb name="emission" value="#F8F1EA"/>
-		<rgb name="scaler" value="8.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<rgb name="scaler" value="16.0"/>			<!--1.5 for gamma correction, 5 for linear-->
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -550,6 +556,10 @@
 	<shape type="obj">
 		<string name="filename" value="../meshes/rich/terzo/lighter-shell.obj"/>
 		<ref type="material" id="terzo/lighter-shell"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/lighter-shell-inner.obj"/>
+		<ref type="material" id="terzo/dark-plastic-top"/>
 	</shape>
 	<shape type="obj">
 		<string name="filename" value="../meshes/rich/terzo/logo.obj"/>
