@@ -1,0 +1,654 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
+<scene version="1.2">
+	<renderer type="pt">
+		<integer name="sample_count" value="128"/>
+        <integer name="max_bounce"   value="8"/>
+        <integer name="max_diffuse"  value="8"/>
+        <integer name="max_specular" value="8"/>
+        <integer name="max_transmit" value="8"/>
+
+		<integer name="specular_constraint" value="-1"/>
+		<bool name="bidirectional" value="false"/>
+		<float name="caustic_scaling" value="1.5"/>
+	</renderer>
+
+	<accelerator type="bvh">
+		<integer name="cache_level" value="8"/>
+        <integer name="max_node_num" value="32"/>
+
+		<float name="overlap_w" value="0.7"/>
+	</accelerator>
+	
+	<sensor type="perspective">
+		<float name="fov" value="60"/>
+		<!-- <float name="fov" value="45"/> -->
+        <bool name="hflip" value="true"/>
+		
+		<transform name="toWorld">
+			<lookat target="2.664588, 2.311200, 3.139999" origin="2.889686, 2.829585, 3.964989" up="-0.135046, 0.855147, -0.500487"/>
+			<!-- <lookat target="3.244630, 3.023399, 4.929405" origin="3.485915, 3.471950, 5.789976" up="-0.093059, 0.893380, -0.439560"/> -->
+		</transform>
+
+		<film type="film">
+			<integer name="width" value="960"/>
+			<integer name="height" value="640"/>
+			<bool name="gamma_correction" value="true"/>
+		</film>
+	</sensor>
+
+	<brdf type="conductor-ggx" id="floor">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.02"/>
+		<float name="roughness_y" value="0.02"/>
+		<rgb name="k_g" value="#FEFEFE"/>
+	</brdf>
+
+	<brdf type="lambertian" id="light">
+		<rgb name="k_d" value="#555555"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<!-- <emitter type="area" id="area">
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="7.0"/>
+		<string name="bind_type" value="triangle"/>
+	</emitter> -->
+
+	<emitter type="area" id="vision/front-light">
+		<rgb name="emission" value="0.6, 0.6, 1"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="vision/tail-light">
+		<rgb name="emission" value="1, 0, 0"/>
+		<rgb name="scaler" value="50.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="envmap" id="env">
+		<float name="scaler" value="1.5"/>		
+		<float name="azimuth" value="93"/>			
+		<float name="zenith" value="80"/>			
+		<ref type="texture" id="envmap"/>
+	</emitter>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/floor.obj"/>
+		<ref type="material" id="floor"/>
+	</shape>
+
+	<!-- <shape type="obj">
+		<string name="filename" value="../meshes/rich/emitters.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area"/>
+	</shape> -->
+
+	<brdf type="conductor-ggx" id="vision/back-wheel-shell">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#212121"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/dark-frames">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.003"/>
+		<float name="roughness_y" value="0.003"/>
+		<rgb name="k_g" value="#121212"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/gold-logo">
+		<string name="conductor" value="Au"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+		<rgb name="k_g" value="#FEFEFE"/>
+	</brdf>
+
+	<brdf type="plastic" id="vision/base">
+		<rgb name="k_d" value="#060606"/>
+		<rgb name="k_s" value="0.7, 0.7, 0.7"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="2"/>
+		<float name="ior" value="1.3"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/lambo-text">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+		<rgb name="k_g" value="#F0F0F0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="vision/other-text">
+		<rgb name="k_d" value="#F14A00"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="plastic" id="vision/logo-base">
+		<rgb name="k_d" value="#070707"/>
+		<rgb name="k_s" value="0.5, 0.5, 0.5"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="plastic" id="vision/plastic-top">
+		<rgb name="k_d" value="#050505"/>
+		<rgb name="k_s" value="0.5, 0.5, 0.5"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.7"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/shell">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#949C5A"/>
+	</brdf>
+
+	<brdf type="plastic" id="vision/side-stuff">
+		<rgb name="k_d" value="#171717"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.4"/>
+	</brdf>
+
+	<brdf type="plastic" id="vision/tire">
+		<rgb name="k_d" value="#030303"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.2"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/wheel-axis">
+		<string name="conductor" value="W"/>
+		<float name="roughness_x" value="0.005"/>
+		<float name="roughness_y" value="0.001"/>
+		<rgb name="k_g" value="#FFFFFF"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/wheel-brakes">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.002"/>
+		<float name="roughness_y" value="0.002"/>
+		<rgb name="k_g" value="#FFFFFF"/>
+
+		<ref type="texture" id="vision/wheel-brakes"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/wheel-frame-base">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#222222"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="vision/wheel-frame-edge">
+		<string name="conductor" value="Na"/>
+		<float name="roughness_x" value="0.001"/>
+		<float name="roughness_y" value="0.001"/>
+		<rgb name="k_g" value="#FFFFFF"/>
+	</brdf>
+
+	<brdf type="plastic" id="vision/wind-shield">
+		<rgb name="k_d" value="#212121"/>
+		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="0.2"/>
+		<float name="ior" value="2.2"/>
+	</brdf>
+
+	<!-- Vision on the left -->
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/back-wheel-shell.obj"/>
+		<ref type="material" id="vision/back-wheel-shell"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/base.obj"/>
+		<ref type="material" id="vision/base"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/dark-frames.obj"/>
+		<ref type="material" id="vision/dark-frames"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/front-light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="vision/front-light"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/gold-logo.obj"/>
+		<ref type="material" id="vision/gold-logo"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/lambo-text.obj"/>
+		<ref type="material" id="vision/lambo-text"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/logo-base.obj"/>
+		<ref type="material" id="vision/logo-base"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/other-text.obj"/>
+		<ref type="material" id="vision/other-text"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/plastic-top.obj"/>
+		<ref type="material" id="vision/plastic-top"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/shell.obj"/>
+		<ref type="material" id="vision/shell"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/side-stuff.obj"/>
+		<ref type="material" id="vision/side-stuff"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/tail-light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="vision/tail-light"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/tire.obj"/>
+		<ref type="material" id="vision/tire"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/wheel-axis.obj"/>
+		<ref type="material" id="vision/wheel-axis"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/wheel-brakes.obj"/>
+		<ref type="material" id="vision/wheel-brakes"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/wheel-frame-base.obj"/>
+		<ref type="material" id="vision/wheel-frame-base"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/wheel-frame-edge.obj"/>
+		<ref type="material" id="vision/wheel-frame-edge"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/vision/wind-shield.obj"/>
+		<ref type="material" id="vision/wind-shield"/>
+	</shape>
+
+
+	<brdf type="plastic" id="terzo/black-panel">
+		<rgb name="k_d" value="#030303"/>
+		<rgb name="k_s" value="0.7"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.4"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="terzo/chamber-dark">
+		<string name="conductor" value="W"/>
+		<float name="roughness_x" value="0.05"/>
+		<float name="roughness_y" value="0.05"/>
+		<rgb name="k_g" value="#4A4A4A"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/dark-base">
+		<rgb name="k_d" value="#121212"/>
+		<rgb name="k_s" value="0.7"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/dark-plastic-top">
+		<rgb name="k_d" value="#050505"/>
+		<rgb name="k_s" value="0.95"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.6"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/front-red-ring">
+		<rgb name="k_d" value="#F93827"/>
+		<rgb name="k_s" value="0.8"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="0.1"/>
+		<float name="ior" value="1.4"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="terzo/grey-steel">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.02"/>
+		<float name="roughness_y" value="0.02"/>
+		<rgb name="k_g" value="#212121"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="terzo/light-panels">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.05"/>
+		<float name="roughness_y" value="0.05"/>
+		<rgb name="k_g" value="#A1A1A1"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="terzo/light-steel">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#FEFEFE"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/shell">
+		<rgb name="k_d" value="#050A12"/>
+		<rgb name="k_s" value="0.5"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="0.2"/>
+		<float name="ior" value="1.7"/>
+	</brdf>
+
+	<!-- <brdf type="conductor-ggx" id="terzo/shell">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.005"/>
+		<float name="roughness_y" value="0.005"/>
+		<rgb name="k_g" value="#213555"/>
+	</brdf> -->
+
+	<brdf type="conductor-ggx" id="terzo/lighter-base">
+		<string name="conductor" value="Cr"/>
+		<float name="roughness_x" value="0.025"/>
+		<float name="roughness_y" value="0.025"/>
+		<rgb name="k_g" value="#213555"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="terzo/lighter-shell">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.01"/>
+		<float name="roughness_y" value="0.01"/>
+		<rgb name="k_g" value="#A8A8A8"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/logo">
+		<rgb name="k_d" value="#070707"/>
+		<rgb name="k_s" value="0.5, 0.5, 0.5"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+
+		<ref type="texture" id="terzo/logo"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/orange-seats">
+		<rgb name="k_d" value="#FF4500"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.2"/>
+		<float name="thickness" value="5"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="conductor-ggx" id="terzo/red-fabric-handle">
+		<string name="conductor" value="Al"/>
+		<float name="roughness_x" value="0.025"/>
+		<float name="roughness_y" value="0.025"/>
+		<rgb name="k_g" value="#213555"/>
+
+		<ref type="texture" id="terzo/red-handle"/>
+	</brdf>
+
+	<brdf type="lambertian" id="terzo/red-text">
+		<rgb name="k_d" value="#C62300"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/ref-black-panels">
+		<rgb name="k_d" value="#070707"/>
+		<rgb name="k_s" value="0.7"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="2"/>
+		<float name="ior" value="1.3"/>
+	</brdf>
+
+	<brdf type="lambertian" id="terzo/side-green">
+		<rgb name="k_d" value="#5CB338"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/tires">
+		<rgb name="k_d" value="#030303"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.2"/>
+
+		<ref type="texture" id="terzo/tires"/>
+	</brdf>
+
+	<emitter type="area" id="terzo/front-light">
+		<rgb name="emission" value="0.6, 0.6, 1"/>
+		<rgb name="scaler" value="20.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="terzo/tail-light">
+		<rgb name="emission" value="1, 0, 0"/>
+		<rgb name="scaler" value="200.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="terzo/wheel-orange-emitter">
+		<rgb name="emission" value="#F26B0F"/>
+		<rgb name="scaler" value="12.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<emitter type="area" id="terzo/inner-emitter">
+		<rgb name="emission" value="#F8F1EA"/>
+		<rgb name="scaler" value="16.0"/>			<!--1.5 for gamma correction, 5 for linear-->
+		<string name="bind_type" value="triangle"/>
+	</emitter>
+
+	<brdf type="plastic" id="terzo/wheel-panel">
+		<rgb name="k_d" value="#020202"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="0.1"/>
+		<float name="ior" value="1.7"/>
+	</brdf>
+
+	<brdf type="plastic" id="terzo/wheel-emitter-base">
+		<rgb name="k_d" value="#F5F5F5"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="0.1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="plastic-forward" id="terzo/wheel-plastic-shell">
+		<rgb name="k_d" value="#C4C4C4"/>
+		<rgb name="k_s" value="0.9, 0.9, 0.9"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="0.1"/>
+		<float name="ior" value="2.0"/>
+	</brdf>
+
+	<brdf type="plastic-forward" id="terzo/wind-shield">
+		<rgb name="k_d" value="#C4C4C4"/>
+		<rgb name="k_s" value="0.9"/>
+		<rgb name="sigma_a" value="0.5, 0.5, 0.5"/>
+		<float name="trans_scaler" value="1"/>
+		<float name="thickness" value="0.1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<!-- TERZO on the right -->
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/black-panel.obj"/>
+		<ref type="material" id="terzo/black-panel"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/chamber-dark.obj"/>
+		<ref type="material" id="terzo/chamber-dark"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/dark-base.obj"/>
+		<ref type="material" id="terzo/dark-base"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/dark-plastic-top.obj"/>
+		<ref type="material" id="terzo/dark-plastic-top"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/front-light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="terzo/front-light"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/front-red-ring.obj"/>
+		<ref type="material" id="terzo/front-red-ring"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/grey-steel.obj"/>
+		<ref type="material" id="terzo/grey-steel"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/inner-emitter.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="terzo/inner-emitter"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/light-panels.obj"/>
+		<ref type="material" id="terzo/light-panels"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/light-steel.obj"/>
+		<ref type="material" id="terzo/light-steel"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/lighter-base.obj"/>
+		<ref type="material" id="terzo/lighter-base"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/lighter-shell.obj"/>
+		<ref type="material" id="terzo/lighter-shell"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/lighter-shell-inner.obj"/>
+		<ref type="material" id="terzo/dark-plastic-top"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/logo.obj"/>
+		<ref type="material" id="terzo/logo"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/orange-seats.obj"/>
+		<ref type="material" id="terzo/orange-seats"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/red-fabric-handle.obj"/>
+		<ref type="material" id="terzo/red-fabric-handle"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/red-text.obj"/>
+		<ref type="material" id="terzo/red-text"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/ref-black-panels.obj"/>
+		<ref type="material" id="terzo/ref-black-panels"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/shell.obj"/>
+		<ref type="material" id="terzo/shell"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/side-green.obj"/>
+		<ref type="material" id="terzo/side-green"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/side-orange.obj"/>
+		<ref type="material" id="vision/other-text"/>		<!--Reused material-->
+	</shape>	
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/tail-light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="terzo/tail-light"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/tires.obj"/>
+		<ref type="material" id="terzo/tires"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/wheel-orange-emitter.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="terzo/wheel-orange-emitter"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/wheel-emitter-base.obj"/>
+		<ref type="material" id="terzo/wheel-emitter-base"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/wheel-panel-inner.obj"/>
+		<ref type="material" id="terzo/shell"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/wheel-panel.obj"/>
+		<ref type="material" id="terzo/wheel-panel"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/wheel-plastic-shell.obj"/>
+		<ref type="material" id="terzo/wheel-plastic-shell"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/white-text.obj"/>
+		<ref type="material" id="vision/lambo-text"/>
+	</shape>
+	<shape type="obj">
+		<string name="filename" value="../meshes/rich/terzo/wind-shield.obj"/>
+		<ref type="material" id="terzo/wind-shield"/>
+	</shape>
+
+	<texture id="vision/wheel-brakes">
+		<string name="glossy" value="../textures/lamborgini/WheelsGT_texture.png"/>
+	</texture>
+
+	<texture id="terzo/logo">
+		<string name="diffuse" value="../textures/lamborgini/lamborghini_logo.jpeg"/>
+	</texture>
+
+	<texture id="terzo/tires">
+		<string name="diffuse" value="../textures/lamborgini/TireColor.png"/>
+	</texture>
+
+	<texture id="terzo/red-handle">
+		<string name="glossy" value="../textures/fabric2-highres/Fabric062_2K-JPG_Red.jpg"/>
+	</texture>
+
+	<texture id="envmap">
+		<string name="diffuse" value="../textures/envmaps/evening.jpg"/>
+	</texture>
+</scene>

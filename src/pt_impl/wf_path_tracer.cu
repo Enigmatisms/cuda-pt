@@ -42,7 +42,7 @@ CPT_CPU void WavefrontPathTracer::render_online(
     raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
         *camera, payload_buffer, verts, norms, uvs,
         obj_info, bvh_leaves, nodes, _cached_nodes, 
-        idx_buffer, num_prims, image.w(), num_nodes, 
+        idx_buffer, image.w(), num_nodes, 
         num_cache, accum_cnt, seed_offset, envmap_id
     );
 
@@ -72,14 +72,14 @@ CPT_CPU void WavefrontPathTracer::render_online(
         fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
             payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
             bvh_leaves, nodes, _cached_nodes, idx_buffer, 
-            num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
+            num_emitter, num_nodes, num_cache, bounce > 0
         );
 
         if (bounce + 1 >= md.max_depth) break;
         fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
             payload_buffer, verts, norms, uvs, 
             bvh_leaves, nodes, _cached_nodes, idx_buffer, 
-            num_prims, num_nodes, num_cache, bounce, envmap_id
+            num_nodes, num_cache, bounce, envmap_id
         );
     }
 
@@ -106,7 +106,7 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
         raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
             *camera, payload_buffer, verts, norms, uvs,
             obj_info, bvh_leaves, nodes, _cached_nodes, 
-            idx_buffer, num_prims, image.w(), num_nodes, 
+            idx_buffer, image.w(), num_nodes, 
             num_cache, i, seed_offset, envmap_id
         );
         for (int bounce = 0; bounce < md.max_depth; bounce ++) {
@@ -132,14 +132,14 @@ CPT_CPU std::vector<uint8_t> WavefrontPathTracer::render(
             fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
                 payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
                 bvh_leaves, nodes, _cached_nodes, idx_buffer, 
-                num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
+                num_emitter, num_nodes, num_cache, bounce > 0
             );
 
             if (bounce + 1 >= md.max_depth) break;
             fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
                 payload_buffer, verts, norms, uvs, 
                 bvh_leaves, nodes, _cached_nodes, idx_buffer, 
-                num_prims, num_nodes, num_cache, bounce, envmap_id
+                num_nodes, num_cache, bounce, envmap_id
             );
         }
 
@@ -167,7 +167,7 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
     raygen_primary_hit_shader<<<GRID, BLOCK, cached_size>>>(
         *camera, payload_buffer, verts, norms, uvs,
         obj_info, bvh_leaves, nodes, _cached_nodes, 
-        idx_buffer, num_prims, image.w(), num_nodes, 
+        idx_buffer, image.w(), num_nodes, 
         num_cache, accum_cnt, seed_offset, envmap_id
     );
 
@@ -197,14 +197,14 @@ CPT_CPU const float* WavefrontPathTracer::render_raw(
         fused_ray_bounce_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
             payload_buffer, verts, norms, uvs, obj_info, emitter_prims,
             bvh_leaves, nodes, _cached_nodes, idx_buffer, 
-            num_prims, num_objs, num_emitter, num_nodes, num_cache, bounce > 0
+            num_emitter, num_nodes, num_cache, bounce > 0
         );
 
         if (bounce + 1 >= md.max_depth) break;
         fused_closesthit_shader<<<NUM_GRID, NUM_THREADS, cached_size>>>(
             payload_buffer, verts, norms, uvs, 
             bvh_leaves, nodes, _cached_nodes, idx_buffer, 
-            num_prims, num_nodes, num_cache, bounce, envmap_id
+            num_nodes, num_cache, bounce, envmap_id
         );
     }
 

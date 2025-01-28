@@ -53,7 +53,6 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     IndexBuffer idx_buffer,
-    int num_prims,
     int width, 
     int node_num, 
     int cache_num,
@@ -126,7 +125,6 @@ CPT_KERNEL void fused_closesthit_shader(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     IndexBuffer idx_buffer,
-    int num_prims,
     int node_num,
     int cache_num,
     int bounce,
@@ -204,8 +202,6 @@ CPT_KERNEL void fused_ray_bounce_shader(
     const cudaTextureObject_t nodes,
     ConstF4Ptr cached_nodes,
     const IndexBuffer idx_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int node_num,
     int cache_num,
@@ -284,6 +280,144 @@ CPT_KERNEL void fused_ray_bounce_shader(
         payloads.set_ray(gidx, ray);
         payloads.pdf(gidx) = pdf;
     }
+}
+
+/**
+ * @brief This shader is used in path guiding enabled WFPT
+ * This kernel handles NEE and the ray hitting an emitter
+ * 
+ * TODO: in this kernel, we must fill in the query 
+ * so that the neural network can eval the NASG params for us
+ * before we execute the next kernel (`guided_ray_scatter_shader`)
+ */
+CPT_KERNEL void nee_direct_shader(
+    PayLoadBufferSoA payloads,
+    const PrecomputedArray verts,
+    const NormalArray norms, 
+    const ConstBuffer<PackedHalf2> uvs,
+    ConstObjPtr objects,
+    ConstIndexPtr emitter_prims,
+    const cudaTextureObject_t bvh_leaves,
+    const cudaTextureObject_t nodes,
+    ConstF4Ptr cached_nodes,
+    const IndexBuffer idx_buffer,
+    int num_emitter,
+    int node_num,
+    int cache_num,
+    bool secondary_bounce
+    /**TODO: output (evaluated NASG params) */
+) {
+    uint8_t ray_stat = 0;
+    uint32_t gmem_addr = blockDim.x * blockIdx.x + threadIdx.x;
+    uint32_t gidx = get_index(idx_buffer, gmem_addr, ray_stat);
+
+    // cache near root level BVH nodes for faster traversal
+    extern __shared__ uint4 s_cached[];
+    if (threadIdx.x < cache_num) {      // no more than 256 nodes will be cached
+        s_cached[threadIdx.x] = cached_nodes[threadIdx.x];
+        int offset_tid = threadIdx.x + blockDim.x;
+        if (offset_tid < cache_num)
+            s_cached[offset_tid] = cached_nodes[offset_tid];
+    }
+    __syncthreads();
+    
+    if (ray_stat < 0x80) {
+        // TODO: we need to interleave computation and memory accessing
+        // Though the compiler will help us achieve this goal, but...
+        // If we do this explicitly, the compiler might help us more
+        Vec4 thp = payloads.thp(gidx),
+             rdc = payloads.L(gidx);
+        Ray ray  = payloads.get_ray(gidx);
+        Sampler sg = payloads.get_sampler(gidx);
+        const Interaction it = payloads.interaction(gidx);
+
+        int object_id = tex1Dfetch<int>(bvh_leaves, ray.hit_id());
+        object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
+        int material_id = 0, emitter_id = 0;
+            objects[object_id].unpack(material_id, emitter_id);
+
+        float direct_pdf = 1;
+
+        Emitter* emitter = sample_emitter(sg, direct_pdf, num_emitter, emitter_id);
+        int emit_prim_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sg.discrete1D(), direct_pdf);
+        emit_prim_id = emitter_prims[emit_prim_id];               // extra mapping, introduced after BVH primitive reordering
+        Ray shadow_ray(ray.advance(ray.hit_t), Vec3(0, 0, 0));
+        ray.o = shadow_ray.o;
+
+        Vec4 direct_comp(0, 0, 0, 1);
+        shadow_ray.d = emitter->sample(shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sg.next2D(), verts, norms, uvs, emit_prim_id) - shadow_ray.o;
+
+        float emit_len_mis = shadow_ray.d.length();
+        shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direct
+        // (3) NEE scene intersection test (possible warp divergence, but... nevermind)
+        if (emitter != c_emitter[0] && 
+            occlusion_test_bvh(shadow_ray, bvh_leaves, nodes, 
+                    s_cached, verts, node_num, cache_num, emit_len_mis - EPSILON)
+        ) {
+            // MIS for BSDF / light sampling, to achieve better rendering
+            // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
+            emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d, material_id) * emitter->non_delta();
+            rdc += thp * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id) * \
+                (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
+            // numerical guard, in case emit_len_mis is 0
+        }
+        // emitter MIS
+        float pdf = payloads.pdf(gidx), emission_weight = pdf / (pdf + 
+                objects[object_id].solid_angle_pdf(c_textures.eval_normal(it, material_id), ray.d, ray.hit_t) * 
+                (emitter_id > 0) * secondary_bounce * ray.non_delta());
+        // (2) account for emission, and accumulate to payload buffer
+        payloads.L(gidx) = (thp * c_emitter[emitter_id]->eval_le(&ray.d, &it)) * emission_weight + rdc;
+        payloads.set_sampler(gidx, sg);
+    }
+}
+
+/**
+ * @brief This kernel handles path guiding. Here
+ * NASG [SIGGRAPH 2024] paper is reproduced (TODO)
+ * For this kernel, we will wait until the neural network 
+ * outputs the evaluation. Note that the problem is:
+ * (1) We should use multi-stream, to split up the evaluation
+ * so that it won't be too memory-hungry, and this will also help
+ * concurrency
+ * 
+ * TODO: major refactoring here
+ */
+CPT_KERNEL void guided_ray_scatter_shader(
+    PayLoadBufferSoA payloads,
+    ConstObjPtr objects,
+    const cudaTextureObject_t bvh_leaves,
+    const IndexBuffer idx_buffer
+    /**TODO: input (evaluated NASG params) and output (training samples) */
+) {
+    uint8_t ray_stat = 0;
+    uint32_t gmem_addr = blockDim.x * blockIdx.x + threadIdx.x;
+    uint32_t gidx = get_index(idx_buffer, gmem_addr, ray_stat);
+
+    if (ray_stat < 0x80) {
+        Vec4 thp = payloads.thp(gidx);
+        Ray ray  = payloads.get_ray(gidx);
+        Sampler sg = payloads.get_sampler(gidx);
+        const Interaction it = payloads.interaction(gidx);
+
+        int object_id = tex1Dfetch<int>(bvh_leaves, ray.hit_id());
+        object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
+        int material_id = 0, emitter_id = 0;
+        objects[object_id].unpack(material_id, emitter_id);
+
+        float direct_pdf = 1, pdf = 1.0f;
+
+        BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;                            
+        ray.d = c_material[material_id]->sample_dir(
+            ray.d, it, thp, pdf, sg, sampled_lobe, material_id
+        );
+        ray.set_delta((sampled_lobe & BSDFFlag::BSDF_SPECULAR) > 0);
+
+        payloads.thp(gidx) = thp;
+        payloads.set_sampler(gidx, sg);
+        payloads.set_ray(gidx, ray);
+        payloads.pdf(gidx) = pdf;
+    }
+
 }
 
 template <bool render_once>
