@@ -79,11 +79,11 @@ This repo currently **has no plan for OptiX**, since I am experiencing how to bu
 Currently, this repo supports:
 
 - [x] Megakernel unidirectional path tracing.
-- [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is not as fast as megakernel PT due to the simplicity of the test scenes (and maybe, coalesced GMEM access problems, being working on this).
+- [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is a bit slower than Megakernel PT.
 - [x] BVH cost visualizer and depth renderer.
 - [x] GPU BVH: A stackless GPU surface area heuristic BVH. 
 - [x] CUDA pitched textures for environment maps, normal, roughness, index of refraction and albedo.
-- [x] Online modification of the scene. Check out the video down below.
+- [x] Online hot reloading of the scene params. Check out the video down below.
 
 <div align="center">
   <video src="https://github.com/user-attachments/assets/fc098d93-7acb-4232-8a7e-c39518af2db4"/>
