@@ -1,3 +1,4 @@
+
 # CUDA-PT
 ---
 
@@ -6,9 +7,6 @@
 Distributed parallel rendering supported, via [nanobind](https://github.com/wjakob/nanobind) and PyTorch DDP.
 
 ![sports-cars](./assets/vision-gt-terzo.jpg)
-
-
-![sports-cars](./assets/cars.jpg)
 
 ![Malorian-Arms-3516](./assets/Malorian-Arms-3516.jpg)
 
