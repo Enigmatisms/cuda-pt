@@ -16,3 +16,6 @@
 [submodule "src/ext/nanobind"]
 	path = src/ext/nanobind
 	url = git@github.com:wjakob/nanobind.git
+[submodule "src/ext/nanovdb"]
+	path = src/ext/nanovdb
+	url = git@github.com:Enigmatisms/nanovdb.git
