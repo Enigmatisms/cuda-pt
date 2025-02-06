@@ -38,7 +38,7 @@ private:
         return msp;
     }
 
-    CPT_GPU_INLINE Vec4 HomogeneousMedium::transmittance(const Ray& ray, float dist) const override {
+    CPT_GPU_INLINE Vec4 transmittance(const Ray& ray, Sampler& /* sp */, float dist) const override {
         return (-sigma_t * dist).exp_xyz();
     }
 };
