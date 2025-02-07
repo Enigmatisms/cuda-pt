@@ -20,6 +20,11 @@ using ConstObjPtr   = const CompactedObjInfo* const __restrict__;
 using ConstBSDFPtr  = const BSDF* const __restrict__;
 using ConstIndexPtr = const int* const __restrict__;
 
+inline CPT_GPU_INLINE int extract_object_info(uint32_t obj_idx, bool& is_triangle) {
+    is_triangle = (obj_idx & 0x80000000) == 0;
+    return obj_idx & 0x000fffff;                            // extract low 20bits
+}
+
 // occlusion test is any hit shader
 inline CPT_GPU bool occlusion_test_bvh(
     const Ray& ray,

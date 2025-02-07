@@ -339,6 +339,7 @@ void bvh_build(
     recursive_linearize(root_node, nodes, cache_nodes, 0, cache_max_level);
     printf("[BVH] Number of nodes to cache: %llu (%d)\n", cache_nodes.size(), cache_max_level);
 
+    // FIXME: MASK ALPHA, change obj_idxs
     obj_idxs.reserve(bvh_infos.size());
     prim_idxs.reserve(bvh_infos.size());
     for (BVHInfo& bvh: bvh_infos) {

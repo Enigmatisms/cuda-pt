@@ -12,8 +12,11 @@ constexpr float AABB_EPS = 1e-3f;
 constexpr float MAX_DIST = 1e7;
 constexpr float ENVMAP_DIST = 5e3;
 constexpr float AABB_INVALID_DIST = 1e5;
+constexpr float SCALING_EPS = 1.05f;
 
 constexpr float M_Pi = 3.1415926535897f;
 constexpr float M_2Pi = M_Pi * 2;
 constexpr float M_1_Pi = 1.f / M_Pi;
 constexpr float DEG2RAD = M_Pi / 180.f;
+
+constexpr uint32_t INVALID_OBJ = 0xffffffff;

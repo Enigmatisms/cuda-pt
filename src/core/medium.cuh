@@ -58,9 +58,13 @@ public:
     CPT_CPU_GPU virtual ~Medium() {}
 public:
     // distance sampling: decide whether it is medium event or surface event
-    CPT_GPU virtual MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const = 0;
+    CPT_GPU virtual MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const = 0 {
+        return {Vec4(1), ray.hit_t, 1, 0};      // return surface event by default
+    }
     // evaluate transmittance given the ray direction and distance
-    CPT_GPU virtual Vec4 transmittance(const Ray& ray, Sampler& sp, float dist) const = 0;
+    CPT_GPU virtual Vec4 transmittance(const Ray& ray, Sampler& sp, float dist) const {
+        return Vec4(1);
+    }
 
     // phase function sampling, update the ray direction
     CPT_GPU_INLINE virtual Vec4 scatter(Ray& ray, Sampler& sp) const {
@@ -74,3 +78,5 @@ public:
         return phase->eval(std::move(indir), std::move(outdir));
     }
 };
+
+using MediumPtrArray = const Medium** const;
