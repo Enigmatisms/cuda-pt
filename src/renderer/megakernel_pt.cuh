@@ -65,8 +65,10 @@ inline CPT_GPU bool occlusion_test_bvh(
 #ifdef TRIANGLE_ONLY
             float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, true, EPSILON, max_dist);
 #else
-            int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
-            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0, EPSILON, max_dist);
+            uint32_t obj_info = tex1Dfetch<uint32_t>(bvh_leaves, idx);
+            bool is_triangle = false;
+            extract_object_info(obj_info, is_triangle);
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, is_triangle, EPSILON, max_dist);
 #endif
             if (dist > EPSILON)
                 return false;
@@ -98,7 +100,7 @@ inline CPT_GPU float ray_intersect_bvh(
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     int& min_index,
-    int& min_obj_idx,
+    uint32_t& min_obj_info,
     float& prim_u,
     float& prim_v,
     const int node_num,
@@ -134,18 +136,20 @@ inline CPT_GPU float ray_intersect_bvh(
         end_idx = intersect_node ? end_idx + beg_idx : 0;
         for (int idx = beg_idx; idx < end_idx; idx ++) {
             // if current ray intersects primitive at [idx], tasks will store it
-            int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+            uint32_t obj_info = tex1Dfetch<uint32_t>(bvh_leaves, idx);
+            bool is_triangle = false;
+            extract_object_info(obj_info, is_triangle);
 #ifdef TRIANGLE_ONLY
             float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v);
 #else
-            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, is_triangle);
 #endif
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;
             prim_u   = valid ? it_u : prim_u;
             prim_v   = valid ? it_v : prim_v;
             min_index = valid ? idx : min_index;
-            min_obj_idx = valid ? obj_idx : min_obj_idx;
+            min_obj_info = valid ? obj_info : min_obj_info;
         }
     }
     return min_dist;

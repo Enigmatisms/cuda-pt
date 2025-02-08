@@ -143,7 +143,7 @@ public:
 
 CPT_CPU_GPU GGXConductorBSDF::GGXConductorBSDF(Vec3 eta_t, Vec3 k, Vec4 albedo, float roughness_x, float roughness_y):
     BSDF(Vec4(0), Vec4(roughness_to_alpha(roughness_x), roughness_to_alpha(roughness_y), 1), 
-        std::move(albedo), BSDFFlag::BSDF_GLOSSY | BSDFFlag::BSDF_REFLECT), 
+        std::move(albedo), ScatterStateFlag::BSDF_GLOSSY | ScatterStateFlag::BSDF_REFLECT), 
         fresnel(std::move(eta_t), std::move(k)) {}
 
 CPT_GPU float GGXConductorBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const {
@@ -173,7 +173,7 @@ CPT_GPU Vec3 GGXConductorBSDF::sample_dir(
     const Interaction& it, 
     Vec4& throughput, 
     float& pdf, Sampler& sp, 
-    BSDFFlag& samp_lobe, 
+    ScatterStateFlag& samp_lobe, 
     int index,
     bool is_radiance
 ) const {
@@ -201,6 +201,6 @@ CPT_GPU Vec3 GGXConductorBSDF::sample_dir(
             D_e * GGX::G(local_in, local_ref, alpha.x(), alpha.y()) * 
             __frcp_rn(4.f * cos_i * cos_o) * fres_v * fmaxf(normal.dot(refdir), 0);
     }
-    samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
+    samp_lobe = static_cast<ScatterStateFlag>(bsdf_flag);
     return refdir;                              
 }

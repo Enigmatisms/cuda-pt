@@ -40,8 +40,7 @@ CPT_KERNEL static void render_depth_kernel(
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     Sampler sampler(px + py * image.w(), seed_offset);
 
-    int min_index = -1, object_id = 0;
-    int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    int min_index = -1, tid = threadIdx.x + threadIdx.y * blockDim.x;
     if (tid == 0) min_max = make_int2(ORDERED_INT_MAX, 0);
     // cache near root level BVH nodes for faster traversal
     if (tid < cache_num) {      // no more than 256 nodes will be cached
@@ -55,9 +54,10 @@ CPT_KERNEL static void render_depth_kernel(
     
     float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
     // ============= step 1: ray intersection =================
+    uint32_t obj_info_dummy = 0;        // placeholder
     min_dist = ray_intersect_bvh(
         ray, bvh_leaves, nodes, s_cached, 
-        verts, min_index, object_id, 
+        verts, min_index, obj_info_dummy, 
         prim_u, prim_v, node_num, cache_num, MAX_DIST
     );
     

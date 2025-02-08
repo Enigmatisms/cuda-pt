@@ -47,7 +47,7 @@ CPT_GPU Vec4 DispersionBSDF::eval(const Interaction& it, const Vec3& out, const 
 
 CPT_GPU Vec3 DispersionBSDF::sample_dir(
     const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-    Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance
+    Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance
 ) const {
     float wavelength = DispersionBSDF::sample_wavelength(sp);
     float eta = get_ior(wavelength);

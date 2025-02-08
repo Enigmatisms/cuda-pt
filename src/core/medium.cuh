@@ -67,10 +67,10 @@ public:
     }
 
     // phase function sampling, update the ray direction
-    CPT_GPU_INLINE virtual Vec4 scatter(Ray& ray, Sampler& sp) const {
-        PhaseSample psp = phase->sample(sp, ray.d);
-        ray.d = delocalize_rotate(ray.d, std::move(psp.outdir));
-        return Vec4(psp.weight, 1);
+    CPT_GPU_INLINE virtual Vec3 scatter(Vec3 raydir, Vec4& throughput, Sampler& sp) const {
+        PhaseSample psp = phase->sample(sp, raydir);
+        throughput *= psp.weight;
+        return delocalize_rotate(raydir, std::move(psp.outdir));
     }
 
     // evaluate local scattering phase function

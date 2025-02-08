@@ -18,7 +18,7 @@ enum RendererType: uint8_t {
     NumRendererType
 };
 
-enum BSDFFlag: int {
+enum ScatterStateFlag: int {
     BSDF_NONE     = 0x00,
     BSDF_DIFFUSE  = 0x01,
     BSDF_SPECULAR = 0x02,
@@ -26,7 +26,8 @@ enum BSDFFlag: int {
     BSDF_FORWARD  = 0x08,
 
     BSDF_REFLECT  = 0x10,
-    BSDF_TRANSMIT = 0x20
+    BSDF_TRANSMIT = 0x20,
+    SCAT_VOLUME   = 0x40,
 };
 
 enum BSDFType: uint8_t {

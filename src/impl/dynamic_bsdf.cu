@@ -75,16 +75,16 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) {
     // create on GPU (ensure vptr and vtables are created on GPU)
     if (type == BSDFType::Lambertian) {
         general_bsdf_filler<LambertianBSDF>(&to_store, bsdf, 
-            static_cast<BSDFFlag>(BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT)
+            static_cast<ScatterStateFlag>(ScatterStateFlag::BSDF_DIFFUSE | ScatterStateFlag::BSDF_REFLECT)
         );
     } else if (type == BSDFType::Specular) {
         general_bsdf_filler<SpecularBSDF>(&to_store, bsdf, 
-            static_cast<BSDFFlag>(BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT)
+            static_cast<ScatterStateFlag>(ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_REFLECT)
         );
     } else if (type == BSDFType::Translucent) {
         bsdf.k_d = Vec4(1.5f, 1);                   // override IoR
         general_bsdf_filler<TranslucentBSDF>(&to_store, bsdf, 
-            static_cast<BSDFFlag>(BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT)
+            static_cast<ScatterStateFlag>(ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_TRANSMIT)
         );
     } else if (type == BSDFType::Plastic) {
         create_plastic_bsdf<PlasticBSDF><<<1, 1>>>(&to_store, 

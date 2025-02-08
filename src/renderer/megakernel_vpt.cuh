@@ -23,6 +23,13 @@ inline CPT_GPU_INLINE int extract_medium_info(uint32_t obj_idx, bool& alpha_mask
     return (obj_idx >> 20) & 0x000000ff;
 }
 
+inline CPT_GPU_INLINE int extract_tracing_info(uint32_t obj_idx, int& hit_med_idx, bool& is_triangle) {
+    is_triangle = (obj_idx & 0x80000000) == 0;
+     // extract higher 12 bits and mask the resulting lower 8bits
+    hit_med_idx = (obj_idx >> 20) & 0x000000ff;
+    return obj_idx & 0x000fffff;                            // extract low 20bits, return the object index
+}
+
 /**
  * @brief Stack with only one bank (4B), used for handling nested volumes
  * x is the ptr, if x == 0, it means that active volume is 0 (not within a volume)

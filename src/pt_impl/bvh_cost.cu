@@ -58,11 +58,12 @@ CPT_GPU int ray_intersect_cost(
         intersect_query ++;
         for (int idx = beg_idx; idx < end_idx; idx ++) {
             // if current ray intersects primitive at [idx], tasks will store it
-            int obj_idx = tex1Dfetch<int>(bvh_leaves, idx);
+            uint32_t obj_info = tex1Dfetch<uint32_t>(bvh_leaves, idx);
 #ifdef TRIANGLE_ONLY
             float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v);
 #else
-            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, obj_idx >= 0);
+            bool is_triangle = (obj_info & 0x80000000) == 0;
+            float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, is_triangle);
 #endif
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;

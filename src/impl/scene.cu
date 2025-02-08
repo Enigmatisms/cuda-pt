@@ -190,12 +190,12 @@ void parseBSDF(
     BSDFInfo info(id);
     info.bsdf = BSDFInfo::BSDFParams(k_d, k_s, k_g);
     if (type == "lambertian") {
-        create_bsdf<LambertianBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT);
+        create_bsdf<LambertianBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ScatterStateFlag::BSDF_DIFFUSE | ScatterStateFlag::BSDF_REFLECT);
     } else if (type == "specular") {
-        create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT);
+        create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_REFLECT);
         info.type = BSDFType::Specular;
     } else if (type == "det-refraction") {
-        create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
+        create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_TRANSMIT);
         info.type = BSDFType::Translucent;
     } else if (type == "conductor-ggx") {
         float roughness_x = 0.1f, roughness_y = 0.1f;

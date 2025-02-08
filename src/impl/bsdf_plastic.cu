@@ -4,9 +4,9 @@ CPT_CPU_GPU PlasticBSDF::PlasticBSDF(
     Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
     float trans_scaler, float thickness, bool penetration
 ): BSDF(_k_d, std::move(_k_s), std::move(sigma_a),
-    BSDFFlag::BSDF_SPECULAR | 
-    BSDFFlag::BSDF_DIFFUSE  | 
-    BSDFFlag::BSDF_REFLECT
+    ScatterStateFlag::BSDF_SPECULAR | 
+    ScatterStateFlag::BSDF_DIFFUSE  | 
+    ScatterStateFlag::BSDF_REFLECT
 ), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {
     precomp_diff_f = FresnelTerms::diffuse_fresnel(ior);
     __padding = penetration;
@@ -49,7 +49,7 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
     const Interaction& it, 
     Vec4& throughput, 
     float& pdf, Sampler& sp, 
-    BSDFFlag& samp_lobe, 
+    ScatterStateFlag& samp_lobe, 
     int index,
     bool is_radiance
 ) const {
@@ -65,7 +65,7 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
         pdf = specular_prob;
         const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
         throughput *= Vec4(Fi / specular_prob, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
-        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_SPECULAR);
+        samp_lobe = static_cast<ScatterStateFlag>(ScatterStateFlag::BSDF_REFLECT | ScatterStateFlag::BSDF_SPECULAR);
     } else {                                // substrate diffuse reflection
         float dummy_v = 1;
         Vec3 local_dir = sample_cosine_hemisphere(sp.next2D(), dummy_v);
@@ -83,7 +83,7 @@ CPT_GPU Vec3 PlasticBSDF::sample_dir(
         pdf = M_1_Pi * local_dir.z() * (1.0f - specular_prob);
         throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;
         outdir = delocalize_rotate(normal, local_dir);
-        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_DIFFUSE);
+        samp_lobe = static_cast<ScatterStateFlag>(ScatterStateFlag::BSDF_REFLECT | ScatterStateFlag::BSDF_DIFFUSE);
     }
     throughput = (__padding > 0 || (raw_dot_indir > 0) ^ (outdir.dot(normal) > 0)) ? throughput : Vec4(0, 1);
     return outdir;
@@ -95,9 +95,9 @@ CPT_CPU_GPU PlasticForwardBSDF::PlasticForwardBSDF(
     Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a, float ior, 
     float trans_scaler, float thickness, bool
 ): BSDF(_k_d, std::move(_k_s), std::move(sigma_a),
-    BSDFFlag::BSDF_SPECULAR | 
-    BSDFFlag::BSDF_TRANSMIT | 
-    BSDFFlag::BSDF_REFLECT
+    ScatterStateFlag::BSDF_SPECULAR | 
+    ScatterStateFlag::BSDF_TRANSMIT | 
+    ScatterStateFlag::BSDF_REFLECT
 ), trans_scaler(trans_scaler), thickness(thickness), eta(1.f / ior) {}
 
 CPT_GPU float PlasticForwardBSDF::pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const {
@@ -134,7 +134,7 @@ CPT_GPU Vec3 PlasticForwardBSDF::sample_dir(
     const Interaction& it, 
     Vec4& throughput, 
     float& pdf, Sampler& sp, 
-    BSDFFlag& samp_lobe, 
+    ScatterStateFlag& samp_lobe, 
     int index,
     bool is_radiance
 ) const {
@@ -150,7 +150,7 @@ CPT_GPU Vec3 PlasticForwardBSDF::sample_dir(
         pdf = specular_prob;
         const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];
         throughput *= Vec4(Fi / specular_prob, 1) * c_textures.eval(spec_tex, it.uv_coord, k_s);
-        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_REFLECT | BSDFFlag::BSDF_SPECULAR);
+        samp_lobe = static_cast<ScatterStateFlag>(ScatterStateFlag::BSDF_REFLECT | ScatterStateFlag::BSDF_SPECULAR);
     } else {                                // substrate diffuse reflection
         const cudaTextureObject_t diff_tex = c_textures.diff_tex[index],
                                   siga_tex = c_textures.glos_tex[index];        // sigma_a is stored in glossy texture
@@ -162,7 +162,7 @@ CPT_GPU Vec3 PlasticForwardBSDF::sample_dir(
         throughput *=  __frcp_rn(1.f - specular_prob) * local_thp;
 
         outdir = indir;
-        samp_lobe = static_cast<BSDFFlag>(BSDFFlag::BSDF_TRANSMIT | BSDFFlag::BSDF_SPECULAR);
+        samp_lobe = static_cast<ScatterStateFlag>(ScatterStateFlag::BSDF_TRANSMIT | ScatterStateFlag::BSDF_SPECULAR);
     }
     return outdir;
 }

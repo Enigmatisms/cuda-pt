@@ -18,7 +18,7 @@ public:
     using BSDF::k_d;        // ior
 
     CPT_CPU_GPU TranslucentBSDF(Vec4 k_s, Vec4 ior):
-        BSDF(std::move(ior), std::move(k_s), Vec4(0, 0, 0), BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT) {}
+        BSDF(std::move(ior), std::move(k_s), Vec4(0, 0, 0), ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_TRANSMIT) {}
 
     CPT_CPU_GPU TranslucentBSDF(): BSDF() {}
     
@@ -56,7 +56,7 @@ public:
         Vec4& throughput,
         Sampler& sp,
         float& pdf,
-        BSDFFlag& samp_lobe, 
+        ScatterStateFlag& samp_lobe, 
         bool is_radiance = false
     ) {
         float dot_normal = indir.dot(normal);
@@ -72,8 +72,8 @@ public:
         bool reflect = total_ref || sp.next1D() < nr;
         ret_dir = select(ret_dir, refra_vec, reflect);
         pdf     = total_ref ? 1.f : (reflect ? nr : 1.f - nr);
-        samp_lobe = static_cast<BSDFFlag>(
-            BSDFFlag::BSDF_SPECULAR | (total_ref || reflect ? BSDFFlag::BSDF_REFLECT : BSDFFlag::BSDF_TRANSMIT)
+        samp_lobe = static_cast<ScatterStateFlag>(
+            ScatterStateFlag::BSDF_SPECULAR | (total_ref || reflect ? ScatterStateFlag::BSDF_REFLECT : ScatterStateFlag::BSDF_TRANSMIT)
         );
         throughput *= ks * (is_radiance && !reflect ? eta2 : 1.f);
         return ret_dir;
@@ -89,7 +89,7 @@ public:
 
     CPT_GPU Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = false
+        Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = false
     ) const override {
         const Vec3 normal = c_textures.eval_normal(it, index);
         const cudaTextureObject_t spec_tex = c_textures.spec_tex[index];

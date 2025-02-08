@@ -38,7 +38,7 @@ public:
 
     CPT_GPU Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+        Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = true
     ) const override;
 };
 
@@ -68,6 +68,6 @@ public:
 
     CPT_GPU Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+        Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = true
     ) const override;
 };

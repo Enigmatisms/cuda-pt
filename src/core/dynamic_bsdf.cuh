@@ -69,7 +69,7 @@ public:
         name(n), type(t), bsdf{}, updated(false), bsdf_changed(false), in_use(false) {}
 
     template <typename TypeBSDF>
-    static void general_bsdf_filler(BSDF** to_store, const BSDFParams& data, BSDFFlag flag) {
+    static void general_bsdf_filler(BSDF** to_store, const BSDFParams& data, ScatterStateFlag flag) {
         create_bsdf<TypeBSDF><<<1, 1>>>(to_store, 
             data.k_d, 
             data.k_s, 

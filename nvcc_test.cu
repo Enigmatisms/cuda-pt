@@ -15,7 +15,7 @@ public:
     constexpr __host__ __device__ const float& z() const { return _data.z; }
 };
 
-int main() {
+int main(int argc, char** argv) {
     cudaDeviceProp prop;
     int device = 0;
     cudaGetDeviceProperties(&prop, device);
