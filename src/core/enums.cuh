@@ -39,7 +39,24 @@ enum BSDFType: uint8_t {
     PlasticForward = 0x04,
     GGXConductor   = 0x05,
     Dispersion     = 0x06,
-    NumSupportedBSDF = 0x07
+    Forward        = 0x07,
+    NumSupportedBSDF = 0x08
+};
+
+enum PhaseFuncType: uint8_t {
+    NullForward      = 0x00,
+    Isotropic        = 0x01,
+    HenyeyGreenstein = 0x02,
+    DuoHG            = 0x03,
+    Rayleigh         = 0x04,
+    SGGX             = 0x05,
+    NumSupportedPhase = 0x06
+};
+
+enum MediumType: uint8_t {
+    Homogeneous      = 0x00,
+    Grid             = 0x01,
+    NumSupportedMedium = 0x02
 };
 
 enum TextureType: uint8_t {

@@ -55,6 +55,7 @@ protected:
     PhaseFunction* phase;
 public:
     CPT_CPU_GPU Medium(): phase(nullptr) {}
+    CPT_CPU_GPU Medium(PhaseFunction * _phase): phase(_phase) {}
 
     CPT_CPU_GPU virtual ~Medium() {
         if (phase != nullptr) {
@@ -79,15 +80,8 @@ public:
         return delocalize_rotate(raydir, std::move(psp.outdir));
     }
 
-    template <typename PhaseType>
-    CPT_CPU_GPU_INLINE void bind_phase_function(PhaseType&& phase_obj) {
-        using DecayType = std::decay_t<PhaseType>;
-        static_assert(std::is_base_of_v<PhaseFunction, DecayType>,
-                      "PhaseType must be derived from PhaseFunction");
-        if (phase != nullptr) {
-            delete phase;
-        }
-        phase = new DecayType(std::forward<PhaseType>(phase_obj));
+    CPT_CPU_GPU_INLINE void bind_phase_function(PhaseFunction* ptr) {
+        phase = ptr;
     }
 
     // evaluate local scattering phase function

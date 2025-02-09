@@ -14,7 +14,7 @@ private:
     Vec4 sigma_a;
     Vec4 sigma_s;
     Vec4 sigma_t;
-
+public:
     CONDITION_TEMPLATE_2(VType1, VType2, Vec4, Vec4)
     CPT_CPU_GPU HomogeneousMedium(VType1&& _sigma_a, VType2&& _sigma_s):
         sigma_a(std::forward<VType1>(_sigma_a)), sigma_s(std::forward<VType2>(sigma_s))
@@ -40,5 +40,18 @@ private:
 
     CPT_GPU_INLINE Vec4 transmittance(const Ray& ray, Sampler& /* sp */, float dist) const override {
         return (-sigma_t * dist).exp_xyz();
+    }
+};
+
+CPT_KERNEL void create_homogeneous_volume(
+    Medium** media,
+    Vec4 sigma_a, 
+    Vec4 sigma_s,
+    float scale,
+    PhaseFunction* ptr
+) {
+    if (threadIdx.x == 0) {
+        *media = new HomogeneousMedium(sigma_a * scale, sigma_s * scale);
+        (*media)->bind_phase_function(ptr);
     }
 };

@@ -440,6 +440,8 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
                 local_update |= draw_selection_menu<DispersionType::NumDispersionType>(
                     DISPERSION_NAMES, "##" + info.name + "-type", "Dispersion Type", info.bsdf.mtype
                 );
+            } else if (info.type == BSDFType::Forward) {
+                ImGui::Text("Forward BSDF has nothing adjustable.");
             }
             info.updated = local_update;
             updated |= local_update;

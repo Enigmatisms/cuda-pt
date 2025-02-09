@@ -57,6 +57,7 @@ CPT_KERNEL void create_abstract_source(Emitter* &dst) {
 
 CPT_KERNEL void create_metal_bsdf(BSDF** dst, Vec3 eta_t, Vec3 k, Vec4 k_g, float roughness_x, float roughness_y) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
+        if (*dst) delete *dst;
         *dst = new GGXConductorBSDF(eta_t, k, k_g, roughness_x, roughness_y);
     }
 }
@@ -88,8 +89,19 @@ CPT_KERNEL void create_dispersion_bsdf(
     BSDF** dst, Vec4 k_s, float index_a, float index_b
 ) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
+        if (*dst) delete *dst;
         *dst = new DispersionBSDF(k_s, index_a, index_b);
         (*dst)->set_kd(Vec4(index_a, index_b, 0));
         (*dst)->set_ks(std::move(k_s));
     }
 }
+
+CPT_KERNEL void create_forward_bsdf(
+    BSDF** dst
+) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        if (*dst) delete *dst;
+        *dst = new ForwardBSDF();
+    }
+}
+

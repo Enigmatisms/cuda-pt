@@ -152,19 +152,15 @@ public:
 };
 
 CPT_KERNEL void create_grid_volume(
-    const nanovdb::FloatGrid** dev_den_grids,
-    const nanovdb::Vec3fGrid** dev_alb_grids,
-    const nanovdb::FloatGrid** dev_ems_grids,
+    const nanovdb::FloatGrid* dev_den_grids,
+    const nanovdb::Vec3fGrid* dev_alb_grids,
+    const nanovdb::FloatGrid* dev_ems_grids,
     Medium** media,
-    int volume_index,
-    float scale
-) {
-    if (threadIdx.x == 0) {
-        *media = new GridVolumeMedium(dev_den_grids[volume_index], dev_alb_grids[volume_index], dev_ems_grids[volume_index], scale);
-    }
-};
+    float scale,
+    PhaseFunction* ptr
+);
 
-class HostGridVolumes {
+class GridVolumeManager {
 private:
     template <typename DType>
     using GridType = nanovdb::Grid<nanovdb::NanoTree<DType>>;
@@ -174,48 +170,14 @@ private:
     std::vector<nanovdb::FloatGrid*> den_grids;
     std::vector<nanovdb::Vec3fGrid*> alb_grids;
     std::vector<nanovdb::FloatGrid*> ems_grids;
-
-    nanovdb::FloatGrid** dev_den_grids;
-    nanovdb::Vec3fGrid** dev_alb_grids;
-    nanovdb::FloatGrid** dev_ems_grids;
+    std::vector<PhaseFunction*> phase_ptrs;
 
     // from all medium to the grid volume medium, for example:
     // [homogeneous, homogeneous, grid, grid, homogeneous, grid] -> [2, 3, 5]
-    std::vector<int> medium_indices;
-    std::vector<Vec3> const_albedos;    // if the grid volume has a constant albedo, then set here
+    std::vector<size_t> medium_indices;
+    std::vector<Vec4> const_albedos;    // if the grid volume has a constant albedo, then set here
     std::vector<float> scales;          // density scale
-public:
-    CPT_CPU HostGridVolumes(): dev_den_grids(nullptr), dev_alb_grids(nullptr), dev_ems_grids(nullptr) {
-        host_handles.reserve(12);
-        den_grids.reserve(4);
-        alb_grids.reserve(4);
-        ems_grids.reserve(4);
-        medium_indices.reserve(4);
-        const_albedos.reserve(4);
-        scales.reserve(4);
-    }
-
-    // @overload, RGB albedo grid
-    CPT_CPU void push(int index, std::string den_path, float scale = 1.f, std::string alb_path = "", std::string ems_path = "") {
-        medium_indices.push_back(index);
-        scales.push_back(scale);
-
-        from_vdb_file(den_path, den_grids);
-        if (!from_vdb_file(alb_path, alb_grids)) {
-            const_albedos.emplace_back(1, 1, 1);
-        }
-        from_vdb_file(ems_path, ems_grids);
-    }
-
-    // @overload, inherently constant albedo grid
-    CPT_CPU void push(int index, std::string den_path, Vec3 albedo, float scale = 1.f, std::string ems_path = "") {
-        medium_indices.push_back(index);
-        scales.push_back(scale);
-        alb_grids.push_back(nullptr);
-        const_albedos.emplace_back(std::move(albedo));
-        from_vdb_file(ems_path, ems_grids);
-    }
-
+private:
     template <typename DType>
     CPT_CPU bool from_vdb_file(std::string path, std::vector<GridType<DType>*>& dev_ptr_buffer) {
         if (!path.empty()) {
@@ -227,29 +189,31 @@ public:
             return false;
         }
     }
+public:
+    CPT_CPU GridVolumeManager();
+    // @overload, RGB albedo grid
+    CPT_CPU void push(
+        size_t          index, 
+        std::string     den_path, 
+        PhaseFunction*  ptr, 
+        float           scale = 1.f, 
+        std::string     alb_path = "", 
+        std::string     ems_path = ""
+    );
+    // @overload, inherently constant albedo grid
+    CPT_CPU void push(
+        size_t          index, 
+        std::string     den_path, 
+        Vec4            albedo, 
+        PhaseFunction*  ptr, 
+        float           scale = 1.f, 
+        std::string     ems_path = ""
+    );
 
-    CPT_CPU ~HostGridVolumes() {
-        if (dev_den_grids) CUDA_CHECK_RETURN(cudaFree(dev_den_grids));
-        if (dev_alb_grids) CUDA_CHECK_RETURN(cudaFree(dev_alb_grids));
-        if (dev_ems_grids) CUDA_CHECK_RETURN(cudaFree(dev_ems_grids));
-    }
+    CPT_CPU void to_gpu(Medium** medium);
 
-    CPT_CPU void to_gpu(Medium** medium) {
-        CUDA_CHECK_RETURN(cudaMalloc(&dev_den_grids, sizeof(nanovdb::FloatGrid*) * den_grids.size()));
-        CUDA_CHECK_RETURN(cudaMalloc(&dev_alb_grids, sizeof(nanovdb::Vec3fGrid*) * alb_grids.size()));
-        CUDA_CHECK_RETURN(cudaMalloc(&dev_ems_grids, sizeof(nanovdb::FloatGrid*) * ems_grids.size()));
-
-        CUDA_CHECK_RETURN(cudaMemcpy(dev_den_grids, den_grids.data(), 
-                    sizeof(nanovdb::FloatGrid*) * den_grids.size(), cudaMemcpyHostToDevice));
-        CUDA_CHECK_RETURN(cudaMemcpy(dev_alb_grids, alb_grids.data(), 
-                    sizeof(nanovdb::Vec3fGrid*) * alb_grids.size(), cudaMemcpyHostToDevice));
-        CUDA_CHECK_RETURN(cudaMemcpy(dev_ems_grids, ems_grids.data(), 
-                    sizeof(nanovdb::FloatGrid*) * ems_grids.size(), cudaMemcpyHostToDevice));
-        for (int i = 0; i < medium_indices.size(); i++) {
-            int map_index = medium_indices[i];
-            create_grid_volume<<<1, 1>>>(dev_den_grids, dev_alb_grids, dev_ems_grids, medium + map_index, i, scales[i]);
-        }
-        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    CPT_CPU bool empty() const noexcept {
+        return host_handles.empty();
     }
 };
 

@@ -70,8 +70,6 @@ void BSDFInfo::bsdf_value_clamping() {
 void BSDFInfo::create_on_gpu(BSDF*& to_store) {
     // destroy the previous BSDF
     bsdf_changed = false;
-    destroy_gpu_alloc<<<1, 1>>>(&to_store);
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     // create on GPU (ensure vptr and vtables are created on GPU)
     if (type == BSDFType::Lambertian) {
         general_bsdf_filler<LambertianBSDF>(&to_store, bsdf, 
@@ -120,6 +118,8 @@ void BSDFInfo::create_on_gpu(BSDF*& to_store) {
             dis_params.x(),
             dis_params.y()
         );
+    } else if (type == BSDFType::Forward) {
+        create_forward_bsdf<<<1, 1>>>(&to_store);
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }

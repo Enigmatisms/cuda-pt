@@ -111,6 +111,36 @@ Vec3 parsePoint(const tinyxml2::XMLElement* element) {
     return Vec3(x, y, z);
 }
 
+template <typename Ty>
+Ty extract_from(
+    const tinyxml2::XMLElement* elem, 
+    std::string value_name = "value"
+) {
+    const char* name2test = elem->Attribute("name");
+    if (!name2test || std::strcmp(name2test, name.c_str())) {
+        std::cerr << "`extract_from` XML field '" << name << "' failed.\n";
+        throw std::runtime_error("`extract_from` XML field failed");
+    }
+    tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
+    Ty result;
+    if constexpr (std::is_same_v<std::decay_t<Ty>, bool>) {
+        e_ret = elem->QueryBoolAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, float>) {
+        e_ret = elem->QueryFloatAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, int>) {
+        e_ret = elem->QueryIntAttribute(value_name.c_str(), &result);
+    } else if constexpr(std::is_same_v<std::decay_t<Ty>, std::string>) {
+        e_ret = elem->Attribute(value_name.c_str());
+    } else {
+        std::cerr << "Unsupported type '" << std::type_info(Ty).name() << "' for extraction.\n";
+        throw std::runtime_error("`extract_from` unsupported type.");
+    }
+
+    if (e_ret != tinyxml2::XML_SUCCESS) {
+        throw std::runtime_error("`extract_from` parsing failed");
+    }
+}
+
 void parseBSDF(
     const tinyxml2::XMLElement* bsdf_elem, 
     const std::unordered_map<std::string, TextureInfo>& tex_map,
@@ -205,7 +235,6 @@ void parseBSDF(
         element = bsdf_elem->FirstChildElement("string");
         if (element) {
             std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
             if (name == "type" || name == "metal" || name == "conductor") {
                 std::string metal_type = element->Attribute("value");
                 auto it = conductor_mapping.find(metal_type);
@@ -224,7 +253,6 @@ void parseBSDF(
         tinyxml2::XMLError eResult;
         while (element) {
             std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
             if (name == "roughness_x" || name == "rough_x") {
                 eResult = element->QueryFloatAttribute("value", &roughness_x);
                 roughness_x = std::clamp(roughness_x, 0.001f, 1.f);
@@ -645,64 +673,130 @@ void parseTexture(
     }
 }
 
-PhaseFunctionWrapper parsePhaseFunction(const tinyxml2::XMLElement* phase_elem) {
-    std::string type = phase_elem->Attribute("type");
-    type = type.empty() ? "homogeneous" : type;
-    tinyxml2::XMLError err;
-    if (type == "hg") {
-        float g = 0.2;
-        const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
-        if (sub_elem) {
-            if (auto name = sub_elem->Attribute("name")) {
-                if (name == "g") {
-                    err = sub_elem->QueryFloatAttribute("value", &g);
-                }
-            }
-        }
-        return {type, std::make_unique<HenyeyGreensteinPhase>(g)};
-    } else if (type == "isotropic") {
-        return {type, std::make_unique<IsotropicPhase>()};
-    } else if (type == "hg-duo") {
-        float g1 = 0.2, g2 = 0.8, weight = 0.5;
-        const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
-        while (sub_elem) {
-            if (auto name = sub_elem->Attribute("name")) {
-                if (name == "g1") {
-                    err = sub_elem->QueryFloatAttribute("value", &g1);
-                } else if (name == "g2") {
-                    err = sub_elem->QueryFloatAttribute("value", &g2);
-                } else if (name == "weight") {
-                    err = sub_elem->QueryFloatAttribute("value", &weight);
-                }
-            }
-            sub_elem = sub_elem->NextSiblingElement("string");
-        }
-        return {type, std::make_unique<MixedHGPhaseFunction>(g1, g2, weight)};
-    } else if (type == "rayleigh") {
-        return {type, std::make_unique<RayleighPhase>()};
-    } else if (type == "sggx") {
-        std::cerr << "Current SGGX is not implemented but will be in the future. Fall back to 'isotropic'\n";
-        return {type, std::make_unique<IsotropicPhase>()};
-    } else {
-        std::cerr << "Phase type '" << type << "' not supported. Fall back to 'isotropic'\n";
-        return {type, std::make_unique<IsotropicPhase>()};
+size_t parsePhaseFunction(
+    const tinyxml2::XMLElement* phase_elem,
+    std::unordered_map<std::string, size_t>& phase_maps, 
+    PhaseFunction** phase_funcs
+) {
+    const tinyxml2::XMLElement* traverser = phase_elem;
+    size_t num_phase = 1;          // allocate a dummy volume 
+    while (traverser) {
+        ++ num_phase;
+        traverser = traverser->NextSiblingElement("phase");
     }
+    if (num_phase == 1) return 0;     // return when there is no valid phase function
+
+    CUDA_CHECK_RETURN(cudaMallocManaged(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
+
+    create_device_phase<PhaseFunction><<<1, 1>>>(&phase_funcs[0]);
+    for (size_t i = 1; i < num_phase; i++, phase_elem = phase_elem->NextSiblingElement("phase")) {
+        phase_maps[phase_elem->Attribute("id")] = i;
+        std::string type = phase_elem->Attribute("type");
+        type = type.empty() ? "homogeneous" : type;
+
+        tinyxml2::XMLError e_ret;
+        if (type == "hg") {
+            float g = 0.2;
+            const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
+            if (sub_elem) {
+                std::string name = sub_elem->Attribute("name");
+                if (name.length()) {
+                    if (name == "g") {
+                        e_ret = sub_elem->QueryFloatAttribute("value", &g);
+                    }
+                }
+            }
+            create_device_phase<HenyeyGreensteinPhase><<<1, 1>>>(&phase_funcs[i], g);
+        } else if (type == "isotropic") {
+            create_device_phase<IsotropicPhase><<<1, 1>>>(&phase_funcs[i]);
+        } else if (type == "hg-duo") {
+            float g1 = 0.2, g2 = 0.8, weight = 0.5;
+            const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
+            while (sub_elem) {
+                std::string name = sub_elem->Attribute("name");
+                if (name.length()) {
+                    if (name == "g1") {
+                        e_ret = sub_elem->QueryFloatAttribute("value", &g1);
+                    } else if (name == "g2") {
+                        e_ret = sub_elem->QueryFloatAttribute("value", &g2);
+                    } else if (name == "weight") {
+                        e_ret = sub_elem->QueryFloatAttribute("value", &weight);
+                    }
+                }
+                sub_elem = sub_elem->NextSiblingElement("string");
+            }
+            create_device_phase<MixedHGPhaseFunction><<<1, 1>>>(&phase_funcs[i], g1, g2, weight);
+        } else if (type == "rayleigh") {
+            create_device_phase<RayleighPhase><<<1, 1>>>(&phase_funcs[i]);
+        } else if (type == "sggx") {
+            std::cerr << "Current SGGX is not implemented but will be in the future. Fall back to 'isotropic'\n";
+            create_device_phase<IsotropicPhase><<<1, 1>>>(&phase_funcs[i]);
+        } else {
+            std::cerr << "Phase type '" << type << "' not supported. Fall back to 'isotropic'\n";
+            create_device_phase<IsotropicPhase><<<1, 1>>>(&phase_funcs[i]);
+        }
+        if (e_ret != tinyxml2::XML_SUCCESS) {
+            std::cerr << "Unexcepted error occurred during parsing of phase function '" << type << "'\n";
+            throw std::runtime_error("Error parsing Phase Function.");
+        }
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    return num_phase - 1;
 }
 
-// FIXME: unfinished
-void parseVolumes(
+size_t parseMedium(
     const tinyxml2::XMLElement* vol_elem, 
-    std::vector<Medium*>& volumes,
-    std::unordered_map<std::string, int>& vol_map,
-    std::string folder_prefix
+    const std::unordered_map<std::string, size_t>& phase_maps,
+    std::unordered_map<std::string, size_t>& medium_maps,
+    GridVolumeManager&  gvm,
+    PhaseFunction**     d_phase_funcs,                  // device_memory
+    Medium**            d_volumes
 ) {
-    while (vol_elem) {
+    const tinyxml2::XMLElement* traverser = vol_elem;
+    size_t num_volume = 1;          // allocate a dummy volume 
+    while (traverser) {
+        ++ num_volume;
+        traverser = traverser->NextSiblingElement("medium");
+    }
+
+    if (num_volume == 1) return 0;
+    CUDA_CHECK_RETURN(cudaMallocManaged(&d_volumes, sizeof(Medium*) * num_volume));
+
+    create_device_medium<Medium><<<1, 1>>>(&d_volumes[0], d_phase_funcs[0]);
+    for (size_t i = 1; i < num_volume; i++, vol_elem = vol_elem->NextSiblingElement("medium")) {
         std::string id = vol_elem->Attribute("id");
         std::string type = vol_elem->Attribute("type");
+        medium_maps[id] = i;
         // phase function type
-        const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("phase");
-        // scaler
+        size_t phase_id = 0;
+        const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("ref");
+        if (element) {
+            std::string ref_type   = element->Attribute("type"),
+                        ref_target = vol_elem->Attribute("id");
+            if (ref_type == "phase") {
+                auto it = phase_maps.find(ref_target);
+                if (it != phase_maps.end()) {
+                    phase_id = it->second;
+                }
+            }
+        }
+        if (phase_id == 0) {
+            std::cerr << "Volume '" << id << "' has no valid phase function.\n";
+            throw std::runtime_error("No valid phase function attached.");
+        }
 
+        const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("float");
+        float scale = 1;
+        if (element) {
+            std::string name = element->Attribute("name");
+            if (name == "scale" || name == "scaler") {
+                if (element->QueryFloatAttribute("value", &scale) != tinyxml2::XML_SUCCESS) {
+                    std::cerr << "Volume '" << id << "' scale parsing unexpected error.\n";
+                    throw std::runtime_error("Density scaler parsing error.");
+                }
+            }
+        }
+        
         if (type == "homogeneous") {
             element = vol_elem->FirstChildElement("rgb");
             std::string name = element->Attribute("name");
@@ -713,10 +807,39 @@ void parseVolumes(
                 sigma_s = parseColor(element->Attribute("value"));
             }
             element = element->NextSiblingElement("string");
+            create_homogeneous_volume<<<1, 1>>>(&d_volumes[i], sigma_a, sigma_s, scale, d_phase_funcs[phase_id]);
         } else if (type == "grid") {
+            const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("string");
+            std::string name = element->Attribute("name"),
+                        density_path, albedo_path = "", emission_path = "";
+            while (element) {
+                name = element->Attribute("name");
+                if (name == "density") {
+                    density_path = extract_from<std::string>(element);
+                } else if (name == "albedo") {
+                    albedo_path  = extract_from<std::string>(element);
+                } else if (name == "emission") {
+                    emission_path = extract_from<std::string>(element);
+                }
+            }
 
+            element = vol_elem->FirstChildElement("rgb");
+            Vec4 albedo(1, 1, 1);
+            if (name == "albedo")
+                albedo = parseColor(element->Attribute("value"));
+
+            if (albedo_path.empty()) {
+                gvm.push(i, density_path, albedo, d_phase_funcs[phase_id], scale, emission_path);
+            } else {
+                gvm.push(i, density_path, d_phase_funcs[phase_id], scale, albedo_path, emission_path);
+            }
         }
     }
+    if (!gvm.empty()) {
+        gvm.to_gpu(d_volumes);
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    return num_volume - 1;
 }
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
@@ -729,7 +852,13 @@ const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
     "MegaKernel-VPT"
 };
 
-Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0), cam_vol_id(0) {
+Scene::Scene(std::string path): 
+    num_bsdfs(0), num_emitters(0), 
+    num_objects(0), num_prims(0), 
+    envmap_id(0), cam_vol_id(0),
+    num_phase_func(0), num_medium(0),
+    media(nullptr), phases(nullptr)
+{
     tinyxml2::XMLDocument doc;
     if (doc.LoadFile(path.c_str()) != tinyxml2::XML_SUCCESS) {
         std::cerr << "Failed to load file" << std::endl;
@@ -744,7 +873,8 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
                                 *sensor_elem  = scene_elem->FirstChildElement("sensor"), 
                                 *render_elem  = scene_elem->FirstChildElement("renderer"), 
                                 *texture_elem = scene_elem->FirstChildElement("texture"), 
-                                *volume_elem  = scene_elem->FirstChildElement("volume"), 
+                                *medium_elem  = scene_elem->FirstChildElement("medium"), 
+                                *phase_elem   = scene_elem->FirstChildElement("phase"), 
                                 *bool_elem    = scene_elem->FirstChildElement("bool"), *ptr = nullptr;
     if (auto version_id = scene_elem->Attribute("version")) {
         if(std::strcmp(version_id, SCENE_VERSION) != 0) {
@@ -774,7 +904,10 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     // ------------------------- (1) parse all the textures and BSDF -------------------------
     
     std::unordered_map<std::string, TextureInfo> tex_map;
+    std::unordered_map<std::string, size_t> phase_maps, medium_maps;
     parseTexture(texture_elem, tex_map, folder_prefix);
+    num_phase_func = parsePhaseFunction(phase_elem, phase_maps, phases);
+    num_medium     = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases, media);
 
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
@@ -784,6 +917,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         throw std::runtime_error("Too many BSDF defined.");
     }
     CUDA_CHECK_RETURN(cudaMalloc(&bsdfs, sizeof(BSDF*) * num_bsdfs));
+    CUDA_CHECK_RETURN(cudaMemset(bsdfs, NULL, sizeof(BSDF*) * num_bsdfs));
 
     textures.init(num_bsdfs);
     for (int i = 0; i < num_bsdfs; i++) {
@@ -811,6 +945,8 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         uvs_list[i].reserve(32);
     }
 
+    // TODO 2.10: next step, here! obj_index remap, incorporate information into the obj_list
+    // TODO 2.10: parse shape reference
     int prim_offset = 0;
     for (int i = 0; i < num_objects; i++) {
         std::string type = shape_elem->Attribute("type");

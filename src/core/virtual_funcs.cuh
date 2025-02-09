@@ -11,6 +11,7 @@
 template <typename BSDFType>
 CPT_KERNEL void create_bsdf(BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 k_g, int flags = ScatterStateFlag::BSDF_DIFFUSE) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
+        if (*dst) delete *dst;
         *dst = new BSDFType();
         (*dst)->set_kd(std::move(k_d));
         (*dst)->set_ks(std::move(k_s));
@@ -45,6 +46,10 @@ CPT_KERNEL void create_dispersion_bsdf(
     BSDF** dst, Vec4 k_s, float index_a, float index_b
 );
 
+CPT_KERNEL void create_forward_bsdf(
+    BSDF** dst
+);
+
 template <typename PlasticType>
 CPT_KERNEL void create_plastic_bsdf(
     BSDF** dst, Vec4 k_d, Vec4 k_s, Vec4 sigma_a, 
@@ -52,6 +57,7 @@ CPT_KERNEL void create_plastic_bsdf(
     float thickness = 0, bool penetrable = false
 ) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
+        if (*dst) delete *dst;
         *dst = new PlasticType(k_d, k_s, sigma_a, ior, trans_scaler, thickness, penetrable);
         (*dst)->set_kd(std::move(k_d));
         (*dst)->set_ks(std::move(k_s));

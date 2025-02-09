@@ -21,8 +21,12 @@ struct PhaseSample {
 class PhaseFunction {
 public:
     CPT_CPU_GPU PhaseFunction() {}
-    CPT_GPU virtual float eval(Vec3&& indir, Vec3&& outdir) const = 0; 
+    CPT_GPU virtual float eval(Vec3&& indir, Vec3&& outdir) const {
+        return 0;
+    }
     // Note that phase function only samples local direction, so
     // the transform from local to world is needed
-    CPT_GPU virtual PhaseSample sample(Sampler& sp, Vec3 indir) const = 0; 
+    CPT_GPU virtual PhaseSample sample(Sampler& sp, Vec3 indir) const {
+        return {std::move(indir), 1};
+    } 
 };
