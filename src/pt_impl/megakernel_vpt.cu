@@ -3,7 +3,9 @@
  * @date: 2025.2.7
  * @author: Qianyue He
 */
+#include "core/max_depth.h"
 #include "core/textures.cuh"
+#include "core/camera_model.cuh"
 #include "renderer/megakernel_vpt.cuh"
 
 static constexpr int RR_BOUNCE = 2;
@@ -25,9 +27,6 @@ CPT_KERNEL void render_vpt_kernel(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
-    int num_prims,
-    int num_objects,
-    int num_emitter,
     int seed_offset,
     int cam_vol_idx,
     int node_num,
@@ -227,9 +226,6 @@ template CPT_KERNEL void render_vpt_kernel<true>(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
-    int num_prims,
-    int num_objects,
-    int num_emitter,
     int seed_offset,
     int cam_vol_idx,
     int node_num,
@@ -254,9 +250,6 @@ template CPT_KERNEL void render_vpt_kernel<false>(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
-    int num_prims,
-    int num_objects,
-    int num_emitter,
     int seed_offset,
     int cam_vol_idx,
     int node_num,

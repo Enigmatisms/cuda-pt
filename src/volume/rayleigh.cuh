@@ -14,9 +14,9 @@
 #include "core/sampling.cuh"
 #include "core/constants.cuh"
 
-class RayleightPhase: public PhaseFunction {
+class RayleighPhase: public PhaseFunction {
 public:
-    CPT_CPU_GPU RayleightPhase() {}
+    CPT_CPU_GPU RayleighPhase() {}
 
     CPT_GPU_INLINE float eval(Vec3&& indir, Vec3&& outdir) const override {
         return 3.f / 16.f * M_1_Pi * (1.f + indir.dot(outdir));

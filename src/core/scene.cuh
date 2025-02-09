@@ -20,6 +20,7 @@
 #include "core/camera_model.cuh"
 #include "core/virtual_funcs.cuh"
 #include "core/dynamic_bsdf.cuh"
+#include "core/medium.cuh"
 #include "core/bvh.cuh"
 
 using Vec4Arr = std::vector<Vec4>;
@@ -51,15 +52,18 @@ public:
     // modify the emitter emission on-the-fly
     std::vector<std::pair<std::string, Vec4>> emitter_props;
     std::vector<BSDFInfo> bsdf_infos;
+    std::vector<Medium*> medium_ptrs;
 
     RenderingConfig config;
 
     DeviceCamera* cam;
+
     int num_bsdfs;
     int num_prims;
     int num_emitters;
     int num_objects;
     int envmap_id;
+    int cam_vol_id;
 
     RendererType rdr_type;
 public:

@@ -8,6 +8,7 @@
  * @copyright Copyright (c) 2025
  */
 
+#include <type_traits>
 #include "core/so3.cuh"
 #include "core/aabb.cuh"
 #include "core/phase.cuh"   
@@ -53,9 +54,14 @@ class Medium {
 protected:
     PhaseFunction* phase;
 public:
-    CPT_CPU_GPU Medium() {}
+    CPT_CPU_GPU Medium(): phase(nullptr) {}
 
-    CPT_CPU_GPU virtual ~Medium() {}
+    CPT_CPU_GPU virtual ~Medium() {
+        if (phase != nullptr) {
+            delete phase;
+            phase = nullptr;
+        }
+    }
 public:
     // distance sampling: decide whether it is medium event or surface event
     CPT_GPU virtual MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const = 0 {
@@ -73,10 +79,21 @@ public:
         return delocalize_rotate(raydir, std::move(psp.outdir));
     }
 
+    template <typename PhaseType>
+    CPT_CPU_GPU_INLINE void bind_phase_function(PhaseType&& phase_obj) {
+        using DecayType = std::decay_t<PhaseType>;
+        static_assert(std::is_base_of_v<PhaseFunction, DecayType>,
+                      "PhaseType must be derived from PhaseFunction");
+        if (phase != nullptr) {
+            delete phase;
+        }
+        phase = new DecayType(std::forward<PhaseType>(phase_obj));
+    }
+
     // evaluate local scattering phase function
     CPT_GPU_INLINE virtual float eval(Vec3 indir, Vec3 outdir) const {
         return phase->eval(std::move(indir), std::move(outdir));
     }
 };
 
-using MediumPtrArray = const Medium** const;
+using MediumPtrArray = const Medium** const __restrict__;

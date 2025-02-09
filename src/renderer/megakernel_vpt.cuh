@@ -14,7 +14,7 @@
 #pragma once
 #include <cuda/pipeline>
 #include "core/medium.cuh"
-#include "renderer/megakernel_pt.cuh"
+#include "renderer/tracing_func.cuh"
 
 // returns medium_index and whether the object is alpha masked
 inline CPT_GPU_INLINE int extract_medium_info(uint32_t obj_idx, bool& alpha_mask) {
@@ -37,6 +37,7 @@ inline CPT_GPU_INLINE int extract_tracing_info(uint32_t obj_idx, int& hit_med_id
 struct BankStack {
     uchar4 data;
 
+    // null medium is not allowed
     CPT_GPU_INLINE BankStack(int val = 0): data{0, 0, 0, 0} {
         if (val > 0) {
             data.x = 1;
@@ -180,8 +181,6 @@ inline CPT_GPU Vec4 occlusion_transmittance_estimate(
  * @param cached_nodes   BVH cached nodes (in shared memory): first half: front float4, second half: back float4
  * @param image          GPU image buffer
  * @param output_buffer  Possible visualization buffer
- * @param num_prims      number of primitives (to be intersected with)
- * @param num_objects    number of objects
  * @param num_emitter    number of emitters
  * @param seed_offset    offset to random seed (to create uncorrelated samples)
  * @param cam_vol_idx    If camera is inside the volume, the ray spawned will have initial volume id to store
@@ -207,8 +206,6 @@ CPT_KERNEL void render_vpt_kernel(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int seed_offset,
     int cam_vol_idx = 0,

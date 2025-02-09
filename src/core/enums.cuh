@@ -15,6 +15,7 @@ enum RendererType: uint8_t {
     VoxelSDFPT   = 3,            // not supported currently
     DepthTracing = 4,            // rendering depth map
     BVHCostViz   = 5,            // displaying BVH traversal cost
+    MegaKernelVPT = 6,           // megakernel volumetric path tracer
     NumRendererType
 };
 

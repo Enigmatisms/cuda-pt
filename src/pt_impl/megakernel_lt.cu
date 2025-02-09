@@ -26,7 +26,6 @@ static constexpr float RR_THRESHOLD = 0.1;
  * @param uvs       uv coordinates, ArrayType: (p1, 2D) -> (p2, 2D) -> (p3, 2D)
  * @param camera    GPU camera model (constant memory)
  * @param image     GPU image buffer
- * @param num_prims number of primitives (to be intersected with)
  * @param max_depth maximum allowed bounce
 */
 template <bool render_once>
@@ -43,8 +42,6 @@ CPT_KERNEL void render_lt_kernel(
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int seed_offset,
     int node_num,
@@ -177,8 +174,6 @@ template CPT_KERNEL void render_lt_kernel<true>(
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int seed_offset,
     int node_num,
@@ -202,8 +197,6 @@ template CPT_KERNEL void render_lt_kernel<false>(
     DeviceImage image,
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int seed_offset,
     int node_num,

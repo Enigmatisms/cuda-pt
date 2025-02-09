@@ -5,6 +5,7 @@
  * @date:   2024.9.6
 */
 #include <numeric>
+#include "volume/phase_registry.cuh"
 #include "core/scene.cuh"
 
 static constexpr int MAX_PRIMITIVE_NUM = 64000000;
@@ -644,16 +645,91 @@ void parseTexture(
     }
 }
 
+PhaseFunctionWrapper parsePhaseFunction(const tinyxml2::XMLElement* phase_elem) {
+    std::string type = phase_elem->Attribute("type");
+    type = type.empty() ? "homogeneous" : type;
+    tinyxml2::XMLError err;
+    if (type == "hg") {
+        float g = 0.2;
+        const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
+        if (sub_elem) {
+            if (auto name = sub_elem->Attribute("name")) {
+                if (name == "g") {
+                    err = sub_elem->QueryFloatAttribute("value", &g);
+                }
+            }
+        }
+        return {type, std::make_unique<HenyeyGreensteinPhase>(g)};
+    } else if (type == "isotropic") {
+        return {type, std::make_unique<IsotropicPhase>()};
+    } else if (type == "hg-duo") {
+        float g1 = 0.2, g2 = 0.8, weight = 0.5;
+        const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
+        while (sub_elem) {
+            if (auto name = sub_elem->Attribute("name")) {
+                if (name == "g1") {
+                    err = sub_elem->QueryFloatAttribute("value", &g1);
+                } else if (name == "g2") {
+                    err = sub_elem->QueryFloatAttribute("value", &g2);
+                } else if (name == "weight") {
+                    err = sub_elem->QueryFloatAttribute("value", &weight);
+                }
+            }
+            sub_elem = sub_elem->NextSiblingElement("string");
+        }
+        return {type, std::make_unique<MixedHGPhaseFunction>(g1, g2, weight)};
+    } else if (type == "rayleigh") {
+        return {type, std::make_unique<RayleighPhase>()};
+    } else if (type == "sggx") {
+        std::cerr << "Current SGGX is not implemented but will be in the future. Fall back to 'isotropic'\n";
+        return {type, std::make_unique<IsotropicPhase>()};
+    } else {
+        std::cerr << "Phase type '" << type << "' not supported. Fall back to 'isotropic'\n";
+        return {type, std::make_unique<IsotropicPhase>()};
+    }
+}
+
+// FIXME: unfinished
+void parseVolumes(
+    const tinyxml2::XMLElement* vol_elem, 
+    std::vector<Medium*>& volumes,
+    std::unordered_map<std::string, int>& vol_map,
+    std::string folder_prefix
+) {
+    while (vol_elem) {
+        std::string id = vol_elem->Attribute("id");
+        std::string type = vol_elem->Attribute("type");
+        // phase function type
+        const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("phase");
+        // scaler
+
+        if (type == "homogeneous") {
+            element = vol_elem->FirstChildElement("rgb");
+            std::string name = element->Attribute("name");
+            Vec4 sigma_a, sigma_s;
+            if (name == "sigma_a") {
+                sigma_a = parseColor(element->Attribute("value"));
+            } else if (name == "sigma_s") {
+                sigma_s = parseColor(element->Attribute("value"));
+            }
+            element = element->NextSiblingElement("string");
+        } else if (type == "grid") {
+
+        }
+    }
+}
+
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
     "MegaKernel-PT", 
     "Wavefront-PT", 
     "Megakernel-LT", 
     "Voxel-SDF-PT", 
     "Depth Tracer", 
-    "BVH Cost Visualizer"
+    "BVH Cost Visualizer",
+    "MegaKernel-VPT"
 };
 
-Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0) {
+Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0), cam_vol_id(0) {
     tinyxml2::XMLDocument doc;
     if (doc.LoadFile(path.c_str()) != tinyxml2::XML_SUCCESS) {
         std::cerr << "Failed to load file" << std::endl;
@@ -668,6 +744,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
                                 *sensor_elem  = scene_elem->FirstChildElement("sensor"), 
                                 *render_elem  = scene_elem->FirstChildElement("renderer"), 
                                 *texture_elem = scene_elem->FirstChildElement("texture"), 
+                                *volume_elem  = scene_elem->FirstChildElement("volume"), 
                                 *bool_elem    = scene_elem->FirstChildElement("bool"), *ptr = nullptr;
     if (auto version_id = scene_elem->Attribute("version")) {
         if(std::strcmp(version_id, SCENE_VERSION) != 0) {
@@ -690,6 +767,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     else if (render_type == "lt")    rdr_type = RendererType::MegeKernelLT;
     else if (render_type == "sdf")   rdr_type = RendererType::VoxelSDFPT;
     else if (render_type == "depth") rdr_type = RendererType::DepthTracing;
+    else if (render_type == "vpt")   rdr_type = RendererType::MegaKernelVPT;
     else if (render_type == "bvh-cost") rdr_type = RendererType::BVHCostViz;
     else                                rdr_type = RendererType::MegaKernelPT;
     

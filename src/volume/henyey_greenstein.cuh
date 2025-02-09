@@ -51,3 +51,31 @@ public:
         return {Vec3(cos_phi * sin_theta, sin_phi * sin_theta, cos_theta), 1.f};
     } 
 };
+
+class MixedHGPhaseFunction: public PhaseFunction {
+private:
+    HenyeyGreensteinPhase ph1;
+    HenyeyGreensteinPhase ph2;
+    float weight;           // the weight for the first phase function
+public:
+    CPT_CPU_GPU MixedHGPhaseFunction(float g1, float g2, float w = 0.5): ph1(g1), ph2(g2), weight(w) {}
+
+    CPT_GPU float eval(Vec3&& indir, Vec3&& outdir) const override {
+        Vec3 temp_indirt = indir, temp_outdir = outdir;
+        return ph1.eval(std::move(temp_indirt), std::move(temp_outdir)) * weight + 
+               ph2.eval(std::move(indir), std::move(outdir)) * (1.f - weight);
+    };
+
+    CPT_GPU PhaseSample sample(Sampler& sp, Vec3 indir) const override {
+        // MIS
+        PhaseSample sp1 = ph1.sample(sp, indir),
+                    sp2 = ph2.sample(sp, indir);
+        Vec3 dir1 = sp1.outdir, dir2 = sp2.outdir;
+        float pdf1 = ph1.eval(Vec3(0, 0, 1), std::move(dir1));
+        float pdf2 = ph2.eval(Vec3(0, 0, 1), std::move(dir2));
+        bool use_first = sp.next1D() < weight;
+        float mis_w = use_first ? pdf1 : pdf2;
+        mis_w /= weight * pdf1 + (1.f - weight) * pdf2;
+        return {use_first ? dir1 : dir2, mis_w};
+    } 
+};
