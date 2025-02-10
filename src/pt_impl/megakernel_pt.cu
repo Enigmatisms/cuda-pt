@@ -57,7 +57,7 @@ CPT_KERNEL void render_pt_kernel(
     
     for (int b = 0; b < md_params.max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
-        uint32_t min_object_info = INVALID_OBJ;
+        int min_object_info = INVALID_OBJ;
         min_index = -1;
         // ============= step 1: ray intersection =================
         min_dist = ray_intersect_bvh(

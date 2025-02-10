@@ -19,4 +19,4 @@ constexpr float M_2Pi = M_Pi * 2;
 constexpr float M_1_Pi = 1.f / M_Pi;
 constexpr float DEG2RAD = M_Pi / 180.f;
 
-constexpr uint32_t INVALID_OBJ = 0xffffffff;
+constexpr int INVALID_OBJ = 0xffffffff;

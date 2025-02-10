@@ -17,13 +17,13 @@
 #include "renderer/tracing_func.cuh"
 
 // returns medium_index and whether the object is alpha masked
-inline CPT_GPU_INLINE int extract_medium_info(uint32_t obj_idx, bool& alpha_mask) {
-    alpha_mask  = (obj_idx & 0x40000000) == 1;              // bit 31
+inline CPT_GPU_INLINE int extract_medium_info(int obj_idx, bool& alpha_mask) {
+    alpha_mask  = (obj_idx & 0x40000000) == 0x40000000;              // bit 31
      // extract higher 12 bits and mask the resulting lower 8bits
     return (obj_idx >> 20) & 0x000000ff;
 }
 
-inline CPT_GPU_INLINE int extract_tracing_info(uint32_t obj_idx, int& hit_med_idx, bool& is_triangle) {
+inline CPT_GPU_INLINE int extract_tracing_info(int obj_idx, int& hit_med_idx, bool& is_triangle) {
     is_triangle = (obj_idx & 0x80000000) == 0;
      // extract higher 12 bits and mask the resulting lower 8bits
     hit_med_idx = (obj_idx >> 20) & 0x000000ff;
@@ -46,7 +46,6 @@ struct BankStack {
     }
 
     CPT_GPU_INLINE int top() const {
-        auto ptr = &data.x;
         return data.x > 0 ? *((&data.x) + data.x) : 0;
     }
 
@@ -95,7 +94,7 @@ inline CPT_GPU Vec4 occlusion_transmittance_estimate(
     while (total_dist + EPSILON < max_dist) {
         int node_idx     = 0, min_index = -1;
         float aabb_tmin  = 0, prim_u = 0, prim_v = 0, min_dist = max_dist - total_dist;     // FIXME: precision problem
-        uint32_t min_obj_info = INVALID_OBJ;
+        int min_obj_info = INVALID_OBJ;
         // There can be much control flow divergence, not good
         Vec3 o_div = ray.o * inv_d;         // FIXME
         for (int i = 0; i < cache_num;) {
@@ -124,7 +123,7 @@ inline CPT_GPU Vec4 occlusion_transmittance_estimate(
             for (int idx = beg_idx; idx < end_idx; idx ++) {
                 // if current ray intersects primitive at [idx], tasks will store it
                 bool is_triangle = true;
-                uint32_t obj_info = tex1Dfetch<int>(bvh_leaves, idx);
+                int obj_info = tex1Dfetch<int>(bvh_leaves, idx);
                 int obj_idx = extract_object_info(obj_info, is_triangle);
 #ifdef TRIANGLE_ONLY
                 float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v);

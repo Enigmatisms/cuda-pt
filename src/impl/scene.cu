@@ -116,11 +116,6 @@ Ty extract_from(
     const tinyxml2::XMLElement* elem, 
     std::string value_name = "value"
 ) {
-    const char* name2test = elem->Attribute("name");
-    if (!name2test || std::strcmp(name2test, name.c_str())) {
-        std::cerr << "`extract_from` XML field '" << name << "' failed.\n";
-        throw std::runtime_error("`extract_from` XML field failed");
-    }
     tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
     Ty result;
     if constexpr (std::is_same_v<std::decay_t<Ty>, bool>) {
@@ -130,15 +125,16 @@ Ty extract_from(
     } else if constexpr (std::is_same_v<std::decay_t<Ty>, int>) {
         e_ret = elem->QueryIntAttribute(value_name.c_str(), &result);
     } else if constexpr(std::is_same_v<std::decay_t<Ty>, std::string>) {
-        e_ret = elem->Attribute(value_name.c_str());
+        result = elem->Attribute(value_name.c_str());
     } else {
-        std::cerr << "Unsupported type '" << std::type_info(Ty).name() << "' for extraction.\n";
+        std::cerr << "Unsupported type '" << typeid(Ty).name() << "' for extraction.\n";
         throw std::runtime_error("`extract_from` unsupported type.");
     }
 
     if (e_ret != tinyxml2::XML_SUCCESS) {
         throw std::runtime_error("`extract_from` parsing failed");
     }
+    return result;
 }
 
 void parseBSDF(
@@ -675,7 +671,7 @@ void parseTexture(
 
 size_t parsePhaseFunction(
     const tinyxml2::XMLElement* phase_elem,
-    std::unordered_map<std::string, size_t>& phase_maps, 
+    std::unordered_map<std::string, int>& phase_maps, 
     PhaseFunction** phase_funcs
 ) {
     const tinyxml2::XMLElement* traverser = phase_elem;
@@ -684,11 +680,12 @@ size_t parsePhaseFunction(
         ++ num_phase;
         traverser = traverser->NextSiblingElement("phase");
     }
+
+    // We need at least one (Dummy), this won't cost much
+    CUDA_CHECK_RETURN(cudaMallocManaged(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
+    create_device_phase<PhaseFunction><<<1, 1>>>(&phase_funcs[0]);
     if (num_phase == 1) return 0;     // return when there is no valid phase function
 
-    CUDA_CHECK_RETURN(cudaMallocManaged(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
-
-    create_device_phase<PhaseFunction><<<1, 1>>>(&phase_funcs[0]);
     for (size_t i = 1; i < num_phase; i++, phase_elem = phase_elem->NextSiblingElement("phase")) {
         phase_maps[phase_elem->Attribute("id")] = i;
         std::string type = phase_elem->Attribute("type");
@@ -746,8 +743,8 @@ size_t parsePhaseFunction(
 
 size_t parseMedium(
     const tinyxml2::XMLElement* vol_elem, 
-    const std::unordered_map<std::string, size_t>& phase_maps,
-    std::unordered_map<std::string, size_t>& medium_maps,
+    const std::unordered_map<std::string, int>& phase_maps,
+    std::unordered_map<std::string, int>& medium_maps,
     GridVolumeManager&  gvm,
     PhaseFunction**     d_phase_funcs,                  // device_memory
     Medium**            d_volumes
@@ -759,10 +756,11 @@ size_t parseMedium(
         traverser = traverser->NextSiblingElement("medium");
     }
 
-    if (num_volume == 1) return 0;
+    // We need at least one (Dummy), this won't cost much
     CUDA_CHECK_RETURN(cudaMallocManaged(&d_volumes, sizeof(Medium*) * num_volume));
-
     create_device_medium<Medium><<<1, 1>>>(&d_volumes[0], d_phase_funcs[0]);
+    if (num_volume == 1) return 0;
+
     for (size_t i = 1; i < num_volume; i++, vol_elem = vol_elem->NextSiblingElement("medium")) {
         std::string id = vol_elem->Attribute("id");
         std::string type = vol_elem->Attribute("type");
@@ -785,7 +783,7 @@ size_t parseMedium(
             throw std::runtime_error("No valid phase function attached.");
         }
 
-        const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("float");
+        element = vol_elem->FirstChildElement("float");
         float scale = 1;
         if (element) {
             std::string name = element->Attribute("name");
@@ -809,7 +807,7 @@ size_t parseMedium(
             element = element->NextSiblingElement("string");
             create_homogeneous_volume<<<1, 1>>>(&d_volumes[i], sigma_a, sigma_s, scale, d_phase_funcs[phase_id]);
         } else if (type == "grid") {
-            const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("string");
+            element = vol_elem->FirstChildElement("string");
             std::string name = element->Attribute("name"),
                         density_path, albedo_path = "", emission_path = "";
             while (element) {
@@ -840,6 +838,39 @@ size_t parseMedium(
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return num_volume - 1;
+}
+
+void parseObjectMediumRef(
+    const tinyxml2::XMLElement* node, 
+    std::unordered_map<std::string, int>& medium_map, 
+    std::vector<int>& obj_med_idxs
+) {
+    const tinyxml2::XMLElement* elem = node->FirstChildElement("ref");
+    int idx = 0;
+    if (!elem) {
+        obj_med_idxs.push_back(0);
+        return;
+    }
+    std::string name = elem->Attribute("name");
+    if (name == "medium") {
+        auto it = medium_map.find(node->Attribute("value"));
+        if (it != medium_map.end()) {
+            idx = it->second & 0x000000ff;      // 8 bit, 255 media at most
+        }
+    }
+    bool cullable = false;
+    elem = node->FirstChildElement("bool");
+    if (elem) {
+        name = elem->Attribute("name");
+        if (name == "cullable") {
+            if (elem->QueryBoolAttribute("value", &cullable) == tinyxml2::XML_SUCCESS) {
+                // object_id (32bit): (31: is_sphere), (30: is_cullable), (29, 28 reserved), (27 - 20: medium idx)
+                idx += static_cast<int>(cullable) << 10;        // shift by 10 bit (then shift by 20, will be 30)
+            }
+        }
+    }
+
+    obj_med_idxs.push_back(idx);
 }
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
@@ -904,7 +935,7 @@ Scene::Scene(std::string path):
     // ------------------------- (1) parse all the textures and BSDF -------------------------
     
     std::unordered_map<std::string, TextureInfo> tex_map;
-    std::unordered_map<std::string, size_t> phase_maps, medium_maps;
+    std::unordered_map<std::string, int> phase_maps, medium_maps;
     parseTexture(texture_elem, tex_map, folder_prefix);
     num_phase_func = parsePhaseFunction(phase_elem, phase_maps, phases);
     num_medium     = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases, media);
@@ -945,8 +976,9 @@ Scene::Scene(std::string path):
         uvs_list[i].reserve(32);
     }
 
-    // TODO 2.10: next step, here! obj_index remap, incorporate information into the obj_list
-    // TODO 2.10: parse shape reference
+    std::vector<int> obj_medium_idxs;
+    obj_medium_idxs.reserve(num_objects);
+
     int prim_offset = 0;
     for (int i = 0; i < num_objects; i++) {
         std::string type = shape_elem->Attribute("type");
@@ -958,6 +990,8 @@ Scene::Scene(std::string path):
                     objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
         sphere_objs[i] = type == "sphere";
         shape_elem = shape_elem->NextSiblingElement("shape");
+
+        parseObjectMediumRef(shape_elem, medium_maps, obj_medium_idxs);
     }
     num_prims = prim_offset;
     if (num_prims > MAX_PRIMITIVE_NUM) {
@@ -974,6 +1008,7 @@ Scene::Scene(std::string path):
     CUDA_CHECK_RETURN(cudaMalloc(&emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(emitters[0]);
     for (int i = 1; i <= num_emitters; i++) {
+        // FIXME: should light tracing support volumetric rendering, the medium mapping should be passed in
         parseEmitter(emitter_elem, emitter_obj_map, tex_map, emitter_props, emitter_names, host_tex_4d, emitters, envmap_id, i);
         emitter_elem = emitter_elem->NextSiblingElement("emitter");
     }
@@ -1004,9 +1039,9 @@ Scene::Scene(std::string path):
     std::vector<int> prim_idxs;     // won't need this if BVH is built
     bvh_build(
         verts_list[0], verts_list[1], verts_list[2], 
-        objects, sphere_objs, world_min, world_max, 
-        obj_idxs, prim_idxs, nodes, 
-        cache_nodes, config.cache_level, 
+        objects, obj_medium_idxs, sphere_objs, 
+        world_min, world_max, obj_idxs, prim_idxs, 
+        nodes, cache_nodes, config.cache_level, 
         config.max_node_num, config.bvh_overlap_w
     );
     auto dur = std::chrono::system_clock::now() - tp;
@@ -1092,9 +1127,13 @@ Scene::Scene(std::string path):
 Scene::~Scene() {
     destroy_gpu_alloc<<<1, num_bsdfs>>>(bsdfs);
     destroy_gpu_alloc<<<1, num_emitters + 1>>>(emitters);
+    destroy_gpu_alloc<<<1, num_medium + 1>>>(media);
+    destroy_gpu_alloc<<<1, num_phase_func + 1>>>(phases);
 
     CUDA_CHECK_RETURN(cudaFree(bsdfs));
     CUDA_CHECK_RETURN(cudaFree(emitters));
+    CUDA_CHECK_RETURN(cudaFree(media));
+    CUDA_CHECK_RETURN(cudaFree(phases));
     CUDA_CHECK_RETURN(cudaFreeHost(cam));
     for (auto& tex: host_tex_4d) tex.destroy();
     for (auto& tex: host_tex_2d) tex.destroy();

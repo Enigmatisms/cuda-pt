@@ -14,7 +14,7 @@
 class VolumePathTracer: public PathTracer {
 protected:
     int cam_vol_id;
-    const Medium** media;
+    Medium** media;
 public:
     VolumePathTracer(const Scene& scene);
 

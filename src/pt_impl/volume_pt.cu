@@ -17,15 +17,10 @@ VolumePathTracer::VolumePathTracer(
 ): PathTracer(scene, false), 
    cam_vol_id(scene.cam_vol_id)
 {
-    size_t mem_size = sizeof(Medium*) * scene.medium_ptrs.size();
-    CUDA_CHECK_RETURN(cudaMallocManaged(&media, mem_size));
-    for (size_t i = 0; i < scene.medium_ptrs.size(); i++) {
-        media[i] = scene.medium_ptrs[i];
-    }
+    media = scene.media;
 }
 
 VolumePathTracer::~VolumePathTracer() {
-    CUDA_CHECK_RETURN(cudaFree(media));
     printf("[Renderer] Volume Path Tracer Object destroyed.\n");
 }
 

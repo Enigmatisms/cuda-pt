@@ -54,7 +54,7 @@ CPT_KERNEL static void render_depth_kernel(
     
     float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
     // ============= step 1: ray intersection =================
-    uint32_t obj_info_dummy = 0;        // placeholder
+    int obj_info_dummy = 0;        // placeholder
     min_dist = ray_intersect_bvh(
         ray, bvh_leaves, nodes, s_cached, 
         verts, min_index, obj_info_dummy, 

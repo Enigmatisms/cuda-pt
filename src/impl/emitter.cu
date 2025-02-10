@@ -5,8 +5,13 @@ CPT_GPU Vec3 EnvMapEmitter::sample(
     const Vec3& hit_pos, const Vec3& hit_n, Vec4& le, float& pdf, Vec2&& uv, 
     const PrecomputedArray& prims, const NormalArray& norms, const ConstBuffer<PackedHalf2>&, int sampled_index
 ) const {
-    Vec3 direction = delocalize_rotate(hit_n, sample_cosine_hemisphere(uv, pdf)),
-         sample_pos = hit_pos + ENVMAP_DIST * direction;
+    Vec3 direction;
+    if (hit_n.length2() > EPSILON) {
+        direction = delocalize_rotate(hit_n, sample_cosine_hemisphere(uv, pdf));            // surface sampling 
+    } else {    
+        direction = delocalize_rotate(Vec3(0, 0, 1), sample_uniform_sphere(uv, pdf));       // for medium
+    }
+    Vec3 sample_pos = hit_pos + ENVMAP_DIST * direction;
     direction = rot.rotate(direction);                      // get local direction to obtain the UV coord
     float tht_y = acosf(direction.z()) * M_1_Pi,            // [0, 1]
           phi_x = (atan2f(direction.y(), direction.x()) + M_Pi) * M_1_Pi * 0.5f;        // [0, 1]

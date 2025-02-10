@@ -27,6 +27,7 @@ CPT_KERNEL void render_vpt_kernel(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
+    int num_emitter,
     int seed_offset,
     int cam_vol_idx,
     int node_num,
@@ -63,7 +64,7 @@ CPT_KERNEL void render_vpt_kernel(
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
-        uint32_t obj_info = INVALID_OBJ;
+        int obj_info = INVALID_OBJ;
         min_dist = ray_intersect_bvh(
             ray, bvh_leaves, nodes, s_cached, 
             verts, min_index, obj_info, 
@@ -80,7 +81,7 @@ CPT_KERNEL void render_vpt_kernel(
         objects[object_id].unpack(material_id, emitter_id);
         hit_emitter = emitter_id > 0;
 
-        Medium* medium  = media[nested_vols.top()];        
+        const Medium* medium  = media[nested_vols.top()];        
         MediumSample md = medium->sample(ray, sampler);
 
         Vec4 direct_comp(0, 1), nee_tr(0, 1);
@@ -95,8 +96,9 @@ CPT_KERNEL void render_vpt_kernel(
         emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
         Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
 
+        // sacrificing the hemispherical sampling for envmap
         shadow_ray.d = emitter->sample(
-            shadow_ray.o, it.shading_norm, direct_comp, direct_pdf, sampler.next2D(), verts, norms, uvs, emitter_id
+            shadow_ray.o, Vec3(0, 0, 1), direct_comp, direct_pdf, sampler.next2D(), verts, norms, uvs, emitter_id
         ) - shadow_ray.o;
         
         float emit_len_mis = shadow_ray.d.length();
@@ -116,7 +118,7 @@ CPT_KERNEL void render_vpt_kernel(
         }
         // even if the emitter is c_emitter[0], we are still going to evaluate direct component, in order to
         // introduce fewer diverging threads. Evaluating direct component is not a bottleneck
-
+        ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;
         if (md.flag > 0) {  // medium event
             // volume measure to solid angle measure, just use the inverse squared distance
             emission_weight = emission_weight / (emission_weight + min_dist * min_dist * hit_emitter * (b > 0) * ray.non_delta());
@@ -131,7 +133,7 @@ CPT_KERNEL void render_vpt_kernel(
                 (phase_pdf * float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
 
             // Bounce the ray via material scattering
-            ScatterStateFlag sampled_lobe = ScatterStateFlag::SCAT_VOLUME;
+            sampled_lobe = ScatterStateFlag::SCAT_VOLUME;
             ray.d = medium->scatter(ray.d, throughput, sampler);
 
             ray.set_delta(false);               // currently, there is no delta lobe for phase function
@@ -157,7 +159,7 @@ CPT_KERNEL void render_vpt_kernel(
                 (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
 
             // Bounce the ray via material scattering
-            ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;
+            
             bool same_hemisphere = ray.d.dot(it.shading_norm) > 0;  // incident ray, whether the direction is in the same hemisphere with normal
             ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe, material_id);
             ray.set_delta((ScatterStateFlag::BSDF_SPECULAR & sampled_lobe) > 0);
@@ -226,6 +228,7 @@ template CPT_KERNEL void render_vpt_kernel<true>(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
+    int num_emitter,
     int seed_offset,
     int cam_vol_idx,
     int node_num,
@@ -250,6 +253,7 @@ template CPT_KERNEL void render_vpt_kernel<false>(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
+    int num_emitter,
     int seed_offset,
     int cam_vol_idx,
     int node_num,

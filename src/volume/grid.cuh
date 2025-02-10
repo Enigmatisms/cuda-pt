@@ -8,7 +8,6 @@
  * @copyright Copyright (c) 2025
  */
 
-#ifdef VALID_NANOVDB
 #include <vector>
 #include "core/medium.cuh"
 #include <nanovdb/io/IO.h>
@@ -31,7 +30,7 @@ public:
     float scale;
 
     // currently, volume traversal is sampled via nearest neighbor
-    CONDITION_TEMPLATE_2(VType1, VType2, Vec3, Vec3)
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
     CPT_GPU_INLINE float sample_density(VType1&& pos, VType2&& offset) const {
         nanovdb::Vec3f idx = density->worldToIndexF(nanovdb::Vec3f(pos.x(), pos.y(), pos.z()));
         idx += nanovdb::Vec3f(offset.x(), offset.y(), offset.z());
@@ -39,7 +38,7 @@ public:
         return acc.getValue(nanovdb::Coord::Floor(idx));
     }
 
-    CONDITION_TEMPLATE_2(VType1, VType2, Vec3, Vec3)
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
     CPT_GPU_INLINE float sample_temperature(VType1&& pos, VType2&& offset) const {
         nanovdb::Vec3f idx = emission->worldToIndexF(nanovdb::Vec3f(pos.x(), pos.y(), pos.z()));
         idx += nanovdb::Vec3f(offset.x(), offset.y(), offset.z());
@@ -47,7 +46,7 @@ public:
         return acc.getValue(nanovdb::Coord::Floor(idx));
     }
 
-    CONDITION_TEMPLATE_2(VType1, VType2, Vec3, Vec3)
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
     CPT_GPU_INLINE Vec4 sample_albedo(VType1&& pos, VType2&& offset) const {
         if (albedo == nullptr) return Vec4(const_alb.x(), const_alb.y(), const_alb.z());
         nanovdb::Vec3f idx = albedo->worldToIndexF(nanovdb::Vec3f(pos.x(), pos.y(), pos.z()));
@@ -216,5 +215,3 @@ public:
         return host_handles.empty();
     }
 };
-
-#endif  // VALID_NANOVDB

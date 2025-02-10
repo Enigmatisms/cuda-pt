@@ -90,17 +90,28 @@ void index_input(
     }
 }
 
+inline int object_index_packing(int obj_med_idx, int obj_id, bool is_sphere) {
+    // take the lower 20 bits and shift up 20bits
+    int trucated = (obj_med_idx & 0x00000fff) << 20;
+    return (static_cast<int>(is_sphere) << 31) + trucated + (obj_id & 0x000fffff);
+}
+
 void create_bvh_info(
     const std::vector<Vec3>& points1,
     const std::vector<Vec3>& points2,
     const std::vector<Vec3>& points3,
-    const std::vector<PrimMappingInfo>& idxs, std::vector<BVHInfo>& bvh_infos) {
+    const std::vector<PrimMappingInfo>& idxs, 
+    const std::vector<int>& obj_med_idxs,        // encodes both medium mapping and alpha cull-able info
+    std::vector<BVHInfo>& bvh_infos
+) {
     bvh_infos.reserve(points1.size());
     for (size_t i = 0; i < points1.size(); i++) {
         const auto& idx_info = idxs[i];
         // idx_info.first is the primitive_id, while second is obj_id (negative means)
+        const int obj_med_id = obj_med_idxs[idx_info.obj_id];
         bvh_infos.emplace_back(points1[i], points2[i], points3[i], 
-            idx_info.is_sphere ? -idx_info.obj_id - 1: idx_info.obj_id, idx_info.prim_id, idx_info.is_sphere);
+            object_index_packing(obj_med_id, idx_info.obj_id, idx_info.is_sphere), 
+            idx_info.prim_id, idx_info.is_sphere);
     }
 }
 
@@ -312,6 +323,7 @@ void bvh_build(
     const std::vector<Vec3>& points2,
     const std::vector<Vec3>& points3,
     const std::vector<ObjInfo>& objects,
+    const std::vector<int>& obj_med_idxs,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
     std::vector<int>& obj_idxs, 
@@ -327,7 +339,7 @@ void bvh_build(
     std::vector<BVHInfo> bvh_infos;
     int node_num = 0, num_prims_all = points1.size();
     index_input(objects, sphere_flags, idx_prs, num_prims_all);
-    create_bvh_info(points1, points2, points3, idx_prs, bvh_infos);
+    create_bvh_info(points1, points2, points3, idx_prs, obj_med_idxs, bvh_infos);
     BVHNode* root_node = bvh_root_start(world_min, world_max, node_num, bvh_infos, max_prim_node);
     float total_cost = calculate_cost(root_node, traverse_cost);
     

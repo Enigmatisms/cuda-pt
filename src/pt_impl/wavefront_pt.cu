@@ -69,8 +69,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
 
     Interaction it;                          // To local register
 
-    int min_index = -1;
-    uint32_t min_object_info = 0;
+    int min_index = -1, min_object_info = 0;
     ray.hit_t = MAX_DIST;
     float prim_u = 0, prim_v = 0;
 
@@ -152,8 +151,7 @@ CPT_KERNEL void fused_closesthit_shader(
         ray.reset();
         
         float prim_u = 0, prim_v = 0;
-        int min_index = -1;
-        uint32_t min_object_info = 0;
+        int min_index = -1, min_object_info = 0;
         ray.hit_t = MAX_DIST;
         ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
                         s_cached, verts, min_index, min_object_info, 
@@ -416,7 +414,7 @@ CPT_KERNEL void guided_ray_scatter_net_eval_shader(
         int material_id = 0, emitter_id = 0;
         objects[object_id].unpack(material_id, emitter_id);
 
-        float direct_pdf = 1, pdf = 1.0f;
+        float pdf = 1.0f;
 
         ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;                            
         ray.d = c_material[material_id]->sample_dir(

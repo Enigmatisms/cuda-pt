@@ -21,7 +21,7 @@ using ConstObjPtr   = const CompactedObjInfo* const __restrict__;
 using ConstBSDFPtr  = const BSDF* const __restrict__;
 using ConstIndexPtr = const int* const __restrict__;
 
-inline CPT_GPU_INLINE int extract_object_info(uint32_t obj_idx, bool& is_triangle) {
+inline CPT_GPU_INLINE int extract_object_info(int obj_idx, bool& is_triangle) {
     is_triangle = (obj_idx & 0x80000000) == 0;
     return obj_idx & 0x000fffff;                            // extract low 20bits
 }
@@ -101,7 +101,7 @@ inline CPT_GPU float ray_intersect_bvh(
     ConstF4Ptr cached_nodes,
     const PrecomputedArray& verts,
     int& min_index,
-    uint32_t& min_obj_info,
+    int& min_obj_info,
     float& prim_u,
     float& prim_v,
     const int node_num,
@@ -137,7 +137,7 @@ inline CPT_GPU float ray_intersect_bvh(
         end_idx = intersect_node ? end_idx + beg_idx : 0;
         for (int idx = beg_idx; idx < end_idx; idx ++) {
             // if current ray intersects primitive at [idx], tasks will store it
-            uint32_t obj_info = tex1Dfetch<uint32_t>(bvh_leaves, idx);
+            int obj_info = tex1Dfetch<int>(bvh_leaves, idx);
             bool is_triangle = false;
             extract_object_info(obj_info, is_triangle);
 #ifdef TRIANGLE_ONLY

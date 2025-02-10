@@ -15,8 +15,8 @@ class ForwardBSDF: public BSDF {
 public:
     using BSDF::k_d;
     using BSDF::bsdf_flag;
-    CPT_CPU_GPU ForwardBSDF():
-        BSDF(Vec4(0, 1), Vec4(0, 1), Vec4(0, 1), ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_TRANSMIT) {}
+    CPT_CPU_GPU ForwardBSDF(int flag):
+        BSDF(Vec4(0, 1), Vec4(0, 1), Vec4(0, 1), flag) {}
 
     CPT_CPU_GPU ForwardBSDF(): BSDF() {}
     

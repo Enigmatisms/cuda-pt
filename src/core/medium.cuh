@@ -65,7 +65,7 @@ public:
     }
 public:
     // distance sampling: decide whether it is medium event or surface event
-    CPT_GPU virtual MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const = 0 {
+    CPT_GPU virtual MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const {
         return {Vec4(1), ray.hit_t, 1, 0};      // return surface event by default
     }
     // evaluate transmittance given the ray direction and distance
@@ -90,4 +90,4 @@ public:
     }
 };
 
-using MediumPtrArray = const Medium** const __restrict__;
+using MediumPtrArray = Medium** const __restrict__;

@@ -1,4 +1,3 @@
-#ifdef VALID_NANOVDB
 #include "volume/grid.cuh"
 
 CPT_KERNEL void create_grid_volume(
@@ -69,5 +68,3 @@ CPT_CPU void GridVolumeManager::to_gpu(Medium** medium) {
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
-
-#endif  // VALID_NANOVDB
