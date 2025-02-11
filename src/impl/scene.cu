@@ -669,10 +669,9 @@ void parseTexture(
     }
 }
 
-size_t parsePhaseFunction(
+std::pair<PhaseFunction**, size_t> parsePhaseFunction(
     const tinyxml2::XMLElement* phase_elem,
-    std::unordered_map<std::string, int>& phase_maps, 
-    PhaseFunction** phase_funcs
+    std::unordered_map<std::string, int>& phase_maps
 ) {
     const tinyxml2::XMLElement* traverser = phase_elem;
     size_t num_phase = 1;          // allocate a dummy volume 
@@ -681,10 +680,15 @@ size_t parsePhaseFunction(
         traverser = traverser->NextSiblingElement("phase");
     }
 
+    PhaseFunction** phase_funcs;
+
     // We need at least one (Dummy), this won't cost much
     CUDA_CHECK_RETURN(cudaMallocManaged(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
     create_device_phase<PhaseFunction><<<1, 1>>>(&phase_funcs[0]);
-    if (num_phase == 1) return 0;     // return when there is no valid phase function
+    if (num_phase == 1) {      // return when there is no valid phase function
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        return std::make_pair(phase_funcs, 0);
+    }     
 
     for (size_t i = 1; i < num_phase; i++, phase_elem = phase_elem->NextSiblingElement("phase")) {
         phase_maps[phase_elem->Attribute("id")] = i;
@@ -738,16 +742,15 @@ size_t parsePhaseFunction(
         }
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    return num_phase - 1;
+    return std::make_pair(phase_funcs, num_phase - 1);
 }
 
-size_t parseMedium(
+std::pair<Medium**, size_t> parseMedium(
     const tinyxml2::XMLElement* vol_elem, 
     const std::unordered_map<std::string, int>& phase_maps,
     std::unordered_map<std::string, int>& medium_maps,
     GridVolumeManager&  gvm,
-    PhaseFunction**     d_phase_funcs,                  // device_memory
-    Medium**            d_volumes
+    PhaseFunction**     d_phase_funcs                  // device_memory
 ) {
     const tinyxml2::XMLElement* traverser = vol_elem;
     size_t num_volume = 1;          // allocate a dummy volume 
@@ -757,9 +760,13 @@ size_t parseMedium(
     }
 
     // We need at least one (Dummy), this won't cost much
+    Medium** d_volumes = nullptr;
     CUDA_CHECK_RETURN(cudaMallocManaged(&d_volumes, sizeof(Medium*) * num_volume));
     create_device_medium<Medium><<<1, 1>>>(&d_volumes[0], d_phase_funcs[0]);
-    if (num_volume == 1) return 0;
+    if (num_volume == 1) {
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        return std::make_pair(d_volumes, 0);
+    }
 
     for (size_t i = 1; i < num_volume; i++, vol_elem = vol_elem->NextSiblingElement("medium")) {
         std::string id = vol_elem->Attribute("id");
@@ -837,7 +844,7 @@ size_t parseMedium(
         gvm.to_gpu(d_volumes);
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    return num_volume - 1;
+    return std::make_pair(d_volumes, num_volume - 1);
 }
 
 void parseObjectMediumRef(
@@ -847,21 +854,24 @@ void parseObjectMediumRef(
 ) {
     const tinyxml2::XMLElement* elem = node->FirstChildElement("ref");
     int idx = 0;
-    if (!elem) {
+    while (elem) {
+        std::string name = elem->Attribute("type");
+        if (name == "medium") {
+            auto it = medium_map.find(node->Attribute("id"));
+            if (it != medium_map.end()) {
+                idx = it->second & 0x000000ff;      // 8 bit, 255 media at most
+            }
+        }
+        elem = elem->NextSiblingElement("ref");
+    }
+    if (!idx) {
         obj_med_idxs.push_back(0);
         return;
-    }
-    std::string name = elem->Attribute("name");
-    if (name == "medium") {
-        auto it = medium_map.find(node->Attribute("value"));
-        if (it != medium_map.end()) {
-            idx = it->second & 0x000000ff;      // 8 bit, 255 media at most
-        }
     }
     bool cullable = false;
     elem = node->FirstChildElement("bool");
     if (elem) {
-        name = elem->Attribute("name");
+        std::string name = elem->Attribute("name");
         if (name == "cullable") {
             if (elem->QueryBoolAttribute("value", &cullable) == tinyxml2::XML_SUCCESS) {
                 // object_id (32bit): (31: is_sphere), (30: is_cullable), (29, 28 reserved), (27 - 20: medium idx)
@@ -936,9 +946,18 @@ Scene::Scene(std::string path):
     
     std::unordered_map<std::string, TextureInfo> tex_map;
     std::unordered_map<std::string, int> phase_maps, medium_maps;
+
     parseTexture(texture_elem, tex_map, folder_prefix);
-    num_phase_func = parsePhaseFunction(phase_elem, phase_maps, phases);
-    num_medium     = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases, media);
+
+    printf("Stage 1\n");
+
+    std::tie(phases, num_phase_func) = parsePhaseFunction(phase_elem, phase_maps);
+
+    printf("Stage 2\n");
+
+    std::tie(media, num_medium)      = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases);
+
+    printf("Stage 3\n");
 
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
@@ -979,6 +998,8 @@ Scene::Scene(std::string path):
     std::vector<int> obj_medium_idxs;
     obj_medium_idxs.reserve(num_objects);
 
+    printf("Stage pre-4\n");
+
     int prim_offset = 0;
     for (int i = 0; i < num_objects; i++) {
         std::string type = shape_elem->Attribute("type");
@@ -989,10 +1010,15 @@ Scene::Scene(std::string path):
             parseSphereShape(shape_elem, bsdf_map, emitter_map, bsdf_infos, emitter_obj_map, 
                     objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
         sphere_objs[i] = type == "sphere";
-        shape_elem = shape_elem->NextSiblingElement("shape");
 
+        printf("Stage pre-4: (%d), %x\n", i, shape_elem);
         parseObjectMediumRef(shape_elem, medium_maps, obj_medium_idxs);
+
+        shape_elem = shape_elem->NextSiblingElement("shape");
     }
+
+    printf("Stage 4\n");
+
     num_prims = prim_offset;
     if (num_prims > MAX_PRIMITIVE_NUM) {
         // MAX_PRIMITIVE_NUM is the upper bound. 2^25 - 1, if num_prims exceeds this bound
