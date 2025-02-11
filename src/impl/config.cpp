@@ -27,6 +27,8 @@ RenderingConfig RenderingConfig::from_xml(
                 node->QueryIntAttribute("value", &config.md.max_specular);
             else if (name == "max_transmit")
                 node->QueryIntAttribute("value", &config.md.max_tranmit);
+            else if (name == "max_volume")
+                node->QueryIntAttribute("value", &config.md.max_volume);
             else if (name == "specular_constraint")
                 node->QueryIntAttribute("value", &config.spec_constraint);
 

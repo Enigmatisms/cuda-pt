@@ -64,7 +64,7 @@ CPT_CPU void VolumePathTracer::render_online(
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, md, output_buffer, nullptr, num_emitter, 
         accum_cnt * SEED_SCALER + seed_offset, cam_vol_id, 
-        num_nodes, accum_cnt, num_cache, envmap_id
+        num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
@@ -80,7 +80,7 @@ CPT_CPU const float* VolumePathTracer::render_raw(
         emitter_prims, bvh_leaves, nodes, _cached_nodes,
         image, md, output_buffer, var_buffer, num_emitter, 
         accum_cnt * SEED_SCALER + seed_offset, cam_vol_id, 
-        num_nodes, accum_cnt, num_cache, envmap_id
+        num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return output_buffer;

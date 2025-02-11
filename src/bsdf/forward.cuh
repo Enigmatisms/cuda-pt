@@ -33,6 +33,7 @@ public:
         Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = true
     ) const override {
         pdf = 1.f;
+        samp_lobe = static_cast<ScatterStateFlag>(bsdf_flag);
         return indir;
     }
 };

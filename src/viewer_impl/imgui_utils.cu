@@ -505,6 +505,8 @@ void render_settings_interface(
                 params.renderer_update |= draw_integer_input("max_diff",  "Max Diffuse", md_params.max_diffuse);
                 params.renderer_update |= draw_integer_input("max_spec",  "Max Specular", md_params.max_specular);
                 params.renderer_update |= draw_integer_input("max_trans", "Max Transmit", md_params.max_tranmit);
+                if (rdr_type == RendererType::MegaKernelVPT)
+                    params.renderer_update |= draw_integer_input("max_vol", "Max Volume", md_params.max_volume);
                 ImGui::Checkbox("Output PNG", &params.output_png);
                 if (!params.output_png) {
                     ImGui::PushItemWidth(120.0f);

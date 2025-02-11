@@ -61,17 +61,18 @@ CPT_KERNEL void render_vpt_kernel(
     float emission_weight = 1.f;
     
     for (int b = 0; b < md_params.max_depth; b++) {
-        float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
+        float prim_u = 0, prim_v = 0;
+        ray.hit_t = MAX_DIST;
         min_index = -1;
         // ============= step 1: ray intersection =================
         int obj_info = INVALID_OBJ;
-        min_dist = ray_intersect_bvh(
+        ray.hit_t = ray_intersect_bvh(
             ray, bvh_leaves, nodes, s_cached, 
             verts, min_index, obj_info, 
-            prim_u, prim_v, node_num, cache_num, min_dist
+            prim_u, prim_v, node_num, cache_num, ray.hit_t
         );
 
-        if (min_index <= 0) {       // definitely not inside the volume
+        if (min_index < 0) {       // definitely not inside the volume
             radiance += throughput * c_emitter[envmap_id]->eval_le(&ray.d);
             break;
         }
@@ -94,7 +95,7 @@ CPT_KERNEL void render_vpt_kernel(
         // (2) sample a point on the emitter (we avoid sampling the hit emitter)
         emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
         emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
-        Ray shadow_ray(ray.advance(min_dist), Vec3(0, 0, 0));
+        Ray shadow_ray(ray.advance(md.dist), Vec3(0, 0, 0));
 
         // sacrificing the hemispherical sampling for envmap
         shadow_ray.d = emitter->sample(
@@ -121,7 +122,7 @@ CPT_KERNEL void render_vpt_kernel(
         ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;
         if (md.flag > 0) {  // medium event
             // volume measure to solid angle measure, just use the inverse squared distance
-            emission_weight = emission_weight / (emission_weight + min_dist * min_dist * hit_emitter * (b > 0) * ray.non_delta());
+            emission_weight = emission_weight / (emission_weight + ray.hit_t * ray.hit_t * hit_emitter * (b > 0) * ray.non_delta());
 
             // TODO: Emission grid direct component testing: I don't know how it works yet
             // Maybe, just query the emission grid and get the radiance (scaled by absorption factor)
@@ -131,6 +132,7 @@ CPT_KERNEL void render_vpt_kernel(
             emit_len_mis = direct_pdf + phase_pdf;
             radiance += nee_tr * throughput * direct_comp * \
                 (phase_pdf * float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
+            // printf("Here: %d, phase_pdf: %f, (%f, %f, %f)\n", nested_vols.top(), phase_pdf, throughput.x(), nee_tr.y(), );
 
             // Bounce the ray via material scattering
             sampled_lobe = ScatterStateFlag::SCAT_VOLUME;
@@ -138,7 +140,7 @@ CPT_KERNEL void render_vpt_kernel(
 
             ray.set_delta(false);               // currently, there is no delta lobe for phase function
         } else {
-            auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(min_dist), prim_u, prim_v, min_index, is_triangle);
+            auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, is_triangle);
 
             int material_id = 0, emitter_id = -1;
             objects[object_id].unpack(material_id, emitter_id);
@@ -146,7 +148,7 @@ CPT_KERNEL void render_vpt_kernel(
 
             // emitter MIS
             emission_weight = emission_weight / (emission_weight + 
-                    objects[object_id].solid_angle_pdf(c_textures.eval_normal(it, material_id), ray.d, min_dist) * 
+                    objects[object_id].solid_angle_pdf(c_textures.eval_normal(it, material_id), ray.d, ray.hit_t) * 
                     hit_emitter * (b > 0) * ray.non_delta());
 
             // check if the ray hits an emitter

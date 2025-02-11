@@ -89,7 +89,7 @@ inline CPT_GPU Vec4 occlusion_transmittance_estimate(
     float max_dist
 ) {
     float total_dist = 0;
-    Vec3 inv_d = ray.d.rcp();
+    const Vec3 inv_d = ray.d.rcp();
     Vec4 Tr(1);
     while (total_dist + EPSILON < max_dist) {
         int node_idx     = 0, min_index = -1;
@@ -152,8 +152,9 @@ inline CPT_GPU Vec4 occlusion_transmittance_estimate(
         if (is_in_medium) {
             active_medium = nested_vols.pop();
         } else {
-            active_medium = nested_vols.top();
+            int old_active_medium = nested_vols.top();
             nested_vols.push(active_medium);
+            active_medium = old_active_medium;
         }
         Tr *= media[active_medium]->transmittance(ray, sp, min_dist);
         

@@ -138,11 +138,11 @@ inline CPT_GPU float ray_intersect_bvh(
         for (int idx = beg_idx; idx < end_idx; idx ++) {
             // if current ray intersects primitive at [idx], tasks will store it
             int obj_info = tex1Dfetch<int>(bvh_leaves, idx);
-            bool is_triangle = false;
-            extract_object_info(obj_info, is_triangle);
 #ifdef TRIANGLE_ONLY
             float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v);
 #else
+            bool is_triangle = false;
+            extract_object_info(obj_info, is_triangle);
             float it_u = 0, it_v = 0, dist = Primitive::intersect(ray, verts, idx, it_u, it_v, is_triangle);
 #endif
             bool valid = dist > EPSILON && dist < min_dist;

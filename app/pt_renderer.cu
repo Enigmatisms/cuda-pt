@@ -1,6 +1,7 @@
 #include "core/scene.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
+#include "renderer/volume_pt.cuh"
 
 extern CPT_GPU_CONST Emitter* c_emitter[9];
 extern CPT_GPU_CONST BSDF*    c_material[48];
@@ -43,6 +44,11 @@ int main(int argc, char** argv) {
                 std::cout << "\tMegakernel Light Tracing.\n";
             break;
         } 
+        case RendererType::MegaKernelVPT: {
+            renderer = std::make_unique<VolumePathTracer>(scene);
+            std::cerr << "\tVolumetric Path Tracer\n";
+            break;
+        }
         case RendererType::VoxelSDFPT: {
             std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             return 0;

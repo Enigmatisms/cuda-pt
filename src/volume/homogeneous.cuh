@@ -9,6 +9,7 @@
  */
 #include "core/medium.cuh"
 
+// FIXME：no need to inline the functions since virtual functions won't be inlined (base class ptr)
 class HomogeneousMedium: public Medium {
 private:
     Vec4 sigma_a;
@@ -17,7 +18,7 @@ private:
 public:
     CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec4, Vec4)
     CPT_CPU_GPU HomogeneousMedium(VType1&& _sigma_a, VType2&& _sigma_s):
-        sigma_a(std::forward<VType1>(_sigma_a)), sigma_s(std::forward<VType2>(sigma_s))
+        sigma_a(std::forward<VType1>(_sigma_a)), sigma_s(std::forward<VType2>(_sigma_s))
     {
         sigma_t = sigma_a + sigma_s;
     }
@@ -31,7 +32,7 @@ public:
         msp.local_thp = (-sigma_t * msp.dist).exp_xyz();
         Vec4 density = is_medium ? msp.local_thp * sigma_t : msp.local_thp;
         msp.pdf = (1.f / 3.f) * (density.x() + density.y() + density.z());
-        msp.pdf = msp.pdf > 1e-6f ? msp.pdf : 1.f;
+        // msp.pdf = fmaxf(msp.pdf, 1e-6f);
         msp.local_thp *= 1.f / msp.pdf;
         msp.local_thp = is_medium ? msp.local_thp * sigma_s : msp.local_thp;
         msp.flag = uint32_t(is_medium);

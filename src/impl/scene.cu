@@ -323,6 +323,9 @@ void parseBSDF(
         info.type = BSDFType::Dispersion;
         info.bsdf.store_dispersion_params(dtype, k_s);
         create_dispersion_bsdf<<<1, 1>>>(bsdfs + index, k_s, dis_params.x(), dis_params.y());
+    } else if (type == "forward") {
+        create_forward_bsdf<<<1, 1>>>(bsdfs + index);
+        info.type = BSDFType::Forward;
     }
     bsdf_infos.emplace_back(std::move(info));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -804,14 +807,16 @@ std::pair<Medium**, size_t> parseMedium(
         
         if (type == "homogeneous") {
             element = vol_elem->FirstChildElement("rgb");
-            std::string name = element->Attribute("name");
-            Vec4 sigma_a, sigma_s;
-            if (name == "sigma_a") {
-                sigma_a = parseColor(element->Attribute("value"));
-            } else if (name == "sigma_s") {
-                sigma_s = parseColor(element->Attribute("value"));
+            Vec4 sigma_a(0, 1), sigma_s(1, 1);
+            while (element) {
+                std::string name = element->Attribute("name");
+                if (name == "sigma_a") {
+                    sigma_a = parseColor(element->Attribute("value"));
+                } else if (name == "sigma_s") {
+                    sigma_s = parseColor(element->Attribute("value"));
+                }
+                element = element->NextSiblingElement("rgb");
             }
-            element = element->NextSiblingElement("string");
             create_homogeneous_volume<<<1, 1>>>(d_volumes, d_phase_funcs, i, phase_id, sigma_a, sigma_s, scale);
         } else if (type == "grid") {
             element = vol_elem->FirstChildElement("string");
@@ -826,6 +831,7 @@ std::pair<Medium**, size_t> parseMedium(
                 } else if (name == "emission") {
                     emission_path = extract_from<std::string>(element);
                 }
+                element = vol_elem->FirstChildElement("string");
             }
 
             element = vol_elem->FirstChildElement("rgb");
@@ -857,7 +863,7 @@ void parseObjectMediumRef(
     while (elem) {
         std::string name = elem->Attribute("type");
         if (name == "medium") {
-            auto it = medium_map.find(node->Attribute("id"));
+            auto it = medium_map.find(elem->Attribute("id"));
             if (it != medium_map.end()) {
                 idx = it->second & 0x000000ff;      // 8 bit, 255 media at most
             }
@@ -947,15 +953,21 @@ Scene::Scene(std::string path):
     std::unordered_map<std::string, TextureInfo> tex_map;
     std::unordered_map<std::string, int> phase_maps, medium_maps;
 
+    printf("Here 1.\n");
+
     parseTexture(texture_elem, tex_map, folder_prefix);
 
     auto phase_pr = parsePhaseFunction(phase_elem, phase_maps);
     phases = phase_pr.first;
     num_phase_func = phase_pr.second;
 
+    printf("Here 2.\n");
+
     auto media_pr = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases);
     media = media_pr.first;
     num_medium = media_pr.second;
+
+    printf("Here 3.\n");
 
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
@@ -996,6 +1008,8 @@ Scene::Scene(std::string path):
     std::vector<int> obj_medium_idxs;
     obj_medium_idxs.reserve(num_objects);
 
+    printf("Here pre-4.\n");
+
 
     int prim_offset = 0;
     for (int i = 0; i < num_objects; i++) {
@@ -1012,6 +1026,8 @@ Scene::Scene(std::string path):
 
         shape_elem = shape_elem->NextSiblingElement("shape");
     }
+
+    printf("Here 4.\n");
 
     num_prims = prim_offset;
     if (num_prims > MAX_PRIMITIVE_NUM) {
@@ -1096,6 +1112,8 @@ Scene::Scene(std::string path):
         }
     }
 
+    printf("[BVH] Here. 1\n");
+
     // build an emitter primitive index map for emitter sampling
     // before the reordering logic, the emitter primitives are gauranteed
     // to be stored continuously, so we don't need an extra index map
@@ -1104,8 +1122,7 @@ Scene::Scene(std::string path):
     // for the leaf node, and the access for the leaf node primitives won't be continuous
     std::vector<std::vector<int>> eprim_idxs(num_emitters);
     for (int i = 0; i < num_prims; i++) {
-        int index = prim_idxs[i], obj_idx = obj_idxs[i];
-        obj_idx = obj_idx < 0 ? -obj_idx - 1 : obj_idx;
+        int index = prim_idxs[i], obj_idx = obj_idxs[i] & 0x000fffff;
         const auto& object = objects[obj_idx];
         reorder_sph_flags[i] = sphere_flags[index];
         if (object.is_emitter()) {
@@ -1113,6 +1130,8 @@ Scene::Scene(std::string path):
             eprim_idxs[emitter_idx].push_back(i);
         }
     }
+
+    printf("[BVH] Here. 2\n");
     // The following code does the following job:
     // BVH op will 'shuffle' the primitive order (sort of)
     // So, the emitter object might not have continuous
@@ -1133,7 +1152,7 @@ Scene::Scene(std::string path):
         if (!obj.is_emitter()) continue;
         obj.prim_offset = e_prim_offsets[obj.emitter_id - 1];
     }
-
+    printf("[BVH] Here. 3\n");
     uvs_list     = std::move(reorder_uvs);
     verts_list   = std::move(reorder_verts);
     norms_list   = std::move(reorder_norms);

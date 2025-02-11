@@ -11,6 +11,7 @@
 #include "core/imgui_utils.cuh"
 
 #include "renderer/bvh_cost.cuh"
+#include "renderer/volume_pt.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
@@ -75,6 +76,11 @@ int main(int argc, char** argv) {
                 std::cout << "\tMegakernel Light Tracing.\n";
             break;
         } 
+        case RendererType::MegaKernelVPT: {
+            renderer = std::make_unique<VolumePathTracer>(scene);
+            std::cerr << "\tVolumetric Path Tracer\n";
+            break;
+        }
         case RendererType::VoxelSDFPT: {
             std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             return 0;
