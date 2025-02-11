@@ -14,11 +14,11 @@
 #include "core/enums.cuh"
 
 template <typename PhaseType, typename... Args>
-CPT_KERNEL void create_device_phase(PhaseFunction** dst, Args... args) {
+CPT_KERNEL void create_device_phase(PhaseFunction** dst, int index, Args... args) {
     static_assert(std::is_base_of_v<PhaseFunction, PhaseType>, 
                   "PhaseType must be derived from PhaseFunction");
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *dst = new PhaseType(args...);
+        dst[index] = new PhaseType(args...);
     }
 }

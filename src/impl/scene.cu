@@ -680,11 +680,11 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
         traverser = traverser->NextSiblingElement("phase");
     }
 
-    PhaseFunction** phase_funcs;
+    PhaseFunction** phase_funcs = nullptr;
 
     // We need at least one (Dummy), this won't cost much
-    CUDA_CHECK_RETURN(cudaMallocManaged(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
-    create_device_phase<PhaseFunction><<<1, 1>>>(&phase_funcs[0]);
+    CUDA_CHECK_RETURN(cudaMalloc(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
+    create_device_phase<PhaseFunction><<<1, 1>>>(phase_funcs, 0);
     if (num_phase == 1) {      // return when there is no valid phase function
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         return std::make_pair(phase_funcs, 0);
@@ -707,9 +707,9 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
                     }
                 }
             }
-            create_device_phase<HenyeyGreensteinPhase><<<1, 1>>>(&phase_funcs[i], g);
+            create_device_phase<HenyeyGreensteinPhase><<<1, 1>>>(phase_funcs, i, g);
         } else if (type == "isotropic") {
-            create_device_phase<IsotropicPhase><<<1, 1>>>(&phase_funcs[i]);
+            create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
         } else if (type == "hg-duo") {
             float g1 = 0.2, g2 = 0.8, weight = 0.5;
             const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
@@ -726,15 +726,15 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
                 }
                 sub_elem = sub_elem->NextSiblingElement("string");
             }
-            create_device_phase<MixedHGPhaseFunction><<<1, 1>>>(&phase_funcs[i], g1, g2, weight);
+            create_device_phase<MixedHGPhaseFunction><<<1, 1>>>(phase_funcs, i, g1, g2, weight);
         } else if (type == "rayleigh") {
-            create_device_phase<RayleighPhase><<<1, 1>>>(&phase_funcs[i]);
+            create_device_phase<RayleighPhase><<<1, 1>>>(phase_funcs, i);
         } else if (type == "sggx") {
             std::cerr << "Current SGGX is not implemented but will be in the future. Fall back to 'isotropic'\n";
-            create_device_phase<IsotropicPhase><<<1, 1>>>(&phase_funcs[i]);
+            create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
         } else {
             std::cerr << "Phase type '" << type << "' not supported. Fall back to 'isotropic'\n";
-            create_device_phase<IsotropicPhase><<<1, 1>>>(&phase_funcs[i]);
+            create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
         }
         if (e_ret != tinyxml2::XML_SUCCESS) {
             std::cerr << "Unexcepted error occurred during parsing of phase function '" << type << "'\n";
@@ -761,8 +761,8 @@ std::pair<Medium**, size_t> parseMedium(
 
     // We need at least one (Dummy), this won't cost much
     Medium** d_volumes = nullptr;
-    CUDA_CHECK_RETURN(cudaMallocManaged(&d_volumes, sizeof(Medium*) * num_volume));
-    create_device_medium<Medium><<<1, 1>>>(&d_volumes[0], d_phase_funcs[0]);
+    CUDA_CHECK_RETURN(cudaMalloc(&d_volumes, sizeof(Medium*) * num_volume));
+    create_device_medium<Medium><<<1, 1>>>(d_volumes, d_phase_funcs, 0, 0);
     if (num_volume == 1) {
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         return std::make_pair(d_volumes, 0);
@@ -812,7 +812,7 @@ std::pair<Medium**, size_t> parseMedium(
                 sigma_s = parseColor(element->Attribute("value"));
             }
             element = element->NextSiblingElement("string");
-            create_homogeneous_volume<<<1, 1>>>(&d_volumes[i], sigma_a, sigma_s, scale, d_phase_funcs[phase_id]);
+            create_homogeneous_volume<<<1, 1>>>(d_volumes, d_phase_funcs, i, phase_id, sigma_a, sigma_s, scale);
         } else if (type == "grid") {
             element = vol_elem->FirstChildElement("string");
             std::string name = element->Attribute("name"),
@@ -834,14 +834,14 @@ std::pair<Medium**, size_t> parseMedium(
                 albedo = parseColor(element->Attribute("value"));
 
             if (albedo_path.empty()) {
-                gvm.push(i, density_path, albedo, d_phase_funcs[phase_id], scale, emission_path);
+                gvm.push(i, phase_id, density_path, albedo, scale, emission_path);
             } else {
-                gvm.push(i, density_path, d_phase_funcs[phase_id], scale, albedo_path, emission_path);
+                gvm.push(i, phase_id, density_path, scale, albedo_path, emission_path);
             }
         }
     }
     if (!gvm.empty()) {
-        gvm.to_gpu(d_volumes);
+        gvm.to_gpu(d_volumes, d_phase_funcs);
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return std::make_pair(d_volumes, num_volume - 1);
@@ -949,15 +949,13 @@ Scene::Scene(std::string path):
 
     parseTexture(texture_elem, tex_map, folder_prefix);
 
-    printf("Stage 1\n");
+    auto phase_pr = parsePhaseFunction(phase_elem, phase_maps);
+    phases = phase_pr.first;
+    num_phase_func = phase_pr.second;
 
-    std::tie(phases, num_phase_func) = parsePhaseFunction(phase_elem, phase_maps);
-
-    printf("Stage 2\n");
-
-    std::tie(media, num_medium)      = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases);
-
-    printf("Stage 3\n");
+    auto media_pr = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases);
+    media = media_pr.first;
+    num_medium = media_pr.second;
 
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
@@ -998,7 +996,6 @@ Scene::Scene(std::string path):
     std::vector<int> obj_medium_idxs;
     obj_medium_idxs.reserve(num_objects);
 
-    printf("Stage pre-4\n");
 
     int prim_offset = 0;
     for (int i = 0; i < num_objects; i++) {
@@ -1011,13 +1008,10 @@ Scene::Scene(std::string path):
                     objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
         sphere_objs[i] = type == "sphere";
 
-        printf("Stage pre-4: (%d), %x\n", i, shape_elem);
         parseObjectMediumRef(shape_elem, medium_maps, obj_medium_idxs);
 
         shape_elem = shape_elem->NextSiblingElement("shape");
     }
-
-    printf("Stage 4\n");
 
     num_prims = prim_offset;
     if (num_prims > MAX_PRIMITIVE_NUM) {
@@ -1153,8 +1147,9 @@ Scene::Scene(std::string path):
 Scene::~Scene() {
     destroy_gpu_alloc<<<1, num_bsdfs>>>(bsdfs);
     destroy_gpu_alloc<<<1, num_emitters + 1>>>(emitters);
-    destroy_gpu_alloc<<<1, num_medium + 1>>>(media);
     destroy_gpu_alloc<<<1, num_phase_func + 1>>>(phases);
+    destroy_gpu_alloc<<<1, num_medium + 1>>>(media);
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
     CUDA_CHECK_RETURN(cudaFree(bsdfs));
     CUDA_CHECK_RETURN(cudaFree(emitters));

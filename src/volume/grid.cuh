@@ -150,15 +150,6 @@ public:
     } 
 };
 
-CPT_KERNEL void create_grid_volume(
-    const nanovdb::FloatGrid* dev_den_grids,
-    const nanovdb::Vec3fGrid* dev_alb_grids,
-    const nanovdb::FloatGrid* dev_ems_grids,
-    Medium** media,
-    float scale,
-    PhaseFunction* ptr
-);
-
 class GridVolumeManager {
 private:
     template <typename DType>
@@ -169,11 +160,11 @@ private:
     std::vector<nanovdb::FloatGrid*> den_grids;
     std::vector<nanovdb::Vec3fGrid*> alb_grids;
     std::vector<nanovdb::FloatGrid*> ems_grids;
-    std::vector<PhaseFunction*> phase_ptrs;
 
     // from all medium to the grid volume medium, for example:
     // [homogeneous, homogeneous, grid, grid, homogeneous, grid] -> [2, 3, 5]
     std::vector<size_t> medium_indices;
+    std::vector<size_t> phase_indices;
     std::vector<Vec4> const_albedos;    // if the grid volume has a constant albedo, then set here
     std::vector<float> scales;          // density scale
 private:
@@ -192,24 +183,24 @@ public:
     CPT_CPU GridVolumeManager();
     // @overload, RGB albedo grid
     CPT_CPU void push(
-        size_t          index, 
+        size_t          med_id, 
+        size_t          ph_id, 
         std::string     den_path, 
-        PhaseFunction*  ptr, 
         float           scale = 1.f, 
         std::string     alb_path = "", 
         std::string     ems_path = ""
     );
     // @overload, inherently constant albedo grid
     CPT_CPU void push(
-        size_t          index, 
+        size_t          med_id, 
+        size_t          ph_id, 
         std::string     den_path, 
         Vec4            albedo, 
-        PhaseFunction*  ptr, 
         float           scale = 1.f, 
         std::string     ems_path = ""
     );
 
-    CPT_CPU void to_gpu(Medium** medium);
+    CPT_CPU void to_gpu(Medium** medium, PhaseFunction** phases);
 
     CPT_CPU bool empty() const noexcept {
         return host_handles.empty();

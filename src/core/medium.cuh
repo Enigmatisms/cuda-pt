@@ -55,14 +55,8 @@ protected:
     PhaseFunction* phase;
 public:
     CPT_CPU_GPU Medium(): phase(nullptr) {}
-    CPT_CPU_GPU Medium(PhaseFunction * _phase): phase(_phase) {}
 
-    CPT_CPU_GPU virtual ~Medium() {
-        if (phase != nullptr) {
-            delete phase;
-            phase = nullptr;
-        }
-    }
+    CPT_CPU_GPU virtual ~Medium() {}
 public:
     // distance sampling: decide whether it is medium event or surface event
     CPT_GPU virtual MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const {

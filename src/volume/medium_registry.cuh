@@ -13,11 +13,17 @@
 #include "core/enums.cuh"
 
 template <typename MedType, typename... Args>
-CPT_KERNEL void create_device_medium(Medium** dst, Args... args) {
+CPT_KERNEL void create_device_medium(
+    Medium** dst, 
+    PhaseFunction** phases, 
+    int med_id, int ph_id, 
+    Args... args
+) {
     static_assert(std::is_base_of_v<Medium, MedType>, 
                   "MedType must be derived from Medium");
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *dst = new MedType(args...);
+        dst[med_id] = new MedType(args...);
+        dst[med_id]->bind_phase_function(phases[ph_id]);
     }
 }

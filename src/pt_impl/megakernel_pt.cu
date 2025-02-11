@@ -6,7 +6,7 @@
 #include "core/textures.cuh"
 #include "renderer/megakernel_pt.cuh"
 
-static constexpr int RR_BOUNCE = 2;
+static constexpr int RR_BOUNCE = 1;
 static constexpr float RR_THRESHOLD = 0.1;
 
 template <bool render_once>

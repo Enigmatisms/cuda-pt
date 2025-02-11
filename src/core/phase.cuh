@@ -21,6 +21,7 @@ struct PhaseSample {
 class PhaseFunction {
 public:
     CPT_CPU_GPU PhaseFunction() {}
+    CPT_CPU_GPU virtual ~PhaseFunction() {}
     CPT_GPU virtual float eval(Vec3&& indir, Vec3&& outdir) const {
         return 0;
     }
