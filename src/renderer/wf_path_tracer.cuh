@@ -6,7 +6,6 @@
  * @date   2024.6.20 -> 2025.1.18
 */
 #pragma once
-#include <cuda/pipeline>
 #include <thrust/copy.h>
 #include <thrust/partition.h>
 #include <thrust/device_vector.h>

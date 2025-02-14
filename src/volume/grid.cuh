@@ -80,7 +80,7 @@ public:
         ((nanovdb::FloatTree*)density->treePtr())->extrema(t, inv_maj);
         inv_maj = 1.f / (scale * inv_maj);
 
-        MediumSample ds{Vec4(1, 1), ray.hit_t, 1, 0};
+        MediumSample ds{Vec4(1, 1), ray.hit_t, 0};
         t = near_t - logf(1.f - sp.next1D()) * inv_maj;
         while (t < far_t) {
             Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D(), sp.next1D(), sp.next1D()) - 0.5f;
@@ -134,7 +134,7 @@ public:
 
     CPT_GPU_INLINE MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const override {
         float t_near = 0, t_far = 0;
-        MediumSample ds{Vec4(1, 1), ray.hit_t, 1, 0};
+        MediumSample ds{Vec4(1, 1), ray.hit_t, 0};
         if (grid_aabb.intersect(ray, t_near, t_far)) {
             ds = delta_tracking_dist_sample(ray, sp, t_near, t_far);
         }

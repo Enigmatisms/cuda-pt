@@ -20,12 +20,12 @@ public:
 
     CPT_CPU_GPU ForwardBSDF(): BSDF() {}
     
-    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& /* in */, int index) const override {
-        return 0.f;
+    CPT_GPU float pdf(const Interaction& it, const Vec3& out, const Vec3& in, int index) const override {
+        return static_cast<float>(in.dot(out) == 1.f);
     }
 
     CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = true) const override {
-        return Vec4(0, 1);
+        return Vec4(in.dot(out) == 1.f, 1);
     }
 
     CPT_GPU Vec3 sample_dir(

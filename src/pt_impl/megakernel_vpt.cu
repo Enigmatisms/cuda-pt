@@ -8,7 +8,7 @@
 #include "core/camera_model.cuh"
 #include "renderer/megakernel_vpt.cuh"
 
-static constexpr int RR_BOUNCE = 1;
+static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
 
 template <bool render_once>

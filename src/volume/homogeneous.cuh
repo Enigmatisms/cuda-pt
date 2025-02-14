@@ -29,12 +29,37 @@ public:
         msp.dist = -logf(1.f - sp.next1D()) / sigma_t[channel];
         bool is_medium = msp.dist < ray.hit_t;
         msp.dist = fminf(msp.dist, ray.hit_t);
-        msp.local_thp = (-sigma_t * msp.dist).exp_xyz();
-        Vec4 density = is_medium ? msp.local_thp * sigma_t : msp.local_thp;
-        msp.pdf = (1.f / 3.f) * (density.x() + density.y() + density.z());
-        // msp.pdf = fmaxf(msp.pdf, 1e-6f);
-        msp.local_thp *= 1.f / msp.pdf;
-        msp.local_thp = is_medium ? msp.local_thp * sigma_s : msp.local_thp;
+
+        float exp_y_x = expf(-(sigma_t.y() - sigma_t.x()) * msp.dist),
+              exp_z_x = expf(-(sigma_t.z() - sigma_t.x()) * msp.dist),
+              exp_z_y = expf(-(sigma_t.z() - sigma_t.y()) * msp.dist),
+              exp_x_y = __frcp_rn(exp_y_x),
+              exp_x_z = __frcp_rn(exp_z_x),
+              exp_y_z = __frcp_rn(exp_z_y);
+        /**
+         * Why so complicated?
+         * 
+         * If you implement in the similar way as PBRT-v3
+         * You will find that when PDF is pretty small, you will need to clip it to prevent
+         * numerical instability, but this can be detrimental to rendering results: unexpected
+         * stripes will apear in the media. If you choose not to clip the results, you might wind
+         * up having black dots. 
+         * 
+         * My following implementation directly get rid of the
+         * need to clip, while also being numerically stable 
+         */
+        msp.local_thp = is_medium ? 
+            Vec4(
+                3.f / (sigma_t.x() + sigma_t.y() * exp_y_x + sigma_t.z() * exp_z_x),
+                3.f / (sigma_t.x() * exp_x_y + sigma_t.y() + sigma_t.z() * exp_z_y),
+                3.f / (sigma_t.x() * exp_x_z + sigma_t.y() * exp_y_z + sigma_t.z())
+            ) * sigma_s : 
+            Vec4(
+                3.f / (1.f + exp_y_x + exp_z_x),
+                3.f / (exp_x_y + 1.f + exp_z_y),
+                3.f / (exp_x_z + exp_y_z + 1.f)
+            );
+        
         msp.flag = uint32_t(is_medium);
         return msp;
     }

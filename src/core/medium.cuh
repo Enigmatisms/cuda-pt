@@ -46,7 +46,6 @@ struct IndexBound {
 struct MediumSample {
     Vec4 local_thp;
     float dist;
-    float pdf;
     uint32_t flag;
 };
 
@@ -60,7 +59,7 @@ public:
 public:
     // distance sampling: decide whether it is medium event or surface event
     CPT_GPU virtual MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const {
-        return {Vec4(1), ray.hit_t, 1, 0};      // return surface event by default
+        return {Vec4(1), ray.hit_t, 0};      // return surface event by default
     }
     // evaluate transmittance given the ray direction and distance
     CPT_GPU virtual Vec4 transmittance(const Ray& ray, Sampler& sp, float dist) const {

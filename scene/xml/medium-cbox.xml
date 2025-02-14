@@ -29,6 +29,7 @@
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
+			<!-- <lookat target="1.534771, 3.502537, 3.607821" origin="1.426864, 4.052012, 4.436334" up="0.143615, 0.833253, -0.533914"/> -->
 			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
 		</transform>
 
@@ -40,8 +41,10 @@
 	</sensor>
 
 	<phase type="hg" id="large-vol">
-		<float name="g" value="0.3"/>
+		<float name="g" value="-0.1"/>
 	</phase>
+
+	<phase type="isotropic" id="bunny-vol"/>
 
 	<medium type="homogeneous" id="large-vol">
 		<rgb name="sigma_a" value="0.001"/>
@@ -49,6 +52,19 @@
 		<float name="scale" value="1"/>
 		<ref type="phase" value="large-vol"/>
 	</medium>
+
+	<medium type="homogeneous" id="bunny-vol">
+		<rgb name="sigma_a" value="0.001"/>
+		<rgb name="sigma_s" value="100.0, 90.0, 80.0"/>
+		<float name="scale" value="0.1"/>
+		<ref type="phase" value="bunny-vol"/>
+	</medium>
+
+	<brdf type="det-refraction" id="glass">
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
 
 	<brdf type="forward" id="large-box"/>
 
@@ -120,6 +136,13 @@
 		<string name="filename" value="../meshes/cbox/tall-box.obj"/>
 		<ref type="material" id="large-box"/>
 		<ref type="medium" id="large-vol"/>
+		<bool name="cullable" value="true"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/bunny.obj"/>
+		<ref type="material" id="glass"/>
+		<ref type="medium" id="bunny-vol"/>
 		<bool name="cullable" value="true"/>
 	</shape>
 
