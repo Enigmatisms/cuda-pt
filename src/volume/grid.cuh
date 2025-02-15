@@ -36,7 +36,7 @@ public:
         nanovdb::Vec3f idx = density->worldToIndexF(nanovdb::Vec3f(pos.x(), pos.y(), pos.z()));
         idx += nanovdb::Vec3f(offset.x(), offset.y(), offset.z());
         auto acc = density->getAccessor();
-        return acc.getValue(nanovdb::Coord::Floor(idx));
+        return acc.getValue(nanovdb::Coord(roundf(idx[0]), roundf(idx[1]), roundf(idx[2])));
     }
 
     CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
@@ -44,7 +44,7 @@ public:
         nanovdb::Vec3f idx = emission->worldToIndexF(nanovdb::Vec3f(pos.x(), pos.y(), pos.z()));
         idx += nanovdb::Vec3f(offset.x(), offset.y(), offset.z());
         auto acc = emission->getAccessor();
-        return acc.getValue(nanovdb::Coord::Floor(idx));
+        return acc.getValue(nanovdb::Coord(roundf(idx[0]), roundf(idx[1]), roundf(idx[2])));
     }
 
     CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
@@ -53,7 +53,7 @@ public:
         nanovdb::Vec3f idx = albedo->worldToIndexF(nanovdb::Vec3f(pos.x(), pos.y(), pos.z()));
         idx += nanovdb::Vec3f(offset.x(), offset.y(), offset.z());
         auto acc = albedo->getAccessor();
-        nanovdb::Vec3f val = acc.getValue(nanovdb::Coord::Floor(idx));
+        nanovdb::Vec3f val = acc.getValue(nanovdb::Coord(roundf(idx[0]), roundf(idx[1]), roundf(idx[2])));
         return Vec4(val[0], val[1], val[2]);
     }
 

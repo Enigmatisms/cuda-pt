@@ -1,4 +1,5 @@
 #include "volume/grid.cuh"
+#include "bsdf/dispersion.cuh"
 
 CPT_GPU_INLINE float warp_reduce_float(float value, int start_mask = 16) {
     #pragma unroll
@@ -59,6 +60,21 @@ CPT_KERNEL void compute_volume_sum(
     __syncthreads();
 }
 
+// CPT_GPU Vec4 black_body_emission(
+//     const nanovdb::FloatGrid* _em,
+//     Vec3 pos
+// ) {
+//     constexpr float c = 299792458;
+//     constexpr float h = 6.62606957e-34;
+//     constexpr float kb = 1.3806488e-23;
+//     for (int i = 0; i < n; ++i) {
+//            Float l = lambda[i] * 1e-9;
+//            Float lambda5 = (l * l) * (l * l) * l;
+//            Le[i] = (2 * h * c * c) /
+//                (lambda5 * (std::exp((h * c) / (l * kb  * T)) - 1));
+//     }
+// }
+
 CPT_GPU GridVolumeMedium::GridVolumeMedium(
     const nanovdb::FloatGrid* _den,
     float _avg_density,
@@ -70,8 +86,8 @@ CPT_GPU GridVolumeMedium::GridVolumeMedium(
    const_alb(std::move(_const_alb)), scale(_scale), avg_density(_avg_density) {
     auto bbox = density->worldBBox();
     grid_aabb = AABB(
-        Vec3(bbox.min()[0], bbox.min()[2], bbox.min()[1]),
-        Vec3(bbox.max()[0], bbox.max()[2], bbox.max()[1]),
+        Vec3(bbox.min()[0], bbox.min()[1], bbox.min()[2]),
+        Vec3(bbox.max()[0], bbox.max()[1], bbox.max()[2]),
         0, 0
     );
     printf("AABB:\n");
@@ -87,6 +103,8 @@ CPT_GPU_INLINE MediumSample GridVolumeMedium::sample(const Ray& ray, Sampler& sp
         t_far  = fminf(t_far, ray.hit_t);
         ds = delta_tracking_dist_sample(ray, sp, t_near, t_far);
     }
+
+    // ds = delta_tracking_dist_sample(ray, sp, 0, ray.hit_t);
     return ds;
 }
 
@@ -97,6 +115,7 @@ CPT_GPU_INLINE Vec4 GridVolumeMedium::transmittance(const Ray& ray, Sampler& sp,
         t_far  = fminf(t_far, ray.hit_t);
         Tr = ratio_tracking_trans_estimate(ray, sp, t_near, t_far);
     }   
+    // float Tr = ratio_tracking_trans_estimate(ray, sp, 0, ray.hit_t);
     return Vec4(Tr, 1);
 }
 
@@ -113,8 +132,8 @@ CPT_GPU MediumSample GridVolumeMedium::delta_tracking_dist_sample(
     MediumSample ds{Vec4(1, 1), ray.hit_t, 0};
     t = near_t - logf(1.f - sp.next1D()) * inv_maj;
     while (t < far_t) {
-        Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D(), sp.next1D(), sp.next1D()) - 0.5f;
-        sample_pos = Vec3(sample_pos.x(), sample_pos.z(), sample_pos.y());
+        Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D()) - 0.5f;
+        sample_pos = Vec3(sample_pos.x(), sample_pos.y(), sample_pos.z());
         const float d = sample_density(sample_pos, offset) * scale;
         if (sp.next1D() < d * inv_maj) {        // real collision
             ds.dist = t;
@@ -142,8 +161,8 @@ CPT_GPU_INLINE float GridVolumeMedium::residual_tracking_trans_estimate(
 
     t = near_t - logf(1.f - sp.next1D()) * inv_maj;
     while (t < far_t) {
-        Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D(), sp.next1D(), sp.next1D()) - 0.5f;
-        sample_pos = Vec3(sample_pos.x(), sample_pos.z(), sample_pos.y());
+        Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D()) - 0.5f;
+        sample_pos = Vec3(sample_pos.x(), sample_pos.y(), sample_pos.z());
         const float d = sample_density(sample_pos, offset) * scale;
         Tr *= 1.f - (d - sigma_c) * inv_maj;
         if (Tr < 0.1f) {            // Russian Roulette
@@ -167,7 +186,7 @@ CPT_GPU float GridVolumeMedium::ratio_tracking_trans_estimate(
 
     t = near_t - logf(1.f - sp.next1D()) * inv_maj;
     while (t < far_t) {
-        Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D(), sp.next1D(), sp.next1D()) - 0.5f;
+        Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D()) - 0.5f;
         sample_pos = Vec3(sample_pos.x(), sample_pos.z(), sample_pos.y());
         const float d = sample_density(sample_pos, offset) * scale;
         Tr *= fmaxf(0.f, 1.f - d * inv_maj);

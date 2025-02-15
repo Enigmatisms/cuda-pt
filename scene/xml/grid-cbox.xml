@@ -29,7 +29,7 @@
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
-			<!-- <lookat target="14.912155, 0.069723, 4.055485" origin="15.878679, -0.185710, 4.079683" up="0.255347, 0.966827, 0.006648"/> -->
+			<!-- <lookat target="4.181033, 8.266033, -7.462358" origin="4.304738, 8.822931, -8.283674" up="0.028861, 0.825305, 0.563950"/> -->
 			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
 		</transform>
 
@@ -43,9 +43,9 @@
 	<phase type="isotropic" id="large-vol"/>
 
 	<medium type="grid" id="vdb-volume">
-		<rgb name="albedo" value="0.7, 0.7, 0.7"/>
-		<float name="scale" value="12"/>
-		<string name="density" value="../volume/density-82.nvdb"/>
+		<rgb name="albedo" value="0.8, 0.8, 0.8"/>
+		<float name="scale" value="20"/>
+		<string name="density" value="../volume/density_0001.nvdb"/>
 		<ref type="phase" id="large-vol"/>
 	</medium>
 
@@ -112,7 +112,7 @@
 
 	<emitter type="area" id="area">
 		<rgb name="emission" value="1, 1, 1"/>
-		<rgb name="scaler" value="48.0"/>
+		<rgb name="scaler" value="40.0"/>
 		<string name="bind_type" value="triangle"/>
 	</emitter>
 
@@ -162,7 +162,7 @@
 	</shape>
 
 	<shape type="obj">
-		<string name="filename" value="../meshes/cbox/light.obj"/>
+		<string name="filename" value="../meshes/cbox/light-side.obj"/>
 		<ref type="material" id="light"/>
 		<ref type="emitter" id="area"/>
 	</shape>
