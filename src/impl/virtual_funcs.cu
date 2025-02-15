@@ -5,7 +5,6 @@
  * @date:   2024.9.6
 */
 
-#pragma once
 #include "core/virtual_funcs.cuh"
 
 CPT_KERNEL void create_point_source(Emitter* &dst, Vec4 le, Vec3 pos) {
