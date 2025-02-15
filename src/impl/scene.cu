@@ -698,7 +698,7 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
         std::string type = phase_elem->Attribute("type");
         type = type.empty() ? "homogeneous" : type;
 
-        tinyxml2::XMLError e_ret;
+        tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
         if (type == "hg") {
             float g = 0.2;
             const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
@@ -753,7 +753,8 @@ std::pair<Medium**, size_t> parseMedium(
     const std::unordered_map<std::string, int>& phase_maps,
     std::unordered_map<std::string, int>& medium_maps,
     GridVolumeManager&  gvm,
-    PhaseFunction**     d_phase_funcs                  // device_memory
+    PhaseFunction**     d_phase_funcs,                  // device_memory
+    std::string folder_prefix
 ) {
     const tinyxml2::XMLElement* traverser = vol_elem;
     size_t num_volume = 1;          // allocate a dummy volume 
@@ -780,7 +781,7 @@ std::pair<Medium**, size_t> parseMedium(
         const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("ref");
         if (element) {
             std::string ref_type   = element->Attribute("type"),
-                        ref_target = vol_elem->Attribute("id");
+                        ref_target = element->Attribute("id");
             if (ref_type == "phase") {
                 auto it = phase_maps.find(ref_target);
                 if (it != phase_maps.end()) {
@@ -825,16 +826,17 @@ std::pair<Medium**, size_t> parseMedium(
             while (element) {
                 name = element->Attribute("name");
                 if (name == "density") {
-                    density_path = extract_from<std::string>(element);
+                    density_path = folder_prefix + extract_from<std::string>(element);
                 } else if (name == "albedo") {
-                    albedo_path  = extract_from<std::string>(element);
+                    albedo_path  = folder_prefix + extract_from<std::string>(element);
                 } else if (name == "emission") {
-                    emission_path = extract_from<std::string>(element);
+                    emission_path = folder_prefix + extract_from<std::string>(element);
                 }
-                element = vol_elem->FirstChildElement("string");
+                element = element->NextSiblingElement("string");
             }
 
             element = vol_elem->FirstChildElement("rgb");
+            name = element->Attribute("name");
             Vec4 albedo(1, 1, 1);
             if (name == "albedo")
                 albedo = parseColor(element->Attribute("value"));
@@ -963,7 +965,7 @@ Scene::Scene(std::string path):
 
     printf("Here 2.\n");
 
-    auto media_pr = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases);
+    auto media_pr = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases, folder_prefix);
     media = media_pr.first;
     num_medium = media_pr.second;
 

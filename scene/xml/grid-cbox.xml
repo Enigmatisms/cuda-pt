@@ -29,7 +29,7 @@
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">
-			<!-- <lookat target="1.534771, 3.502537, 3.607821" origin="1.426864, 4.052012, 4.436334" up="0.143615, 0.833253, -0.533914"/> -->
+			<!-- <lookat target="14.912155, 0.069723, 4.055485" origin="15.878679, -0.185710, 4.079683" up="0.255347, 0.966827, 0.006648"/> -->
 			<lookat target="2.78, 2.73, -7.99" origin="2.78, 2.73, -8.00" up="0, 1, 0"/>
 		</transform>
 
@@ -40,24 +40,13 @@
 		</film>
 	</sensor>
 
-	<phase type="hg" id="large-vol">
-		<float name="g" value="-0.1"/>
-	</phase>
+	<phase type="isotropic" id="large-vol"/>
 
-	<phase type="isotropic" id="bunny-vol"/>
-
-	<medium type="homogeneous" id="large-vol">
-		<rgb name="sigma_a" value="0.001"/>
-		<rgb name="sigma_s" value="20.0"/>
-		<float name="scale" value="1"/>
+	<medium type="grid" id="vdb-volume">
+		<rgb name="albedo" value="0.7, 0.7, 0.7"/>
+		<float name="scale" value="12"/>
+		<string name="density" value="../volume/density-82.nvdb"/>
 		<ref type="phase" id="large-vol"/>
-	</medium>
-
-	<medium type="homogeneous" id="bunny-vol">
-		<rgb name="sigma_a" value="0.001"/>
-		<rgb name="sigma_s" value="100.0, 90.0, 80.0"/>
-		<float name="scale" value="0.1"/>
-		<ref type="phase" id="bunny-vol"/>
 	</medium>
 
 	<brdf type="det-refraction" id="glass">
@@ -66,7 +55,14 @@
 		<rgb name="k_g" value="1.0"/>
 	</brdf>
 
-	<brdf type="forward" id="large-box"/>
+	<brdf type="forward" id="volume-bound"/>
+
+	<brdf type="conductor-ggx" id="large-box">
+		<string name="conductor" value="Au"/>
+		<float name="roughness_x" value="0.001"/>
+		<float name="roughness_y" value="0.001"/>
+		<rgb name="k_g" value="1"/>
+	</brdf>
 
 	<brdf type="lambertian" id="box">
 		<rgb name="k_d" value="#BCBCBC"/>
@@ -98,13 +94,26 @@
 		<rgb name="k_s" value="0.0"/>
 	</brdf>
 
-	<emitter type="area" id="area">
-		<!-- <float name="angle" value="10"/> -->
-		<rgb name="emission" value="1, 1, 1"/>
-		<rgb name="scaler" value="48.0"/>			<!--1.5 for gamma correction, 5 for linear-->
-		<string name="bind_type" value="triangle"/>
+	<brdf type="plastic" id="bunny1">
+		<rgb name="k_d" value="0.6, 0, 0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.5"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
 
-		<!-- <ref type="texture" id="emitter"/> -->
+	<!-- <emitter type="envmap" id="area">
+		<float name="scaler" value="1.0"/>		
+		<float name="azimuth" value="0"/>			
+		<float name="zenith" value="90"/>			
+		<ref type="texture" id="envmap"/>
+	</emitter> -->
+
+	<emitter type="area" id="area">
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="48.0"/>
+		<string name="bind_type" value="triangle"/>
 	</emitter>
 
 	<shape type="obj">
@@ -135,15 +144,16 @@
 	<shape type="obj">
 		<string name="filename" value="../meshes/cbox/tall-box.obj"/>
 		<ref type="material" id="large-box"/>
-		<ref type="medium" id="large-vol"/>
-		<bool name="cullable" value="true"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/bunny-full.obj"/>
+		<ref type="material" id="bunny1"/>
 	</shape>
 
 	<shape type="obj">
 		<string name="filename" value="../meshes/cbox/bunny.obj"/>
 		<ref type="material" id="glass"/>
-		<ref type="medium" id="bunny-vol"/>
-		<bool name="cullable" value="true"/>
 	</shape>
 
 	<shape type="obj">
@@ -157,7 +167,14 @@
 		<ref type="emitter" id="area"/>
 	</shape>
 
-	<texture id="emitter">
-		<string name="emission" value="../textures/others/rgb-emitter.png"/>
-	</texture>
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/volume-bound.obj"/>
+		<ref type="material" id="volume-bound"/>
+		<ref type="medium" id="vdb-volume"/>
+		<bool name="cullable" value="true"/>
+	</shape>
+
+	<!-- <texture id="envmap">
+		<string name="diffuse" value="../textures/envmaps/day-sky-city.jpg"/>
+	</texture> -->
 </scene>
