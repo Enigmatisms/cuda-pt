@@ -103,8 +103,6 @@ CPT_GPU_INLINE MediumSample GridVolumeMedium::sample(const Ray& ray, Sampler& sp
         t_far  = fminf(t_far, ray.hit_t);
         ds = delta_tracking_dist_sample(ray, sp, t_near, t_far);
     }
-
-    // ds = delta_tracking_dist_sample(ray, sp, 0, ray.hit_t);
     return ds;
 }
 
@@ -115,7 +113,6 @@ CPT_GPU_INLINE Vec4 GridVolumeMedium::transmittance(const Ray& ray, Sampler& sp,
         t_far  = fminf(t_far, ray.hit_t);
         Tr = ratio_tracking_trans_estimate(ray, sp, t_near, t_far);
     }   
-    // float Tr = ratio_tracking_trans_estimate(ray, sp, 0, ray.hit_t);
     return Vec4(Tr, 1);
 }
 
@@ -187,7 +184,7 @@ CPT_GPU float GridVolumeMedium::ratio_tracking_trans_estimate(
     t = near_t - logf(1.f - sp.next1D()) * inv_maj;
     while (t < far_t) {
         Vec3 sample_pos = ray.o + t * ray.d, offset = Vec3(sp.next1D()) - 0.5f;
-        sample_pos = Vec3(sample_pos.x(), sample_pos.z(), sample_pos.y());
+        sample_pos = Vec3(sample_pos.x(), sample_pos.y(), sample_pos.z());
         const float d = sample_density(sample_pos, offset) * scale;
         Tr *= fmaxf(0.f, 1.f - d * inv_maj);
 
