@@ -83,7 +83,7 @@ static void setup_imgui_style( bool dark_style, float alpha_  ) {
             if( col.w < 1.00f ) col.w *= alpha_;
         }
     } else {
-        for (int i = 0; i <= ImGuiCol_COUNT; i++) {
+        for (int i = 0; i < ImGuiCol_COUNT; i++) {
             ImVec4& col = style.Colors[i];
             if( col.w < 1.00f ) {
                 col.x *= alpha_;

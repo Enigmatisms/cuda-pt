@@ -17,13 +17,13 @@
 #include "renderer/tracing_func.cuh"
 
 // returns medium_index and whether the object is alpha masked
-inline CPT_GPU_INLINE int extract_medium_info(int obj_idx, bool& alpha_mask) {
+CPT_GPU_INLINE int extract_medium_info(int obj_idx, bool& alpha_mask) {
     alpha_mask  = (obj_idx & 0x40000000) == 0x40000000;              // bit 31
      // extract higher 12 bits and mask the resulting lower 8bits
     return (obj_idx >> 20) & 0x000000ff;
 }
 
-inline CPT_GPU_INLINE int extract_tracing_info(int obj_idx, int& hit_med_idx, bool& is_triangle) {
+CPT_GPU_INLINE int extract_tracing_info(int obj_idx, int& hit_med_idx, bool& is_triangle) {
     is_triangle = (obj_idx & 0x80000000) == 0;
      // extract higher 12 bits and mask the resulting lower 8bits
     hit_med_idx = (obj_idx >> 20) & 0x000000ff;
