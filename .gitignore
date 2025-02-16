@@ -5,6 +5,8 @@ build_debug/*
 **/*.db
 **/*.out
 **/*.psd
+**/*.nvdb
 **/*.blend
 **/*.blend1
 scene/textures
+**/__pycache__
