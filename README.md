@@ -7,9 +7,6 @@ Distributed parallel rendering supported, via [nanobind](https://github.com/wjak
 
 ![sports-cars](./assets/vision-gt-terzo.jpg)
 
-
-![sports-cars](./assets/cars.jpg)
-
 ![Malorian-Arms-3516](./assets/Malorian-Arms-3516.jpg)
 
 ![modern-kitchen](./assets/modern-kitchen.jpg)
