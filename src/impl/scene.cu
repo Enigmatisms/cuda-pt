@@ -49,6 +49,58 @@ static std::string get_folder_path(std::string filePath) {
     return ""; // include empty str if depth is 0
 }
 
+template <typename Ty>
+Ty extract_from(
+    const tinyxml2::XMLElement* elem, 
+    std::string value_name = "value"
+) {
+    tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
+    Ty result;
+    if constexpr (std::is_same_v<std::decay_t<Ty>, bool>) {
+        e_ret = elem->QueryBoolAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, float>) {
+        e_ret = elem->QueryFloatAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, int>) {
+        e_ret = elem->QueryIntAttribute(value_name.c_str(), &result);
+    } else if constexpr(std::is_same_v<std::decay_t<Ty>, std::string>) {
+        result = elem->Attribute(value_name.c_str());
+    } else {
+        std::cerr << "Unsupported type '" << typeid(Ty).name() << "' for extraction.\n";
+        throw std::runtime_error("`extract_from` unsupported type.");
+    }
+
+    if (e_ret != tinyxml2::XML_SUCCESS) {
+        throw std::runtime_error("`extract_from` parsing failed");
+    }
+    return result;
+}
+
+template <typename Ty>
+Ty parse_attribute(
+    const tinyxml2::XMLElement* elem, 
+    std::initializer_list<std::string>&& names,
+    std::string value_name = "value",
+    std::string name_name = "name"
+) {
+    if (elem == nullptr) {
+        std::cerr << "Error while parsing '";
+        for (auto name: names) std::cout << name << ", ";
+        std::cerr << "'\n";
+        throw std::runtime_error("Empty element pointer, parsing stops.");
+    }
+    bool name_check = false;
+    const std::string elem_name = elem->Attribute(name_name.c_str());
+    for (auto name: names) {
+        if (name == elem_name) {
+            name_check = true;
+            break;
+        }
+    }
+    Ty result;
+    if (!name_check) return result;
+    return extract_from<Ty>(elem, value_name);
+}
+
 Vec4 parseColor(const std::string& value) {
     float r, g, b;
     if (value[0] == '#') {
@@ -86,55 +138,11 @@ Vec3 parsePoint(const tinyxml2::XMLElement* element) {
         std::cerr << "Point not specified for point source.\n";
         throw std::runtime_error("Point element is null");
     }
-
-    const char* name = element->Attribute("name");
-    if (name == nullptr) {
-        throw std::runtime_error("No 'name' attribute found");
-    }
-
-    float x = 0, y = 0, z = 0;
-    tinyxml2::XMLError eResult = element->QueryFloatAttribute("x", &x);
-    if (eResult != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("Error parsing 'x' attribute");
-    }
-
-    eResult = element->QueryFloatAttribute("y", &y);
-    if (eResult != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("Error parsing 'y' attribute");
-    }
-
-    eResult = element->QueryFloatAttribute("z", &z);
-    if (eResult != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("Error parsing 'z' attribute");
-    }
+    float x = extract_from<float>(element, "x");
+    float y = extract_from<float>(element, "y");
+    float z = extract_from<float>(element, "z");
 
     return Vec3(x, y, z);
-}
-
-template <typename Ty>
-Ty extract_from(
-    const tinyxml2::XMLElement* elem, 
-    std::string value_name = "value"
-) {
-    tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
-    Ty result;
-    if constexpr (std::is_same_v<std::decay_t<Ty>, bool>) {
-        e_ret = elem->QueryBoolAttribute(value_name.c_str(), &result);
-    } else if constexpr (std::is_same_v<std::decay_t<Ty>, float>) {
-        e_ret = elem->QueryFloatAttribute(value_name.c_str(), &result);
-    } else if constexpr (std::is_same_v<std::decay_t<Ty>, int>) {
-        e_ret = elem->QueryIntAttribute(value_name.c_str(), &result);
-    } else if constexpr(std::is_same_v<std::decay_t<Ty>, std::string>) {
-        result = elem->Attribute(value_name.c_str());
-    } else {
-        std::cerr << "Unsupported type '" << typeid(Ty).name() << "' for extraction.\n";
-        throw std::runtime_error("`extract_from` unsupported type.");
-    }
-
-    if (e_ret != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("`extract_from` parsing failed");
-    }
-    return result;
 }
 
 void parseBSDF(
@@ -968,22 +976,16 @@ Scene::Scene(std::string path):
     std::unordered_map<std::string, TextureInfo> tex_map;
     std::unordered_map<std::string, int> phase_maps, medium_maps;
 
-    printf("Here 1.\n");
-
     parseTexture(texture_elem, tex_map, folder_prefix);
 
     auto phase_pr = parsePhaseFunction(phase_elem, phase_maps);
     phases = phase_pr.first;
     num_phase_func = phase_pr.second;
 
-    printf("Here 2.\n");
-
     auto media_pr = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases, folder_prefix);
     gvm.load_black_body_data(folder_prefix);
     media = media_pr.first;
     num_medium = media_pr.second;
-
-    printf("Here 3.\n");
 
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
@@ -1023,9 +1025,6 @@ Scene::Scene(std::string path):
 
     std::vector<int> obj_medium_idxs;
     obj_medium_idxs.reserve(num_objects);
-
-    printf("Here pre-4.\n");
-
 
     int prim_offset = 0;
     for (int i = 0; i < num_objects; i++) {
@@ -1128,8 +1127,6 @@ Scene::Scene(std::string path):
         }
     }
 
-    printf("[BVH] Here. 1\n");
-
     // build an emitter primitive index map for emitter sampling
     // before the reordering logic, the emitter primitives are gauranteed
     // to be stored continuously, so we don't need an extra index map
@@ -1147,7 +1144,6 @@ Scene::Scene(std::string path):
         }
     }
 
-    printf("[BVH] Here. 2\n");
     // The following code does the following job:
     // BVH op will 'shuffle' the primitive order (sort of)
     // So, the emitter object might not have continuous
@@ -1168,7 +1164,6 @@ Scene::Scene(std::string path):
         if (!obj.is_emitter()) continue;
         obj.prim_offset = e_prim_offsets[obj.emitter_id - 1];
     }
-    printf("[BVH] Here. 3\n");
     uvs_list     = std::move(reorder_uvs);
     verts_list   = std::move(reorder_verts);
     norms_list   = std::move(reorder_norms);
