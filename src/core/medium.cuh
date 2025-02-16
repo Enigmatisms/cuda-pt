@@ -67,9 +67,10 @@ public:
     }
 
     // phase function sampling, update the ray direction
-    CPT_GPU_INLINE virtual Vec3 scatter(Vec3 raydir, Vec4& throughput, Sampler& sp) const {
+    CPT_GPU virtual Vec3 scatter(Vec3 raydir, Vec4& throughput, Sampler& sp, float& pdf) const {
         PhaseSample psp = phase->sample(sp, raydir);
         throughput *= psp.weight;
+        pdf = psp.weight;
         return delocalize_rotate(raydir, std::move(psp.outdir));
     }
 
@@ -77,8 +78,12 @@ public:
         phase = ptr;
     }
 
+    CPT_GPU virtual Vec4 query_emission(Vec3 pos, Sampler& sp) const {
+        return Vec4(0, 1);
+    }
+
     // evaluate local scattering phase function
-    CPT_GPU_INLINE virtual float eval(Vec3 indir, Vec3 outdir) const {
+    CPT_GPU virtual float eval(Vec3 indir, Vec3 outdir) const {
         return phase->eval(std::move(indir), std::move(outdir));
     }
 };

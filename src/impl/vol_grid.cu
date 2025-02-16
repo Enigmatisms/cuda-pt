@@ -1,5 +1,7 @@
 #include "volume/grid.cuh"
-#include "bsdf/dispersion.cuh"
+#include "core/xyz.cuh"
+
+static __constant__ cudaTextureObject_t emit_tex = 0;
 
 CPT_GPU_INLINE float warp_reduce_float(float value, int start_mask = 16) {
     #pragma unroll
@@ -60,39 +62,29 @@ CPT_KERNEL void compute_volume_sum(
     __syncthreads();
 }
 
-// CPT_GPU Vec4 black_body_emission(
-//     const nanovdb::FloatGrid* _em,
-//     Vec3 pos
-// ) {
-//     constexpr float c = 299792458;
-//     constexpr float h = 6.62606957e-34;
-//     constexpr float kb = 1.3806488e-23;
-//     for (int i = 0; i < n; ++i) {
-//            Float l = lambda[i] * 1e-9;
-//            Float lambda5 = (l * l) * (l * l) * l;
-//            Le[i] = (2 * h * c * c) /
-//                (lambda5 * (std::exp((h * c) / (l * kb  * T)) - 1));
-//     }
-// }
-
 CPT_GPU GridVolumeMedium::GridVolumeMedium(
     const nanovdb::FloatGrid* _den,
     float _avg_density,
     const nanovdb::Vec3fGrid* _alb,
     const nanovdb::FloatGrid* _em,
     Vec3 _const_alb,
-    float _scale
-): density(_den), albedo(_alb), emission(_em), 
-   const_alb(std::move(_const_alb)), scale(_scale), avg_density(_avg_density) {
+    float _scale,
+    float _temp_scale,
+    float _em_scale
+): density(_den), albedo(_alb), emission(_em), const_alb(std::move(_const_alb)), 
+    scale(_scale), temp_scale(_temp_scale), emission_scale(_em_scale), avg_density(_avg_density) {
     auto bbox = density->worldBBox();
     grid_aabb = AABB(
         Vec3(bbox.min()[0], bbox.min()[1], bbox.min()[2]),
         Vec3(bbox.max()[0], bbox.max()[1], bbox.max()[2]),
         0, 0
     );
-    printf("AABB:\n");
-    print_vec3(grid_aabb.mini);
-    print_vec3(grid_aabb.maxi);
+}
+
+CPT_GPU Vec4 GridVolumeMedium::query_emission(Vec3 pos, Sampler& sp) const {
+    float temp = sample_temperature(std::move(pos), Vec3(sp.next1D()) - 0.5f);
+    auto res = Vec4(tex1D<float4>(emit_tex, temp * temp_scale)) * emission_scale;
+    return res;
 }
 
 CPT_GPU_INLINE MediumSample GridVolumeMedium::sample(const Ray& ray, Sampler& sp, float max_dist) const {
@@ -206,15 +198,18 @@ CPT_KERNEL void create_grid_volume(
     int med_id, int ph_id,
     Vec3 _calb,
     float scale,
+    float temp_scale,
+    float em_scale,
     float avg_density           // for residual ratio tracking
 ) {
     if (threadIdx.x == 0) {
-        media[med_id] = new GridVolumeMedium(dev_den_grids, avg_density, dev_alb_grids, dev_ems_grids, std::move(_calb), scale);
+        media[med_id] = new GridVolumeMedium(dev_den_grids, avg_density, dev_alb_grids, 
+            dev_ems_grids, std::move(_calb), scale, temp_scale, em_scale);
         media[med_id]->bind_phase_function(phases[ph_id]);
     }
 };
 
-CPT_CPU GridVolumeManager::GridVolumeManager() {
+CPT_CPU GridVolumeManager::GridVolumeManager(): _emit_tex(0) {
     host_handles.reserve(12);
     den_grids.reserve(4);
     alb_grids.reserve(4);
@@ -231,12 +226,16 @@ CPT_CPU void GridVolumeManager::push(
     size_t          ph_id, 
     std::string     den_path, 
     float           scale, 
+    float           temp_scale, 
+    float           em_scale, 
     std::string     alb_path, 
     std::string     ems_path
 ) {
     medium_indices.push_back(med_id);
     phase_indices.push_back(ph_id);
     scales.push_back(scale);
+    temp_scales.push_back(temp_scale);
+    em_scales.push_back(em_scale);
     from_vdb_file(den_path, den_grids);
     if (!from_vdb_file(alb_path, alb_grids)) {
         const_albedos.emplace_back(1, 1, 1);
@@ -251,11 +250,15 @@ CPT_CPU void GridVolumeManager::push(
     std::string     den_path, 
     Vec4            albedo, 
     float           scale, 
+    float           temp_scale, 
+    float           em_scale, 
     std::string     ems_path
 ) {
     medium_indices.push_back(med_id);
     phase_indices.push_back(ph_id);
     scales.push_back(scale);
+    temp_scales.push_back(temp_scale);
+    em_scales.push_back(em_scale);
     from_vdb_file(den_path, den_grids);
     alb_grids.push_back(nullptr);
     const_albedos.emplace_back(Vec3(albedo.x(), albedo.y(), albedo.z()));
@@ -287,7 +290,35 @@ CPT_CPU void GridVolumeManager::to_gpu(Medium** medium, PhaseFunction** phases) 
         CUDA_CHECK_RETURN(cudaFree(cnt_val));
 
         create_grid_volume<<<1, 1>>>(den_grids[i], alb_grids[i], 
-            ems_grids[i], medium, phases, media_idx, phase_idx, const_albedos[i], scales[i], host_val / float(host_cnt));
+            ems_grids[i], medium, phases, media_idx, phase_idx, 
+            const_albedos[i], scales[i], temp_scales[i], em_scales[i], host_val / float(host_cnt));
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+}
+
+CPT_CPU GridVolumeManager::~GridVolumeManager() {
+    if (_emit_tex) {
+        CUDA_CHECK_RETURN(cudaDestroyTextureObject(_emit_tex));
+        CUDA_CHECK_RETURN(cudaFreeArray(_bb_emission));
+    }
+}
+
+CPT_CPU void GridVolumeManager::load_black_body_data(std::string path_prefix) {
+    std::ifstream file(path_prefix + "../data/blackbody.bin", std::ios::binary);
+    if (!file) {
+        std::cerr << "Failed to open binary file containing blackbody emission data." << std::endl;
+        throw std::runtime_error("File read failed.");
+    }
+    std::vector<float4> data;
+    while (file) {
+        float3 point;
+        file.read(reinterpret_cast<char*>(&point), sizeof(float3));
+        if (file) {
+            data.push_back({point.x, point.y, point.z, 1.f});
+        }
+    }
+    file.close();
+    printf("[VOLUME] Blackbody emission data loaded.\n");
+    _emit_tex = createArrayTexture1D<float4>(data.data(), _bb_emission, data.size());
+    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(emit_tex, &_emit_tex, sizeof(cudaTextureObject_t)));
 }

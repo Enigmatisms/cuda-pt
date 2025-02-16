@@ -796,7 +796,7 @@ std::pair<Medium**, size_t> parseMedium(
 
         element = vol_elem->FirstChildElement("float");
         float scale = 1;
-        if (element) {
+        while (element) {
             std::string name = element->Attribute("name");
             if (name == "scale" || name == "scaler") {
                 if (element->QueryFloatAttribute("value", &scale) != tinyxml2::XML_SUCCESS) {
@@ -804,6 +804,7 @@ std::pair<Medium**, size_t> parseMedium(
                     throw std::runtime_error("Density scaler parsing error.");
                 }
             }
+            element = element->NextSiblingElement("float");
         }
         
         if (type == "homogeneous") {
@@ -841,10 +842,22 @@ std::pair<Medium**, size_t> parseMedium(
             if (name == "albedo")
                 albedo = parseColor(element->Attribute("value"));
 
+            element = vol_elem->FirstChildElement("float");
+            float temp_scale = 1, emission_scale;
+            while (element) {
+                std::string name = element->Attribute("name");
+                if (name == "temp-scale" || name == "temp_scale") {
+                    temp_scale = extract_from<float>(element);
+                } else if (name == "emission-scale" || name == "em-scale") {
+                    emission_scale = extract_from<float>(element);
+                }
+                element = element->NextSiblingElement("float");
+            }
+
             if (albedo_path.empty()) {
-                gvm.push(i, phase_id, density_path, albedo, scale, emission_path);
+                gvm.push(i, phase_id, density_path, albedo, scale, temp_scale, emission_scale, emission_path);
             } else {
-                gvm.push(i, phase_id, density_path, scale, albedo_path, emission_path);
+                gvm.push(i, phase_id, density_path, scale, temp_scale, emission_scale, albedo_path, emission_path);
             }
         }
     }
@@ -966,6 +979,7 @@ Scene::Scene(std::string path):
     printf("Here 2.\n");
 
     auto media_pr = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases, folder_prefix);
+    gvm.load_black_body_data(folder_prefix);
     media = media_pr.first;
     num_medium = media_pr.second;
 

@@ -235,12 +235,12 @@ CPT_KERNEL void render_vpt_kernel(
         throughput *= md.local_thp;
 
         extract_medium_info(obj_info, alpha_mask);
-        if (alpha_mask && md.flag == 0) {               // surface event, forward BSDF (cullable)
+        if (alpha_mask && md.flag == 0) {               
+            // surface event, forward BSDF (cullable) should not have NEE
             ray.o = ray.advance(md.dist);
             auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, is_triangle);
             bool same_hemisphere = ray.d.dot(it.shading_norm) > 0;
             if ((it.shading_norm.dot(ray.d) > 0 ^ same_hemisphere) == false) {
-                // necessary branch, sigh... hate branches
                 if (same_hemisphere) {  // if we are exiting from a medium
                     nested_vols.pop();
                 } else {                // if we are entering a medium
@@ -285,12 +285,7 @@ CPT_KERNEL void render_vpt_kernel(
         // introduce fewer diverging threads. Evaluating direct component is not a bottleneck
         ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;
         if (md.flag > 0) {  // medium event
-            // volume measure to solid angle measure, just use the inverse squared distance
-            emission_weight = emission_weight / (emission_weight + ray.hit_t * ray.hit_t * hit_emitter * (b > 0) * ray.non_delta());
-
-            // TODO: Emission grid direct component testing: I don't know how it works yet
-            // Maybe, just query the emission grid and get the radiance (scaled by absorption factor)
-            // radiance += throughput * c_emitter[emitter_id]->eval_le(&ray.d, &it) * emission_weight;
+            radiance += throughput * medium->query_emission(shadow_ray.o, sampler);
 
             float phase_pdf = medium->eval(shadow_ray.d, ray.d);
             emit_len_mis = direct_pdf + phase_pdf;
@@ -300,7 +295,7 @@ CPT_KERNEL void render_vpt_kernel(
 
             // Bounce the ray via material scattering
             sampled_lobe = ScatterStateFlag::SCAT_VOLUME;
-            ray.d = medium->scatter(ray.d, throughput, sampler);
+            ray.d = medium->scatter(ray.d, throughput, sampler, emission_weight);
 
             ray.set_delta(false);               // currently, there is no delta lobe for phase function
         } else {

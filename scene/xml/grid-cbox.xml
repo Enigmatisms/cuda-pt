@@ -43,9 +43,12 @@
 	<phase type="isotropic" id="large-vol"/>
 
 	<medium type="grid" id="vdb-volume">
-		<rgb name="albedo" value="0.8, 0.8, 0.8"/>
-		<float name="scale" value="20"/>
-		<string name="density" value="../volume/density_0001.nvdb"/>
+		<rgb name="albedo" value="0.1, 0.1, 0.1"/>
+		<float name="scale" value="12"/>
+		<string name="density" value="../volume/density-07.nvdb"/>
+		<string name="emission" value="../volume/flame-07.nvdb"/>
+
+		<float name="emission-scale" value="30"/>
 		<ref type="phase" id="large-vol"/>
 	</medium>
 

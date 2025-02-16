@@ -27,7 +27,9 @@ public:
     const nanovdb::FloatGrid* emission;     // emission grid: blackbody temperature
     AABB grid_aabb;
     Vec3 const_alb;                         // if `albedo` is not nullptr, this field is useless
-    float scale;
+    float scale;                            // scale of the density
+    float temp_scale;                       // scale the max temperature
+    float emission_scale;                   // scale of the emission
     const float avg_density;
 
     // currently, volume traversal is sampled via nearest neighbor
@@ -41,6 +43,7 @@ public:
 
     CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec3, Vec3)
     CPT_GPU_INLINE float sample_temperature(VType1&& pos, VType2&& offset) const {
+        if (emission == nullptr) return 0;
         nanovdb::Vec3f idx = emission->worldToIndexF(nanovdb::Vec3f(pos.x(), pos.y(), pos.z()));
         idx += nanovdb::Vec3f(offset.x(), offset.y(), offset.z());
         auto acc = emission->getAccessor();
@@ -63,7 +66,9 @@ public:
         const nanovdb::Vec3fGrid* _alb = nullptr,
         const nanovdb::FloatGrid* _em = nullptr,
         Vec3 _const_alb = Vec3(1), 
-        float _scale = 1
+        float _scale = 1,
+        float _temp_scale = 1,
+        float _em_scale   = 1
     );
 
     CPT_GPU MediumSample delta_tracking_dist_sample(
@@ -91,6 +96,8 @@ public:
     CPT_GPU_INLINE MediumSample sample(const Ray& ray, Sampler& sp, float max_dist = MAX_DIST) const override;
 
     CPT_GPU_INLINE Vec4 transmittance(const Ray& ray, Sampler& sp, float dist) const override;
+
+    CPT_GPU Vec4 query_emission(Vec3 pos, Sampler& sp) const override;
 };
 
 class GridVolumeManager {
@@ -110,6 +117,11 @@ private:
     std::vector<size_t> phase_indices;
     std::vector<Vec3> const_albedos;    // if the grid volume has a constant albedo, then set here
     std::vector<float> scales;          // density scale
+    std::vector<float> temp_scales;     // temporature scale
+    std::vector<float> em_scales;       // emission scale
+
+    cudaArray_t _bb_emission;
+    cudaTextureObject_t _emit_tex;
 private:
     template <typename DType>
     CPT_CPU bool from_vdb_file(std::string path, std::vector<GridType<DType>*>& dev_ptr_buffer) {
@@ -126,12 +138,15 @@ private:
     }
 public:
     CPT_CPU GridVolumeManager();
+    CPT_CPU ~GridVolumeManager();
     // @overload, RGB albedo grid
     CPT_CPU void push(
         size_t          med_id, 
         size_t          ph_id, 
         std::string     den_path, 
         float           scale = 1.f, 
+        float           temp_scale = 1.f, 
+        float           em_scale = 1.f, 
         std::string     alb_path = "", 
         std::string     ems_path = ""
     );
@@ -142,6 +157,8 @@ public:
         std::string     den_path, 
         Vec4            albedo, 
         float           scale = 1.f, 
+        float           temp_scale = 1.f, 
+        float           em_scale = 1.f, 
         std::string     ems_path = ""
     );
 
@@ -150,4 +167,6 @@ public:
     CPT_CPU bool empty() const noexcept {
         return host_handles.empty();
     }
+
+    CPT_CPU void load_black_body_data(std::string path_prefix);
 };
