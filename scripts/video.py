@@ -26,19 +26,22 @@ def convert_png_to_jpg(input_folder, output_folder, jpg_compress=True, quality=9
 import imageio
 from PIL import Image
 
-def create_video_from_images(image_folder, output_video_path, frame_rate=30, resolution=(1920, 1080), quality=10):
+def create_video_from_images(image_folder, output_video_path, frame_rate=30, quality=10, first_repeat = 40):
     image_files = [f for f in os.listdir(image_folder)]
     image_files = natsort.natsorted(image_files)
     
     writer = imageio.get_writer(output_video_path, fps=frame_rate, codec='libx264', quality=quality)
 
-    for image_file in image_files:
+    for i, image_file in enumerate(image_files):
         img_path = os.path.join(image_folder, image_file)
         
         img = Image.open(img_path)
-        # img_resized = img.resize(resolution, Image.ANTIALIAS)
 
-        writer.append_data(np.array(img))
+        if first_repeat > 0 and i == 0:
+            for j in range(first_repeat):
+                writer.append_data(np.array(img))
+        else:
+            writer.append_data(np.array(img))
 
         print(f"Adding {image_file} to video")
 
@@ -50,4 +53,4 @@ if __name__ == "__main__":
     output_folder = "./compressed" 
     video_output_path = "output_video.mp4"
     # convert_png_to_jpg(input_folder, output_folder, jpg_compress=False, quality=99)
-    create_video_from_images(input_folder, video_output_path, frame_rate=30, resolution=(1024, 1024), quality=7)
+    create_video_from_images(input_folder, video_output_path, frame_rate=30, quality=8)
