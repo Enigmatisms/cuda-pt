@@ -12,6 +12,7 @@
 #include "renderer/bvh_cost.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
+#include "renderer/volume_pt.cuh"
 
 template <size_t Ndim>
 static nb::ndarray<nb::pytorch, float> gpu_ndarray_deep_copy(const float* gpu_src_ptr, size_t width, size_t height, int dev_id = 0) {
@@ -79,6 +80,11 @@ PythonRenderer::PythonRenderer(const nb::str& xml_path, int _device_id, int seed
                 std::cout << "\tMegakernel Light Tracing.\n";
             break;
         } 
+        case RendererType::MegaKernelVPT: {
+            rdr = std::make_unique<VolumePathTracer>(*scene);
+            std::cerr << "\tVolumetric Path Tracer\n";
+            break;
+        }
         case RendererType::VoxelSDFPT: {
             std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             exit(0);
