@@ -17,6 +17,10 @@ Distributed parallel rendering supported, via [nanobind](https://github.com/wjak
 | ---------------------------------- | ----------------------- | -------------------------- |
 | ![](./assets/kitchen-variance.jpg) | ![](./assets/depth.jpg) | ![](./assets/bvh-cost.jpg) |
 
+| Online Param Setter                | Volumetric Path Tracing[^1]            | 
+| ---------------------------------- | --------------------------- |
+| <div align="center"><video src="https://github.com/user-attachments/assets/fc098d93-7acb-4232-8a7e-c39518af2db4"/></div> | <div align="center"><video src="https://github.com/user-attachments/assets/89a5234e-44f7-48a6-bed4-ee2beb6fe7b3"/></div> |
+[^1]: The video is offline-rendered with my distributed parallel renderer. The smoke is simulated by Blender and exported to `.nvdb` format for my renderer.
 #### Compile & Run
 
 The repo contains several external dependencies, therefore, using the following command:
@@ -77,19 +81,16 @@ Currently, this repo supports:
 
 - [x] Megakernel unidirectional path tracing.
 - [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is not as fast as megakernel PT due to the simplicity of the test scenes (and maybe, coalesced GMEM access problems, being working on this).
+- [x] GPU volumetric path tracer (Megakernel). Supports homogeneous and grid volume (NanoVDB), with online parameter setters. 
 - [x] BVH cost visualizer and depth renderer.
 - [x] GPU BVH: A stackless GPU surface area heuristic BVH. 
 - [x] CUDA pitched textures for environment maps, normal, roughness, index of refraction and albedo.
 - [x] Online modification of the scene. Check out the video down below.
 
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/fc098d93-7acb-4232-8a7e-c39518af2db4"/>
-</div>
-
 ##### TODO
 
 - [x] (Recent) An `imgui` based interactive UI.
-- [ ] (Around 2025.01, stay tuned) Benchmarking with AdaPT (Taichi lang based renderer) and OptiX (optional). More profiling, and finally, I think I will write several blog posts on "How to implement an efficient software path tracing renderer with CUDA". The blog posts will be more focused on the soft(and hard)-ware related analysis-driven-optimization, so they will actually be posts that summarize (and teach) some best practices for programming the tasks with extremely imbalanced workloads.
+- [ ] (Around 2025.05, stay tuned) Benchmarking with AdaPT (Taichi lang based renderer) and OptiX (optional). More profiling, and finally, I think I will write several blog posts on "How to implement an efficient software path tracing renderer with CUDA". The blog posts will be more focused on the soft(and hard)-ware related analysis-driven-optimization, so they will actually be posts that summarize (and teach) some best practices for programming the tasks with extremely imbalanced workloads.
 
 ##### Tricks (that will be covered in my incoming blog posts)
 
