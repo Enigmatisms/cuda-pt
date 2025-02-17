@@ -16,7 +16,7 @@ public:
     using BSDF::k_d;
     using BSDF::bsdf_flag;
     CPT_CPU_GPU LambertianBSDF(Vec4 _k_d, int kd_id = -1):
-        BSDF(std::move(_k_d), Vec4(0, 0, 0), Vec4(0, 0, 0), BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT) {}
+        BSDF(std::move(_k_d), Vec4(0, 0, 0), Vec4(0, 0, 0), ScatterStateFlag::BSDF_DIFFUSE | ScatterStateFlag::BSDF_REFLECT) {}
 
     CPT_CPU_GPU LambertianBSDF(): BSDF() {}
     
@@ -37,7 +37,7 @@ public:
 
     CPT_GPU Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+        Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = true
     ) const override {
         auto local_ray = sample_cosine_hemisphere(sp.next2D(), pdf);
         const Vec3 normal = c_textures.eval_normal(it, index);
@@ -47,7 +47,7 @@ public:
         float dot_out = normal.dot(out_ray);
         const cudaTextureObject_t diff_tex = c_textures.diff_tex[index];
         throughput *= c_textures.eval(diff_tex, it.uv_coord, k_d) * ((dot_in > 0) ^ (dot_out > 0));
-        samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
+        samp_lobe = static_cast<ScatterStateFlag>(bsdf_flag);
         return out_ray;
     }
 };

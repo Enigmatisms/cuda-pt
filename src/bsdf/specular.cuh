@@ -14,7 +14,7 @@ class SpecularBSDF: public BSDF {
 public:
     using BSDF::k_s;
     CPT_CPU_GPU SpecularBSDF(Vec4 _k_s):
-        BSDF(Vec4(0, 0, 0), std::move(_k_s), Vec4(0, 0, 0), BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT) {}
+        BSDF(Vec4(0, 0, 0), std::move(_k_s), Vec4(0, 0, 0), ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_REFLECT) {}
 
     CPT_CPU_GPU SpecularBSDF(): BSDF() {}
     
@@ -31,10 +31,10 @@ public:
 
     CPT_GPU Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+        Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = true
     ) const override {
         // throughput *= f / pdf
-        samp_lobe = static_cast<BSDFFlag>(bsdf_flag);
+        samp_lobe = static_cast<ScatterStateFlag>(bsdf_flag);
         const Vec3 normal = c_textures.eval_normal(it, index);
         float in_dot_n = indir.dot(normal);
         pdf = 1.f;

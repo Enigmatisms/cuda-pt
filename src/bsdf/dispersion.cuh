@@ -22,7 +22,7 @@ public:
     static constexpr float D65_RANGE = 531;
 public:
     CPT_CPU_GPU DispersionBSDF(Vec4 k_s, float index_a, float index_b):
-        BSDF(Vec4(index_a, index_b, 0), std::move(k_s), Vec4(0, 0, 0), BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_TRANSMIT) {}
+        BSDF(Vec4(index_a, index_b, 0), std::move(k_s), Vec4(0, 0, 0), ScatterStateFlag::BSDF_DIFFUSE | ScatterStateFlag::BSDF_TRANSMIT) {}
 
     CPT_CPU_GPU DispersionBSDF(): BSDF() {}
     
@@ -30,7 +30,7 @@ public:
     CPT_GPU Vec4 eval(const Interaction& it, const Vec3& out, const Vec3& in, int index, bool is_mi = false, bool is_radiance = true) const override;
     CPT_GPU Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = true
+        Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = true
     ) const override;
 
     CPT_GPU_INLINE static Vec4 wavelength_to_XYZ(float wavelength);

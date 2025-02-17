@@ -46,6 +46,7 @@ public:
         return Vec4(0, 0, 0, 1);
     }
 
+    // TODO: Refactor note: should we use passing by value instead of by reference? Since sample can not be inlined
     CPT_GPU_INLINE virtual Vec3 sample(
         const Vec3& hit_pos, const Vec3&,
         Vec4& le, float& pdf, Vec2&&, 

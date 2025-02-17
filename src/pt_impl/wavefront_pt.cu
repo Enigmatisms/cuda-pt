@@ -69,7 +69,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
 
     Interaction it;                          // To local register
 
-    int min_index = -1, min_object_id = 0;   // round up
+    int min_index = -1, min_object_info = 0;
     ray.hit_t = MAX_DIST;
     float prim_u = 0, prim_v = 0;
 
@@ -89,8 +89,10 @@ CPT_KERNEL void raygen_primary_hit_shader(
     payloads.pdf(gidx) = 1.f;
     payloads.set_sampler(gidx, sg);
     ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
-                    s_cached, verts, min_index, min_object_id, 
+                    s_cached, verts, min_index, min_object_info, 
                     prim_u, prim_v, node_num, cache_num, MAX_DIST);
+    bool is_triangle = true;
+    int object_id = extract_object_info(min_object_info, is_triangle);
 
     // ============= step 2: local shading for indirect bounces ================
     if (min_index >= 0) {
@@ -99,12 +101,12 @@ CPT_KERNEL void raygen_primary_hit_shader(
         ray.set_hit();
         ray.set_active(true);
         ray.set_hit_index(min_index);
-        it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+        it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, is_triangle);
     } else {
         payloads.L(gidx) = c_emitter[envmap_id]->eval_le(&ray.d);
     }
 
-    set_index(idx_buffer, gidx, gidx, compose_ray_stat(min_object_id, min_index >= 0));
+    set_index(idx_buffer, gidx, gidx, compose_ray_stat(object_id, min_index >= 0));
 
     payloads.set_ray(gidx, ray);
     payloads.interaction(gidx) = it;
@@ -149,11 +151,13 @@ CPT_KERNEL void fused_closesthit_shader(
         ray.reset();
         
         float prim_u = 0, prim_v = 0;
-        int min_index = -1, min_object_id = 0;   // round up
+        int min_index = -1, min_object_info = 0;
         ray.hit_t = MAX_DIST;
         ray.hit_t = ray_intersect_bvh(ray, bvh_leaves, nodes, 
-                        s_cached, verts, min_index, min_object_id, 
+                        s_cached, verts, min_index, min_object_info, 
                         prim_u, prim_v, node_num, cache_num, MAX_DIST);
+        bool is_triangle = true;
+        int object_id = extract_object_info(min_object_info, is_triangle);
 
         ray.set_hit(min_index >= 0);
         ray.set_hit_index(min_index);
@@ -163,7 +167,7 @@ CPT_KERNEL void fused_closesthit_shader(
         Vec4 thp = payloads.thp(gidx);
         if (min_index >= 0) {
             // if hit, first upload the interaction regardless of RR
-            payloads.interaction(gidx) = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, min_object_id >= 0);
+            payloads.interaction(gidx) = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, is_triangle);
 
             Sampler sampler = payloads.get_sampler(gidx);
             float max_value = thp.max_elem_3d();
@@ -180,7 +184,7 @@ CPT_KERNEL void fused_closesthit_shader(
             payloads.L(gidx) += thp * c_emitter[envmap_id]->eval_le(&ray.d);
             ray.set_active(false);
         }
-        ray_stat = compose_ray_stat(min_object_id, ray.is_active());
+        ray_stat = compose_ray_stat(object_id, ray.is_active());
         set_status(idx_buffer, gmem_addr, ray_stat);
         // update the ray
         payloads.set_ray(gidx, ray);
@@ -269,11 +273,11 @@ CPT_KERNEL void fused_ray_bounce_shader(
         // (2) account for emission, and accumulate to payload buffer
         payloads.L(gidx) = (thp * c_emitter[emitter_id]->eval_le(&ray.d, &it)) * emission_weight + rdc;
         
-        BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;                            
+        ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;                            
         ray.d = c_material[material_id]->sample_dir(
             ray.d, it, thp, pdf, sg, sampled_lobe, material_id
         );
-        ray.set_delta((sampled_lobe & BSDFFlag::BSDF_SPECULAR) > 0);
+        ray.set_delta((sampled_lobe & ScatterStateFlag::BSDF_SPECULAR) > 0);
 
         payloads.thp(gidx) = thp;
         payloads.set_sampler(gidx, sg);
@@ -375,18 +379,24 @@ CPT_KERNEL void nee_direct_shader(
  * @brief This kernel handles path guiding. Here
  * NASG [SIGGRAPH 2024] paper is reproduced (TODO)
  * For this kernel, we will wait until the neural network 
- * outputs the evaluation. Note that the problem is:
- * (1) We should use multi-stream, to split up the evaluation
- * so that it won't be too memory-hungry, and this will also help
- * concurrency
+ * outputs the evaluation
  * 
- * TODO: major refactoring here
+ * This is the first half of the ray scatter shader, where we need to
+ * output the samples that need NN evaluation. For each pixel, we only need to output all the samples
+ * to a global pool leveraging multi-stream, and each stream outputs only part of the pool
+ * so that we do not need the entire pool to be ready to start NN evaluation
+ * 
+ * For example, we have 16 non blocking streams, and the global pool has 16 patches, each thread has 128 threads and
+ * 128 blocks, totaling up to a 128 * 128 patch. After generating the 128 * 128 patch, there will be a neural network
+ * that use 128 * 128 as batch size for evaluation (no grad). After the result is returned (and consumed), the current stream 
+ * will move forward to process one more patch (so a for loop is needed).
  */
-CPT_KERNEL void guided_ray_scatter_shader(
+CPT_KERNEL void guided_ray_scatter_net_eval_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     const cudaTextureObject_t bvh_leaves,
-    const IndexBuffer idx_buffer
+    const IndexBuffer idx_buffer,
+    int stream_id
     /**TODO: input (evaluated NASG params) and output (training samples) */
 ) {
     uint8_t ray_stat = 0;
@@ -404,20 +414,19 @@ CPT_KERNEL void guided_ray_scatter_shader(
         int material_id = 0, emitter_id = 0;
         objects[object_id].unpack(material_id, emitter_id);
 
-        float direct_pdf = 1, pdf = 1.0f;
+        float pdf = 1.0f;
 
-        BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;                            
+        ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;                            
         ray.d = c_material[material_id]->sample_dir(
             ray.d, it, thp, pdf, sg, sampled_lobe, material_id
         );
-        ray.set_delta((sampled_lobe & BSDFFlag::BSDF_SPECULAR) > 0);
+        ray.set_delta((sampled_lobe & ScatterStateFlag::BSDF_SPECULAR) > 0);
 
         payloads.thp(gidx) = thp;
         payloads.set_sampler(gidx, sg);
         payloads.set_ray(gidx, ray);
         payloads.pdf(gidx) = pdf;
     }
-
 }
 
 template <bool render_once>

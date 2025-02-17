@@ -6,7 +6,7 @@
 #include "core/textures.cuh"
 #include "renderer/megakernel_pt.cuh"
 
-static constexpr int RR_BOUNCE = 2;
+static constexpr int RR_BOUNCE = 1;
 static constexpr float RR_THRESHOLD = 0.1;
 
 template <bool render_once>
@@ -24,8 +24,6 @@ CPT_KERNEL void render_pt_kernel(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int seed_offset,
     int node_num,
@@ -40,7 +38,7 @@ CPT_KERNEL void render_pt_kernel(
     // step 1: generate ray
 
     // step 2: bouncing around the scene until the max depth is reached
-    int min_index = -1, object_id = 0, diff_b = 0, spec_b = 0, trans_b = 0;
+    int min_index = -1, diff_b = 0, spec_b = 0, trans_b = 0;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
     extern __shared__ uint4 s_cached[];
     // cache near root level BVH nodes for faster traversal
@@ -59,18 +57,21 @@ CPT_KERNEL void render_pt_kernel(
     
     for (int b = 0; b < md_params.max_depth; b++) {
         float prim_u = 0, prim_v = 0, min_dist = MAX_DIST;
+        int min_object_info = INVALID_OBJ;
         min_index = -1;
         // ============= step 1: ray intersection =================
         min_dist = ray_intersect_bvh(
             ray, bvh_leaves, nodes, s_cached, 
-            verts, min_index, object_id, 
+            verts, min_index, min_object_info, 
             prim_u, prim_v, node_num, cache_num, min_dist
         );
 
+        bool is_triangle = true;
+        int object_id = extract_object_info(min_object_info, is_triangle);
+
         // ============= step 2: local shading for indirect bounces ================
         if (min_index >= 0) {
-            auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(min_dist), prim_u, prim_v, min_index, object_id >= 0);
-            object_id = object_id >= 0 ? object_id : -object_id - 1;        // sphere object ID is -id - 1
+            auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(min_dist), prim_u, prim_v, min_index, is_triangle);
 
             // ============= step 3: next event estimation ================
             // (1) randomly pick one emitter
@@ -114,27 +115,26 @@ CPT_KERNEL void render_pt_kernel(
                 // numerical guard, in case emit_len_mis is 0
             }
 
-            // step 4: sample a new ray direction, bounce the 
-            BSDFFlag sampled_lobe = BSDFFlag::BSDF_NONE;
+            ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;
             ray.o = std::move(shadow_ray.o);
             ray.d = c_material[material_id]->sample_dir(ray.d, it, throughput, emission_weight, sampler, sampled_lobe, material_id);
-            ray.set_delta((BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0);
-
+            ray.set_delta((ScatterStateFlag::BSDF_SPECULAR & sampled_lobe) > 0);
 
             if (radiance.numeric_err())
                 radiance.fill(0);
             
             // using BVH enables breaking, since there is no within-loop synchronization
-            diff_b  += (BSDFFlag::BSDF_DIFFUSE  & sampled_lobe) > 0;
-            spec_b  += (BSDFFlag::BSDF_SPECULAR & sampled_lobe) > 0;
-            trans_b += (BSDFFlag::BSDF_TRANSMIT & sampled_lobe) > 0;
+            diff_b  += (ScatterStateFlag::BSDF_DIFFUSE  & sampled_lobe) > 0;
+            spec_b  += (ScatterStateFlag::BSDF_SPECULAR & sampled_lobe) > 0;
+            trans_b += (ScatterStateFlag::BSDF_TRANSMIT & sampled_lobe) > 0;
             if (diff_b  >= md_params.max_diffuse  || 
                 spec_b  >= md_params.max_specular || 
                 trans_b >= md_params.max_tranmit
             ) break;
             float max_value = throughput.max_elem_3d();
+            if (max_value < THP_EPS) break;
             if (b >= RR_BOUNCE && max_value < RR_THRESHOLD) {
-                if (sampler.next1D() > max_value || max_value < THP_EPS) break;
+                if (sampler.next1D() > max_value) break;
                 throughput *= 1. / max_value;
             }
         } else {
@@ -171,8 +171,6 @@ template CPT_KERNEL void render_pt_kernel<true>(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int seed_offset,
     int node_num,
@@ -196,8 +194,6 @@ template CPT_KERNEL void render_pt_kernel<false>(
     const MaxDepthParams md_params,
     float* __restrict__ output_buffer,
     float* __restrict__ var_buffer,
-    int num_prims,
-    int num_objects,
     int num_emitter,
     int seed_offset,
     int node_num,

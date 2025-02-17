@@ -25,17 +25,15 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(
         if (bidirectional) {
             render_pt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
                 *camera, verts, norms, uvs, obj_info, emitter_prims,
-                bvh_leaves, nodes, _cached_nodes, image, md,
-                nullptr, nullptr, num_prims, num_objs, num_emitter, 
-                accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt
+                bvh_leaves, nodes, _cached_nodes, image, md, nullptr, 
+                nullptr, num_emitter, accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt
             ); 
             CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         }
         render_lt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
             *camera, verts, norms, uvs, obj_info,
-            emitter_prims, bvh_leaves, nodes, _cached_nodes, 
-            image, md, nullptr, num_prims, num_objs, num_emitter, 
-            i * SEED_SCALER + seed_offset, num_nodes, spec_constraint
+            emitter_prims, bvh_leaves, nodes, _cached_nodes, image, 
+            md, nullptr, num_emitter, i * SEED_SCALER + seed_offset, num_nodes, spec_constraint
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
@@ -56,18 +54,15 @@ CPT_CPU void LightTracer::render_online(
     if (bidirectional) {
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
             *camera, verts, norms, uvs, obj_info, emitter_prims,
-            bvh_leaves, nodes, _cached_nodes, image, md,
-            output_buffer, nullptr, num_prims, num_objs, num_emitter, 
-            accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, false
+            bvh_leaves, nodes, _cached_nodes, image, md, output_buffer, 
+            nullptr, num_emitter, accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, false
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
     render_lt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
         *camera, verts, norms, uvs, obj_info, emitter_prims,
-        bvh_leaves, nodes, _cached_nodes, image, md, 
-        output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, 
-        num_cache, spec_constraint, caustic_scaling, gamma_corr
+        bvh_leaves, nodes, _cached_nodes, image, md, output_buffer, num_emitter, 
+        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, spec_constraint, caustic_scaling, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
@@ -81,18 +76,15 @@ CPT_CPU const float* LightTracer::render_raw(
     if (bidirectional) {
         render_pt_kernel<false><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
             *camera, verts, norms, uvs, obj_info, emitter_prims,
-            bvh_leaves, nodes, _cached_nodes, image, md,
-            output_buffer, nullptr, num_prims, num_objs, num_emitter, 
-            accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, false
+            bvh_leaves, nodes, _cached_nodes, image, md,output_buffer, 
+            nullptr, num_emitter, accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, false
         ); 
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     }
     render_lt_kernel<true><<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y), dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
         *camera, verts, norms, uvs, obj_info, emitter_prims,
-        bvh_leaves, nodes, _cached_nodes, image, md, 
-        output_buffer, num_prims, num_objs, num_emitter, 
-        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, 
-        num_cache, spec_constraint, caustic_scaling, gamma_corr
+        bvh_leaves, nodes, _cached_nodes, image, md, output_buffer, num_emitter, 
+        accum_cnt * SEED_SCALER + seed_offset, num_nodes, accum_cnt, num_cache, spec_constraint, caustic_scaling, gamma_corr
     ); 
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return output_buffer;

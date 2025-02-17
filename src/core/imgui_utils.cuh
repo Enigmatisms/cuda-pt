@@ -9,6 +9,7 @@
 
 class DeviceCamera;
 class BSDFInfo;
+class MediumInfo;
 
 namespace gui {
 
@@ -32,6 +33,7 @@ struct GUIParams {
     bool camera_update = false;
     bool scene_update = false;
     bool material_update = false;
+    bool medium_update   = false;
     bool renderer_update = false;
     bool serialized_update = false;
     bool output_png = true;
@@ -40,13 +42,14 @@ struct GUIParams {
     std::vector<char>& serialized_data;
 
     inline bool buffer_flush_update() const noexcept {
-        return camera_update || scene_update || material_update || renderer_update;
+        return camera_update || scene_update || material_update || medium_update || renderer_update;
     }
 
     inline void reset() {
         capture = false;
         camera_update   = false;
         scene_update    = false; 
+        medium_update   = false;
         renderer_update = false,
         material_update = false;
         serialized_update = false;
@@ -107,6 +110,7 @@ void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
+    std::vector<MediumInfo>& med_infos,
     MaxDepthParams& md_params,
     GUIParams& params,
     const uint8_t rdr_type = 0

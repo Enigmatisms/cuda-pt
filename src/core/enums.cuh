@@ -15,10 +15,11 @@ enum RendererType: uint8_t {
     VoxelSDFPT   = 3,            // not supported currently
     DepthTracing = 4,            // rendering depth map
     BVHCostViz   = 5,            // displaying BVH traversal cost
+    MegaKernelVPT = 6,           // megakernel volumetric path tracer
     NumRendererType
 };
 
-enum BSDFFlag: int {
+enum ScatterStateFlag: int {
     BSDF_NONE     = 0x00,
     BSDF_DIFFUSE  = 0x01,
     BSDF_SPECULAR = 0x02,
@@ -26,7 +27,8 @@ enum BSDFFlag: int {
     BSDF_FORWARD  = 0x08,
 
     BSDF_REFLECT  = 0x10,
-    BSDF_TRANSMIT = 0x20
+    BSDF_TRANSMIT = 0x20,
+    SCAT_VOLUME   = 0x40,
 };
 
 enum BSDFType: uint8_t {
@@ -37,7 +39,24 @@ enum BSDFType: uint8_t {
     PlasticForward = 0x04,
     GGXConductor   = 0x05,
     Dispersion     = 0x06,
-    NumSupportedBSDF = 0x07
+    Forward        = 0x07,
+    NumSupportedBSDF = 0x08
+};
+
+enum PhaseFuncType: uint8_t {
+    NullForward      = 0x00,
+    Isotropic        = 0x01,
+    HenyeyGreenstein = 0x02,
+    DuoHG            = 0x03,
+    Rayleigh         = 0x04,
+    SGGX             = 0x05,
+    NumSupportedPhase = 0x06
+};
+
+enum MediumType: uint8_t {
+    Homogeneous      = 0x00,
+    Grid             = 0x01,
+    NumSupportedMedium = 0x02
 };
 
 enum TextureType: uint8_t {

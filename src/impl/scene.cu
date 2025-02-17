@@ -5,11 +5,13 @@
  * @date:   2024.9.6
 */
 #include <numeric>
+#include "volume/phase_registry.cuh"
 #include "core/scene.cuh"
 
 static constexpr int MAX_PRIMITIVE_NUM = 64000000;
 static constexpr int MAX_ALLOWED_BSDF = 48;
 static constexpr const char* SCENE_VERSION = "1.2";
+using TypedVec4 = std::pair<Vec4, PhaseFuncType>;
 
 const std::unordered_map<std::string, MetalType> conductor_mapping = {
     {"Au", MetalType::Au},
@@ -48,7 +50,7 @@ static std::string get_folder_path(std::string filePath) {
     return ""; // include empty str if depth is 0
 }
 
-Vec4 parseColor(const std::string& value) {
+Vec4 parseColor(std::string value) {
     float r, g, b;
     if (value[0] == '#') {
         std::stringstream ss;
@@ -85,29 +87,75 @@ Vec3 parsePoint(const tinyxml2::XMLElement* element) {
         std::cerr << "Point not specified for point source.\n";
         throw std::runtime_error("Point element is null");
     }
-
-    const char* name = element->Attribute("name");
-    if (name == nullptr) {
-        throw std::runtime_error("No 'name' attribute found");
-    }
-
+    std::string err_what = "Point parsing failed.\n";
     float x = 0, y = 0, z = 0;
-    tinyxml2::XMLError eResult = element->QueryFloatAttribute("x", &x);
-    if (eResult != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("Error parsing 'x' attribute");
+    if (element->QueryFloatAttribute("x", &x) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Warning: point element 'x' attribute not set. Using default value 0.\n";
     }
-
-    eResult = element->QueryFloatAttribute("y", &y);
-    if (eResult != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("Error parsing 'y' attribute");
+    if (element->QueryFloatAttribute("y", &y) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Warning: point element 'y' attribute not set. Using default value 0.\n";
     }
-
-    eResult = element->QueryFloatAttribute("z", &z);
-    if (eResult != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("Error parsing 'z' attribute");
+    if (element->QueryFloatAttribute("z", &z) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Warning: point element 'z' attribute not set. Using default value 0.\n";
     }
-
     return Vec3(x, y, z);
+}
+
+template <typename Ty>
+Ty extract_from(
+    const tinyxml2::XMLElement* elem, 
+    std::string value_name = "value",
+    std::string error_what = ""
+) {
+    tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
+    Ty result;
+    if constexpr (std::is_same_v<std::decay_t<Ty>, bool>) {
+        e_ret = elem->QueryBoolAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, float>) {
+        e_ret = elem->QueryFloatAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, int>) {
+        e_ret = elem->QueryIntAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, std::string>) {
+        result = elem->Attribute(value_name.c_str());
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, Vec4>) {
+        result = parseColor(elem->Attribute(value_name.c_str()));
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, Vec3>) {
+        result = parsePoint(elem);
+    } else {
+        std::cerr << "Unsupported type '" << typeid(Ty).name() << "' for extraction.\n";
+        std::cerr << error_what;
+        throw std::runtime_error("`extract_from` unsupported type.");
+    }
+
+    if (e_ret != tinyxml2::XML_SUCCESS) {
+        throw std::runtime_error("`extract_from` parsing failed");
+    }
+    return result;
+}
+
+template <typename Ty>
+bool parse_attribute(
+    const tinyxml2::XMLElement* elem, 
+    Ty& inout_value,
+    std::initializer_list<std::string>&& names,
+    std::string error_what = "",
+    std::string value_name = "value",
+    std::string name_name = "name"
+) {
+    if (elem == nullptr) {
+        return false;
+    }
+    bool name_check = false;
+    const std::string elem_name = elem->Attribute(name_name.c_str());
+    for (auto name: names) {
+        if (name == elem_name) {
+            name_check = true;
+            break;
+        }
+    }
+    if (!name_check) return false;
+    inout_value = extract_from<Ty>(elem, value_name, error_what);
+    return true;
 }
 
 void parseBSDF(
@@ -129,16 +177,10 @@ void parseBSDF(
 
     const tinyxml2::XMLElement* element = bsdf_elem->FirstChildElement("rgb");
     while (element) {
-        std::string name = element->Attribute("name");
-        std::string value = element->Attribute("value");
-        Vec4 color = parseColor(value);
-        if (name == "k_d") {
-            k_d = color;
-        } else if (name == "k_s") {
-            k_s = color;
-        } else if (name == "k_g" || name == "sigma_a") {
-            k_g = color;
-        }
+        std::string err_what = "[BSDF] Vec4 parsing failed.\n";
+        parse_attribute<Vec4>(element, k_d, {"k_d"}, err_what);
+        parse_attribute<Vec4>(element, k_s, {"k_s"}, err_what);
+        parse_attribute<Vec4>(element, k_g, {"k_g", "sigma_a"}, err_what);
         element = element->NextSiblingElement("rgb");
     }
 
@@ -190,12 +232,12 @@ void parseBSDF(
     BSDFInfo info(id);
     info.bsdf = BSDFInfo::BSDFParams(k_d, k_s, k_g);
     if (type == "lambertian") {
-        create_bsdf<LambertianBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_DIFFUSE | BSDFFlag::BSDF_REFLECT);
+        create_bsdf<LambertianBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ScatterStateFlag::BSDF_DIFFUSE | ScatterStateFlag::BSDF_REFLECT);
     } else if (type == "specular") {
-        create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_REFLECT);
+        create_bsdf<SpecularBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_REFLECT);
         info.type = BSDFType::Specular;
     } else if (type == "det-refraction") {
-        create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, BSDFFlag::BSDF_SPECULAR | BSDFFlag::BSDF_TRANSMIT);
+        create_bsdf<TranslucentBSDF><<<1, 1>>>(bsdfs + index, k_d, k_s, k_g, ScatterStateFlag::BSDF_SPECULAR | ScatterStateFlag::BSDF_TRANSMIT);
         info.type = BSDFType::Translucent;
     } else if (type == "conductor-ggx") {
         float roughness_x = 0.1f, roughness_y = 0.1f;
@@ -204,7 +246,6 @@ void parseBSDF(
         element = bsdf_elem->FirstChildElement("string");
         if (element) {
             std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
             if (name == "type" || name == "metal" || name == "conductor") {
                 std::string metal_type = element->Attribute("value");
                 auto it = conductor_mapping.find(metal_type);
@@ -220,19 +261,13 @@ void parseBSDF(
             }
         }
         element = bsdf_elem->FirstChildElement("float");
-        tinyxml2::XMLError eResult;
+        std::string error_what = "[Conductor-GGX] Roughness parsing failed.\n";
         while (element) {
-            std::string name = element->Attribute("name");
-            std::string value = element->Attribute("value");
-            if (name == "roughness_x" || name == "rough_x") {
-                eResult = element->QueryFloatAttribute("value", &roughness_x);
+            if (parse_attribute<float>(element, roughness_x, {"roughness_x", "rough_x"}, error_what)) {
                 roughness_x = std::clamp(roughness_x, 0.001f, 1.f);
-            } else if (name == "roughness_y" || name == "rough_y") {
-                eResult = element->QueryFloatAttribute("value", &roughness_y);
+            } else if (parse_attribute<float>(element, roughness_y, {"roughness_y", "rough_y"}, error_what)) {
                 roughness_y = std::clamp(roughness_y, 0.001f, 1.f);
             }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'roughness' attribute");
             element = element->NextSiblingElement("float");
         }
         info.bsdf.store_ggx_params(mtype, k_g, roughness_x, roughness_y);
@@ -242,29 +277,17 @@ void parseBSDF(
         k_g = Vec4(0, 1);
         element = bsdf_elem->FirstChildElement("float");
         float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
-        bool penetrable = false;
+        std::string error_what = "[Plastic] BSDF Param parsing failed.\n";
         while (element) {
-            std::string name = element->Attribute("name");
-            tinyxml2::XMLError eResult;
-            if (name == "trans_scaler") {
-                eResult = element->QueryFloatAttribute("value", &trans_scaler);
-            } else if (name == "thickness") {
-                eResult = element->QueryFloatAttribute("value", &thickness);
-            } else if (name == "ior") {
-                eResult = element->QueryFloatAttribute("value", &ior);
-            }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
+            parse_attribute<float>(element, trans_scaler, {"trans_scaler"}, error_what);
+            parse_attribute<float>(element, thickness, {"thickness"}, error_what);
+            parse_attribute<float>(element, ior, {"ior"}, error_what);
             element = element->NextSiblingElement("float");
         }
+        bool penetrable = false;
         element = bsdf_elem->FirstChildElement("bool");
-        if (element) {
-            if (std::string(element->Attribute("name")) == "penetrable") {
-                auto eResult = element->QueryBoolAttribute("value", &penetrable);
-                if (eResult != tinyxml2::XML_SUCCESS)
-                    throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
-            }
-        }
+        parse_attribute<bool>(element, penetrable, {"penetrable"}, error_what);
+
         if (type == "plastic") {
             info.type = BSDFType::Plastic;
             create_plastic_bsdf<PlasticBSDF><<<1, 1>>>(bsdfs + index, 
@@ -298,6 +321,9 @@ void parseBSDF(
         info.type = BSDFType::Dispersion;
         info.bsdf.store_dispersion_params(dtype, k_s);
         create_dispersion_bsdf<<<1, 1>>>(bsdfs + index, k_s, dis_params.x(), dis_params.y());
+    } else if (type == "forward") {
+        create_forward_bsdf<<<1, 1>>>(bsdfs + index);
+        info.type = BSDFType::Forward;
     }
     bsdf_infos.emplace_back(std::move(info));
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -334,14 +360,8 @@ void parseEmitter(
 
     const tinyxml2::XMLElement* element = emitter_elem->FirstChildElement("rgb");
     while (element) {
-        std::string name = element->Attribute("name");
-        std::string value = element->Attribute("value");
-        Vec4 color = parseColor(value);
-        if (name == "emission") {
-            emission = color;
-        } else if (name == "scaler") {
-            scaler = color;
-        }
+        parse_attribute<Vec4>(element, emission, {"emission"});
+        parse_attribute<Vec4>(element, scaler, {"scaler"});
         element = element->NextSiblingElement("rgb");
     }
     scaler.w() = scaler.x();
@@ -373,22 +393,13 @@ void parseEmitter(
     if (type == "point") {
         element = emitter_elem->FirstChildElement("point");
         Vec3 pos(0, 0, 0);
-        std::string name = element->Attribute("name");
-        if (name == "center" || name == "pos")
-            pos = parsePoint(element);
+        parse_attribute(element, pos, {"center", "pos"});
         create_point_source<<<1, 1>>>(emitters[index], emission * scaler, pos);
     } else if (type == "area-spot") {
         element = emitter_elem->FirstChildElement("float");
         float cos_val = 0.99;
-        if (element) {
-            std::string name = element->Attribute("name");
-            tinyxml2::XMLError eResult;
-            if (name == "half-angle" || name == "angle") {
-                eResult = element->QueryFloatAttribute("value", &cos_val);
-                cos_val = cosf(cos_val * DEG2RAD);
-            }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'Area Spot Emitter' attribute");
+        if (parse_attribute(element, cos_val, {"half-angle", "angle"})) {
+            cos_val = cosf(cos_val * DEG2RAD);
         }
         element = emitter_elem->FirstChildElement("string");
         std::string attr_name = element->Attribute("name");
@@ -412,17 +423,9 @@ void parseEmitter(
         element = emitter_elem->FirstChildElement("float");
         float scaler = 1.f, azimuth = 0.f, zenith = 0.f;
         while (element) {
-            std::string name = element->Attribute("name");
-            tinyxml2::XMLError eResult;
-            if (name == "scaler") {
-                eResult = element->QueryFloatAttribute("value", &scaler);
-            } else if (name == "azimuth") {
-                eResult = element->QueryFloatAttribute("value", &azimuth);
-            } else if (name == "zenith") {
-                eResult = element->QueryFloatAttribute("value", &zenith);
-            }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'EnvMap Emitter' attribute");
+            parse_attribute(element, scaler, {"scaler"});
+            parse_attribute(element, azimuth, {"azimuth"});
+            parse_attribute(element, zenith, {"zenith"});
             element = element->NextSiblingElement("float");
         }
         e_props.back().second = Vec4(-1, scaler, azimuth, zenith);
@@ -482,15 +485,11 @@ void parseSphereShape(
     float radius = 0;
     Vec3 center(0, 0, 0);
     element = shapeElement->FirstChildElement("point");
-    std::string name = element->Attribute("name");
-    if (name == "center" || name == "pos")
-        center = parsePoint(element);
+    parse_attribute(element, center, {"center", "pos"});
 
     element = shapeElement->FirstChildElement("float");
-    name = element->Attribute("name");
-    if (name == "r" || name == "radius") {
-        element->QueryFloatAttribute("value", &radius);
-    }
+    parse_attribute(element, radius, {"radius", "r"});
+
     verts_list[0].emplace_back(std::move(center));
     verts_list[1].emplace_back(radius, radius, radius);
     verts_list[2].emplace_back(0, 0, 0);
@@ -520,9 +519,8 @@ void parseObjShape(
 
     const tinyxml2::XMLElement* element = shapeElement->FirstChildElement("string");
     while (element) {
-        name = element->Attribute("name");
-        if (name == "filename") {
-            filename = folder_prefix + element->Attribute("value");
+        if (parse_attribute(element, filename, {"filename"})) {
+            filename = folder_prefix + filename;
         }
         element = element->NextSiblingElement("string");
     }
@@ -594,7 +592,7 @@ void parseObjShape(
                 }
             }
             if (!has_normal) {      // compute normals ourselves
-                printf("Normal vector not found in '%s' primitive %llu, computing yet normal direction is not guaranteed.\n", name.c_str(), i);
+                printf("Normal vector not found in '%s' primitive %lu, computing yet normal direction is not guaranteed.\n", name.c_str(), i);
                 Vec3 diff = verts_list[1][i] - verts_list[0][i];
                 Vec3 normal = diff.cross(verts_list[2][i] - verts_list[0][i]).normalized_h();
                 for (int j = 0; j < 3; j++) {
@@ -618,23 +616,23 @@ void parseTexture(
         TextureInfo info;
         const tinyxml2::XMLElement* element = tex_elem->FirstChildElement("string");
         while (element) {
-            std::string name = element->Attribute("name");
-            if (name == "diffuse" || name == "emission") {
-                info.diff_path = folder_prefix + element->Attribute("value");
-            } else if (name == "specular") {
-                info.spec_path = folder_prefix + element->Attribute("value");
-            } else if (name == "glossy" || name == "sigma_a") {
-                info.glos_path = folder_prefix + element->Attribute("value");
-            } else if (name == "rough1" || name == "roughness_1" || name == "ior") {
-                info.rough_path1 = folder_prefix + element->Attribute("value");
-                info.is_rough_ior = name == "ior";
-            } else if (name == "rough2" || name == "roughness_2") {
+            std::string path_value;
+            if (parse_attribute(element, path_value, {"diffuse", "emission"})) {
+                info.diff_path = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"specular"})) {
+                info.spec_path = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"glossy", "sigma_a"})) {
+                info.glos_path = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"rough1", "roughness_1", "ior"})) {
+                info.rough_path1 = folder_prefix + path_value;
+                info.is_rough_ior = element->Attribute("name") == "ior";
+            } else if (parse_attribute(element, path_value, {"rough2", "roughness_2"})) {
                 info.is_rough_ior = false;
-                info.rough_path2 = folder_prefix + element->Attribute("value");
-            } else if (name == "normal") {
-                info.normal_path = folder_prefix + element->Attribute("value");
+                info.rough_path2 = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"normal"})) {
+                info.normal_path = folder_prefix + path_value;
             } else {
-                std::cerr << "Unsupported texture type '" << name << "'\n";
+                std::cerr << "Unsupported texture type '" << element->Attribute("name") << "'\n";
                 throw std::runtime_error("Unexpected texture type.");
             }
             element = element->NextSiblingElement("string");
@@ -644,16 +642,231 @@ void parseTexture(
     }
 }
 
+std::pair<PhaseFunction**, size_t> parsePhaseFunction(
+    const tinyxml2::XMLElement* phase_elem,
+    std::unordered_map<std::string, int>& phase_maps,
+    std::vector<TypedVec4>& phase_params
+) {
+    const tinyxml2::XMLElement* traverser = phase_elem;
+    size_t num_phase = 1;          // allocate a dummy volume 
+    while (traverser) {
+        ++ num_phase;
+        traverser = traverser->NextSiblingElement("phase");
+    }
+
+    PhaseFunction** phase_funcs = nullptr;
+    phase_params.emplace_back();
+    // We need at least one (Dummy), this won't cost much
+    CUDA_CHECK_RETURN(cudaMalloc(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
+    create_device_phase<PhaseFunction><<<1, 1>>>(phase_funcs, 0);
+    if (num_phase == 1) {      // return when there is no valid phase function
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        return std::make_pair(phase_funcs, 0);
+    }     
+
+    for (size_t i = 1; i < num_phase; i++, phase_elem = phase_elem->NextSiblingElement("phase")) {
+        phase_params.emplace_back(Vec4(), PhaseFuncType::Isotropic);
+        phase_maps[phase_elem->Attribute("id")] = i;
+        std::string type = phase_elem->Attribute("type");
+        type = type.empty() ? "hg" : type;
+
+        if (type == "hg") {
+            float g = 0.2;
+            const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
+            parse_attribute(sub_elem, g, {"g"});
+            phase_params.back().first.x() = g;
+            phase_params.back().second = PhaseFuncType::HenyeyGreenstein;
+            create_device_phase<HenyeyGreensteinPhase><<<1, 1>>>(phase_funcs, i, g);
+        } else if (type == "isotropic") {
+            create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
+        } else if (type == "hg-duo") {
+            float g1 = 0.2, g2 = 0.8, weight = 0.5;
+            const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
+            while (sub_elem) {
+                std::string name = sub_elem->Attribute("name");
+                parse_attribute(sub_elem, g1, {"g1"});
+                parse_attribute(sub_elem, g2, {"g2"});
+                parse_attribute(sub_elem, weight, {"weight"});
+                sub_elem = sub_elem->NextSiblingElement("string");
+            }
+            phase_params.back().first  = Vec4(g1, g2, weight);
+            phase_params.back().second = PhaseFuncType::DuoHG;
+            create_device_phase<MixedHGPhaseFunction><<<1, 1>>>(phase_funcs, i, g1, g2, weight);
+        } else if (type == "rayleigh") {
+            phase_params.back().second = PhaseFuncType::Rayleigh;
+            create_device_phase<RayleighPhase><<<1, 1>>>(phase_funcs, i);
+        } else if (type == "sggx") {
+            std::cerr << "Current SGGX is not implemented but will be in the future. Fall back to 'isotropic'\n";
+            create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
+        } else {
+            std::cerr << "Phase type '" << type << "' not supported. Fall back to 'isotropic'\n";
+            create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
+        }
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    return std::make_pair(phase_funcs, num_phase - 1);
+}
+
+std::pair<Medium**, size_t> parseMedium(
+    const tinyxml2::XMLElement* vol_elem, 
+    const std::unordered_map<std::string, int>& phase_maps,
+    const std::vector<TypedVec4>& phase_params,
+    std::vector<MediumInfo>& med_infos,
+    std::unordered_map<std::string, int>& medium_maps,
+    GridVolumeManager&  gvm,
+    PhaseFunction**     d_phase_funcs,                  // device_memory
+    std::string folder_prefix
+) {
+    const tinyxml2::XMLElement* traverser = vol_elem;
+    size_t num_volume = 1;          // allocate a dummy volume 
+    while (traverser) {
+        ++ num_volume;
+        traverser = traverser->NextSiblingElement("medium");
+    }
+
+    // We need at least one (Dummy), this won't cost much
+    Medium** d_volumes = nullptr;
+    med_infos.emplace_back();
+    CUDA_CHECK_RETURN(cudaMalloc(&d_volumes, sizeof(Medium*) * num_volume));
+    create_device_medium<Medium><<<1, 1>>>(d_volumes, d_phase_funcs, 0, 0);
+    if (num_volume == 1) {
+        CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+        return std::make_pair(d_volumes, 0);
+    }
+
+    for (size_t i = 1; i < num_volume; i++, vol_elem = vol_elem->NextSiblingElement("medium")) {
+        std::string id = vol_elem->Attribute("id");
+        std::string type = vol_elem->Attribute("type");
+        medium_maps[id] = i;
+        // phase function type
+        size_t phase_id = 0;
+        const tinyxml2::XMLElement* element = vol_elem->FirstChildElement("ref");
+        if (element) {
+            std::string ref_type   = element->Attribute("type"),
+                        ref_target = element->Attribute("id");
+            if (ref_type == "phase") {
+                auto it = phase_maps.find(ref_target);
+                if (it != phase_maps.end()) {
+                    phase_id = it->second;
+                }
+            }
+        }
+        if (phase_id == 0) {
+            std::cerr << "Volume '" << id << "' has no valid phase function.\n";
+            throw std::runtime_error("No valid phase function attached.");
+        }
+        MediumInfo med_info(id, element->Attribute("id"), phase_id, MediumType::Homogeneous, phase_params[phase_id].second);
+
+        element = vol_elem->FirstChildElement("float");
+        float scale = 1;
+        while (element) {
+            parse_attribute(element, scale, {"scale", "scaler"}, "Density scaler parsing error.");
+            element = element->NextSiblingElement("float");
+        }
+        
+        if (type == "homogeneous") {
+            element = vol_elem->FirstChildElement("rgb");
+            Vec4 sigma_a(0, 1), sigma_s(1, 1);
+            while (element) {
+                parse_attribute(element, sigma_a, {"sigma_a"});
+                parse_attribute(element, sigma_s, {"sigma_s"});
+                element = element->NextSiblingElement("rgb");
+            }
+            med_info.med_param = MediumInfo::MediumParams(sigma_a, sigma_s, phase_params[phase_id].first, scale);
+            create_homogeneous_volume<<<1, 1>>>(d_volumes, d_phase_funcs, i, phase_id, sigma_a, sigma_s, scale);
+        } else if (type == "grid") {
+            med_info.mtype = MediumType::Grid;
+            element = vol_elem->FirstChildElement("string");
+            std::string name = element->Attribute("name"),
+                        density_path, albedo_path = "", emission_path = "";
+            while (element) {
+                if (parse_attribute(element, density_path, {"density"})) {
+                    density_path = folder_prefix + density_path;
+                } else if (parse_attribute(element, albedo_path, {"albedo"})) {
+                    albedo_path = folder_prefix + albedo_path;
+                } else if (parse_attribute(element, emission_path, {"emission"})) {
+                    emission_path = folder_prefix + emission_path;
+                }
+                element = element->NextSiblingElement("string");
+            }
+
+            element = vol_elem->FirstChildElement("rgb");
+            Vec4 albedo(1, 1, 1);
+            parse_attribute(element, albedo, {"albedo"});
+
+            element = vol_elem->FirstChildElement("float");
+            float temp_scale = 1, emission_scale = 1;
+            while (element) {
+                parse_attribute(element, temp_scale, {"temp-scale", "temp_scale"});
+                parse_attribute(element, emission_scale, {"emission-scale", "em-scale"});
+                element = element->NextSiblingElement("float");
+            }
+
+            if (albedo_path.empty()) {
+                gvm.push(i, phase_id, density_path, albedo, scale, temp_scale, emission_scale, emission_path);
+            } else {
+                gvm.push(i, phase_id, density_path, scale, temp_scale, emission_scale, albedo_path, emission_path);
+            }
+
+            med_info.med_param = MediumInfo::MediumParams(albedo, 
+                    Vec4(emission_scale, temp_scale, 0), phase_params[phase_id].first, scale);
+        }
+        med_infos.emplace_back(std::move(med_info));
+    }
+    if (!gvm.empty()) {
+        gvm.to_gpu(d_volumes, d_phase_funcs);
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+    return std::make_pair(d_volumes, num_volume - 1);
+}
+
+void parseObjectMediumRef(
+    const tinyxml2::XMLElement* node, 
+    std::unordered_map<std::string, int>& medium_map, 
+    std::vector<int>& obj_med_idxs
+) {
+    const tinyxml2::XMLElement* elem = node->FirstChildElement("ref");
+    int idx = 0;
+    while (elem) {
+        std::string name = elem->Attribute("type");
+        if (name == "medium") {
+            auto it = medium_map.find(elem->Attribute("id"));
+            if (it != medium_map.end()) {
+                idx = it->second & 0x000000ff;      // 8 bit, 255 media at most
+            }
+        }
+        elem = elem->NextSiblingElement("ref");
+    }
+    if (!idx) {
+        obj_med_idxs.push_back(0);
+        return;
+    }
+    bool cullable = false;
+    elem = node->FirstChildElement("bool");
+    if (parse_attribute(elem, cullable, {"cullable"})) {
+        // object_id (32bit): (31: is_sphere), (30: is_cullable), (29, 28 reserved), (27 - 20: medium idx)
+        idx += static_cast<int>(cullable) << 10;        // shift by 10 bit (then shift by 20, will be 30)
+    }
+    obj_med_idxs.push_back(idx);
+}
+
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
     "MegaKernel-PT", 
     "Wavefront-PT", 
     "Megakernel-LT", 
     "Voxel-SDF-PT", 
     "Depth Tracer", 
-    "BVH Cost Visualizer"
+    "BVH Cost Visualizer",
+    "MegaKernel-VPT"
 };
 
-Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0) {
+Scene::Scene(std::string path): 
+    num_bsdfs(0), num_emitters(0), 
+    num_objects(0), num_prims(0), 
+    envmap_id(0), cam_vol_id(0),
+    num_phase_func(0), num_medium(0),
+    media(nullptr), phases(nullptr)
+{
     tinyxml2::XMLDocument doc;
     if (doc.LoadFile(path.c_str()) != tinyxml2::XML_SUCCESS) {
         std::cerr << "Failed to load file" << std::endl;
@@ -668,6 +881,8 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
                                 *sensor_elem  = scene_elem->FirstChildElement("sensor"), 
                                 *render_elem  = scene_elem->FirstChildElement("renderer"), 
                                 *texture_elem = scene_elem->FirstChildElement("texture"), 
+                                *medium_elem  = scene_elem->FirstChildElement("medium"), 
+                                *phase_elem   = scene_elem->FirstChildElement("phase"), 
                                 *bool_elem    = scene_elem->FirstChildElement("bool"), *ptr = nullptr;
     if (auto version_id = scene_elem->Attribute("version")) {
         if(std::strcmp(version_id, SCENE_VERSION) != 0) {
@@ -690,13 +905,27 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     else if (render_type == "lt")    rdr_type = RendererType::MegeKernelLT;
     else if (render_type == "sdf")   rdr_type = RendererType::VoxelSDFPT;
     else if (render_type == "depth") rdr_type = RendererType::DepthTracing;
+    else if (render_type == "vpt")   rdr_type = RendererType::MegaKernelVPT;
     else if (render_type == "bvh-cost") rdr_type = RendererType::BVHCostViz;
     else                                rdr_type = RendererType::MegaKernelPT;
     
     // ------------------------- (1) parse all the textures and BSDF -------------------------
     
     std::unordered_map<std::string, TextureInfo> tex_map;
+    std::unordered_map<std::string, int> phase_maps, medium_maps;
+    std::vector<TypedVec4> phase_params;
+
     parseTexture(texture_elem, tex_map, folder_prefix);
+
+    auto phase_pr = parsePhaseFunction(phase_elem, phase_maps, phase_params);
+    phases = phase_pr.first;
+    num_phase_func = phase_pr.second;
+
+    auto media_pr = parseMedium(medium_elem, phase_maps, phase_params, 
+                medium_infos, medium_maps, gvm, phases, folder_prefix);
+    gvm.load_black_body_data(folder_prefix);
+    media = media_pr.first;
+    num_medium = media_pr.second;
 
     ptr = bsdf_elem;
     for (; ptr != nullptr; ++ num_bsdfs)
@@ -706,6 +935,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         throw std::runtime_error("Too many BSDF defined.");
     }
     CUDA_CHECK_RETURN(cudaMalloc(&bsdfs, sizeof(BSDF*) * num_bsdfs));
+    CUDA_CHECK_RETURN(cudaMemset(bsdfs, 0, sizeof(BSDF*) * num_bsdfs));
 
     textures.init(num_bsdfs);
     for (int i = 0; i < num_bsdfs; i++) {
@@ -733,6 +963,9 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         uvs_list[i].reserve(32);
     }
 
+    std::vector<int> obj_medium_idxs;
+    obj_medium_idxs.reserve(num_objects);
+
     int prim_offset = 0;
     for (int i = 0; i < num_objects; i++) {
         std::string type = shape_elem->Attribute("type");
@@ -743,8 +976,12 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
             parseSphereShape(shape_elem, bsdf_map, emitter_map, bsdf_infos, emitter_obj_map, 
                     objects, verts_list, norms_list, uvs_list, prim_offset, folder_prefix, i);
         sphere_objs[i] = type == "sphere";
+
+        parseObjectMediumRef(shape_elem, medium_maps, obj_medium_idxs);
+
         shape_elem = shape_elem->NextSiblingElement("shape");
     }
+
     num_prims = prim_offset;
     if (num_prims > MAX_PRIMITIVE_NUM) {
         // MAX_PRIMITIVE_NUM is the upper bound. 2^25 - 1, if num_prims exceeds this bound
@@ -760,6 +997,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     CUDA_CHECK_RETURN(cudaMalloc(&emitters, sizeof(Emitter*) * (num_emitters + 1)));
     create_abstract_source<<<1, 1>>>(emitters[0]);
     for (int i = 1; i <= num_emitters; i++) {
+        // FIXME: should light tracing support volumetric rendering, the medium mapping should be passed in
         parseEmitter(emitter_elem, emitter_obj_map, tex_map, emitter_props, emitter_names, host_tex_4d, emitters, envmap_id, i);
         emitter_elem = emitter_elem->NextSiblingElement("emitter");
     }
@@ -790,9 +1028,9 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     std::vector<int> prim_idxs;     // won't need this if BVH is built
     bvh_build(
         verts_list[0], verts_list[1], verts_list[2], 
-        objects, sphere_objs, world_min, world_max, 
-        obj_idxs, prim_idxs, nodes, 
-        cache_nodes, config.cache_level, 
+        objects, obj_medium_idxs, sphere_objs, 
+        world_min, world_max, obj_idxs, prim_idxs, 
+        nodes, cache_nodes, config.cache_level, 
         config.max_node_num, config.bvh_overlap_w
     );
     auto dur = std::chrono::system_clock::now() - tp;
@@ -801,7 +1039,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
     // The nodes.size is actually twice the number of nodes
     // since Each BVH node will be separated to two float4, nodes will store two float4 for each node
-    printf("[BVH] Total nodes: %llu, leaves: %llu\n", nodes.size(), prim_idxs.size());
+    printf("[BVH] Total nodes: %lu, leaves: %lu\n", nodes.size(), prim_idxs.size());
 
     tp = std::chrono::system_clock::now();
     std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
@@ -835,8 +1073,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
     // for the leaf node, and the access for the leaf node primitives won't be continuous
     std::vector<std::vector<int>> eprim_idxs(num_emitters);
     for (int i = 0; i < num_prims; i++) {
-        int index = prim_idxs[i], obj_idx = obj_idxs[i];
-        obj_idx = obj_idx < 0 ? -obj_idx - 1 : obj_idx;
+        int index = prim_idxs[i], obj_idx = obj_idxs[i] & 0x000fffff;
         const auto& object = objects[obj_idx];
         reorder_sph_flags[i] = sphere_flags[index];
         if (object.is_emitter()) {
@@ -844,6 +1081,7 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
             eprim_idxs[emitter_idx].push_back(i);
         }
     }
+
     // The following code does the following job:
     // BVH op will 'shuffle' the primitive order (sort of)
     // So, the emitter object might not have continuous
@@ -864,7 +1102,6 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
         if (!obj.is_emitter()) continue;
         obj.prim_offset = e_prim_offsets[obj.emitter_id - 1];
     }
-
     uvs_list     = std::move(reorder_uvs);
     verts_list   = std::move(reorder_verts);
     norms_list   = std::move(reorder_norms);
@@ -878,9 +1115,14 @@ Scene::Scene(std::string path): num_bsdfs(0), num_emitters(0), num_objects(0), n
 Scene::~Scene() {
     destroy_gpu_alloc<<<1, num_bsdfs>>>(bsdfs);
     destroy_gpu_alloc<<<1, num_emitters + 1>>>(emitters);
+    destroy_gpu_alloc<<<1, num_phase_func + 1>>>(phases);
+    destroy_gpu_alloc<<<1, num_medium + 1>>>(media);
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
     CUDA_CHECK_RETURN(cudaFree(bsdfs));
     CUDA_CHECK_RETURN(cudaFree(emitters));
+    CUDA_CHECK_RETURN(cudaFree(media));
+    CUDA_CHECK_RETURN(cudaFree(phases));
     CUDA_CHECK_RETURN(cudaFreeHost(cam));
     for (auto& tex: host_tex_4d) tex.destroy();
     for (auto& tex: host_tex_2d) tex.destroy();
@@ -919,6 +1161,21 @@ void Scene::update_materials() {
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
+void Scene::update_media() {
+    if (rdr_type != RendererType::MegaKernelVPT) return;
+    for (size_t i = 1; i < medium_infos.size(); i++) {
+        auto& med_info = medium_infos[i];
+        if (med_info.phase_changed) {
+            med_info.clamp_phase_vals();
+            med_info.create_on_gpu(media[i], phases);
+        } else {
+            med_info.clamp_phase_vals();
+            med_info.copy_to_gpu(media[i], phases);
+        }
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+}
+
 template <typename T>
 static void free_resource(std::vector<T>& vec) {
     vec.clear();
@@ -937,6 +1194,7 @@ void Scene::free_resources() {
     free_resource(nodes);
     free_resource(cache_nodes);
     free_resource(emitter_prims);
+    gvm.free_resources();
 }
 
 void Scene::export_prims(PrecomputedArray& verts, NormalArray& norms, ConstBuffer<PackedHalf2>& uvs) const {

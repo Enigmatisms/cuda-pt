@@ -83,7 +83,7 @@ static void setup_imgui_style( bool dark_style, float alpha_  ) {
             if( col.w < 1.00f ) col.w *= alpha_;
         }
     } else {
-        for (int i = 0; i <= ImGuiCol_COUNT; i++) {
+        for (int i = 0; i < ImGuiCol_COUNT; i++) {
             ImVec4& col = style.Colors[i];
             if( col.w < 1.00f ) {
                 col.x *= alpha_;
@@ -440,7 +440,64 @@ static bool material_widget(std::vector<BSDFInfo>& bsdf_infos) {
                 local_update |= draw_selection_menu<DispersionType::NumDispersionType>(
                     DISPERSION_NAMES, "##" + info.name + "-type", "Dispersion Type", info.bsdf.mtype
                 );
+            } else if (info.type == BSDFType::Forward) {
+                ImGui::Text("Forward BSDF has nothing adjustable.");
             }
+            info.updated = local_update;
+            updated |= local_update;
+        }
+        ImGui::Unindent();
+    }
+    return updated;
+}
+
+static bool medium_widget(std::vector<MediumInfo>& med_infos) {
+    bool updated = false;
+    for (size_t i = 1; i < med_infos.size(); i++) {
+        auto& info = med_infos[i];
+        ImGui::Separator();
+        std::string header_name = "Medium '" + info.name + "' | Type: '" + MEDIUM_NAMES[info.mtype] + "'";
+        ImGui::Indent();
+        if (ImGui::CollapsingHeader(header_name.c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
+            bool local_update = draw_selection_menu<PhaseFuncType::NumSupportedPhase>(
+                PHASES_NAMES, "##" + info.name + "-ptype", "Phase", reinterpret_cast<uint8_t&>(info.ptype)
+            );
+            info.phase_changed = local_update;
+            if (info.phase_changed) {
+                updated = true;
+            }
+            
+            if (local_update) {
+                ImGui::Unindent();
+                continue;
+            }
+{
+            ImGui::Indent();
+            std::string header_name = "Phase '" + info.name + "' | Type: '" + PHASES_NAMES[info.ptype] + "'";
+            if (ImGui::CollapsingHeader(header_name.c_str(), ImGuiWindowFlags_AlwaysAutoResize)) {
+                if (info.ptype == PhaseFuncType::HenyeyGreenstein) {
+                    local_update |= draw_coupled_slider_input(info.name + "-g", "g", info.med_param.g(), -0.999, 0.999);
+                } else if (info.ptype == PhaseFuncType::DuoHG) {
+                    local_update |= draw_coupled_slider_input(info.name + "-g1", "g(1)", info.med_param.g1(), -0.999, 0.999);
+                    local_update |= draw_coupled_slider_input(info.name + "-g2", "g(2)", info.med_param.g2(), -0.999, 0.999);
+                    local_update |= draw_coupled_slider_input(info.name + "-weight", "Weight", info.med_param.weight());
+                } else {
+                    ImGui::Text("No modifi-able params.");
+                }
+            }
+            ImGui::Unindent();
+}
+            if (info.mtype == MediumType::Homogeneous) {
+                local_update |= draw_color_picker(info.name + "-sigma_a", "Absorption", &info.med_param.sigma_a.x());
+                local_update |= draw_color_picker(info.name + "-sigma_s", "Scattering", &info.med_param.sigma_s.x());
+                local_update |= draw_coupled_slider_input(info.name + "-scale", "Scale", info.med_param.scale, 0.1, 100.f);
+            } else if (info.mtype == MediumType::Grid) {
+                local_update |= draw_color_picker(info.name + "-albedo", "Albedo", &info.med_param.sigma_a.x());
+                local_update |= draw_coupled_slider_input(info.name + "-scale", "Scale", info.med_param.scale, 0.1, 100.f);
+                local_update |= draw_coupled_slider_input(info.name + "-tp-scale", "Temp Scale", info.med_param.temperature_scale(), 0.1f, 10.f);
+                local_update |= draw_coupled_slider_input(info.name + "-em-scale", "Emission Scale", info.med_param.emission_scale(), 0.1f, 100.f);
+            }
+
             info.updated = local_update;
             updated |= local_update;
         }
@@ -453,6 +510,7 @@ void render_settings_interface(
     DeviceCamera& cam, 
     std::vector<std::pair<std::string, Vec4>>& emitters,
     std::vector<BSDFInfo>& bsdf_infos,
+    std::vector<MediumInfo>& med_infos,
     MaxDepthParams& md_params,
     GUIParams& params,
     const uint8_t rdr_type
@@ -473,6 +531,7 @@ void render_settings_interface(
     params.scene_update    = false;
     params.renderer_update = false;
     params.material_update = false;
+    params.medium_update   = false;
     if (params.show_window) {
         // Begin the collapsible window
         if (ImGui::Begin("Settings", &params.show_window, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -503,6 +562,8 @@ void render_settings_interface(
                 params.renderer_update |= draw_integer_input("max_diff",  "Max Diffuse", md_params.max_diffuse);
                 params.renderer_update |= draw_integer_input("max_spec",  "Max Specular", md_params.max_specular);
                 params.renderer_update |= draw_integer_input("max_trans", "Max Transmit", md_params.max_tranmit);
+                if (rdr_type == RendererType::MegaKernelVPT)
+                    params.renderer_update |= draw_integer_input("max_vol", "Max Volume", md_params.max_volume);
                 ImGui::Checkbox("Output PNG", &params.output_png);
                 if (!params.output_png) {
                     ImGui::PushItemWidth(120.0f);
@@ -533,6 +594,9 @@ void render_settings_interface(
             }
             if (ImGui::CollapsingHeader("Material Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
                 params.material_update |= material_widget(bsdf_infos);
+            }
+            if (ImGui::CollapsingHeader("Medium Settings", ImGuiWindowFlags_AlwaysAutoResize)) {
+                params.medium_update |= medium_widget(med_infos);
             }
             if (ImGui::CollapsingHeader("Screen Capture", ImGuiWindowFlags_AlwaysAutoResize)) {
                 params.capture = ImGui::Button("Capture Frame");

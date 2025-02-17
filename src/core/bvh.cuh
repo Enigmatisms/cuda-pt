@@ -205,6 +205,7 @@ void bvh_build(
     const std::vector<Vec3>& points2,
     const std::vector<Vec3>& points3,
     const std::vector<ObjInfo>& objects,
+    const std::vector<int>& obj_med_idxs,
     const std::vector<bool>& sphere_flags,
     const Vec3& world_min, const Vec3& world_max,
     std::vector<int>& obj_idxs, 

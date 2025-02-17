@@ -13,5 +13,6 @@ const std::array<const char*, NumSupportedBSDF> BSDF_NAMES = {
     "Plastic",        
     "PlasticForward", 
     "GGXConductor",
-    "Dispersion"
+    "Dispersion",
+    "Forward (Null)"
 };

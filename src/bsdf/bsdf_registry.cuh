@@ -14,3 +14,4 @@
 #include "bsdf/plastic.cuh"
 #include "bsdf/ggx_conductor.cuh"
 #include "bsdf/dispersion.cuh"
+#include "bsdf/forward.cuh"

@@ -23,7 +23,7 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" OR "${CMAKE_BUILD_TYPE}" STREQUAL "deb
 		set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wall -G -O0 -lineinfo -maxrregcount=40 -arch=native")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
 	endif ()
-    set(CUDA_CONFIG_FLAGS -G)
+    set(CUDA_CONFIG_FLAGS -G --extended-lambda)
 ELSE()
 	# to check register usage, please set "-Xptxas -v"
 	# to cap the register usage to boost occupancy, set ""
@@ -52,7 +52,7 @@ ELSE()
 			message(FATAL_ERROR "OpenMP can not be found but it is required by wavefront path tracer. Manual overriding is required to skip this exception.")
 		endif()
 	endif ()
-	set(CUDA_CONFIG_FLAGS --use_fast_math -Xptxas -O3)
+	set(CUDA_CONFIG_FLAGS --extended-lambda --use_fast_math -Xptxas -O3)
 ENDIF()
 set(CUDA_FINAL_FLAGS ${CUDA_COMMON_FLAGS} ${CUDA_CONFIG_FLAGS})
 
@@ -67,7 +67,7 @@ include_directories(
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/imgui
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyxml2
 	${CMAKE_CURRENT_LIST_DIR}/src/ext/tinyobjloader
-	${CMAKE_CURRENT_LIST_DIR}/src/ext/stb
+	${CMAKE_CURRENT_LIST_DIR}/src/ext/
 )
 
 add_subdirectory(src/ext/tinyxml2)
@@ -75,6 +75,7 @@ add_subdirectory(src/ext/tinyobjloader)
 add_subdirectory(src/ext/imgui)
 add_subdirectory(src/ext/glfw)
 add_subdirectory(src/ext/nanobind)
+add_subdirectory(src/ext/nanovdb)
 
 find_package(OpenGL REQUIRED)
 if (MSVC)

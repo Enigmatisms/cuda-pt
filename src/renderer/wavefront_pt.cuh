@@ -291,11 +291,12 @@ CPT_KERNEL void nee_direct_shader(
  * 
  * TODO: major refactoring here
  */
-CPT_KERNEL void guided_ray_scatter_shader(
+CPT_KERNEL void guided_ray_scatter_net_eval_shader(
     PayLoadBufferSoA payloads,
     ConstObjPtr objects,
     const cudaTextureObject_t bvh_leaves,
-    const IndexBuffer idx_buffer
+    const IndexBuffer idx_buffer,
+    int stream_id
 );
 
 /**

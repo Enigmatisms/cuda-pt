@@ -14,9 +14,11 @@
 
 class PathTracer: public TracerBase {
 private:
+    bool verbose;
+protected:
     int* _obj_idxs;
     float4* _nodes;
-protected:
+
     CompactedObjInfo* obj_info;
     int num_objs;
     int num_nodes;
@@ -30,7 +32,7 @@ protected:
 
     int* emitter_prims;
 public:
-    PathTracer(const Scene& scene);
+    PathTracer(const Scene& scene, bool _verbose = true);
 
     virtual ~PathTracer();
 

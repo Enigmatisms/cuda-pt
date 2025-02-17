@@ -11,6 +11,7 @@
 #include "core/imgui_utils.cuh"
 
 #include "renderer/bvh_cost.cuh"
+#include "renderer/volume_pt.cuh"
 #include "renderer/light_tracer.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
@@ -75,6 +76,11 @@ int main(int argc, char** argv) {
                 std::cout << "\tMegakernel Light Tracing.\n";
             break;
         } 
+        case RendererType::MegaKernelVPT: {
+            renderer = std::make_unique<VolumePathTracer>(scene);
+            std::cerr << "\tVolumetric Path Tracer\n";
+            break;
+        }
         case RendererType::VoxelSDFPT: {
             std::cerr << "\tVoxelSDFPT is not implemented yet. Stay tuned. Rendering exits.\n";
             return 0;
@@ -123,7 +129,8 @@ int main(int argc, char** argv) {
             break;
         }
         gui::render_settings_interface(
-            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.md, params, scene.rdr_type
+            *scene.cam, scene.emitter_props, scene.bsdf_infos, 
+            scene.medium_infos, scene.config.md, params, scene.rdr_type
         );
         if (!io.WantCaptureMouse) {        // no sub window (setting window or main menu) is focused
             params.camera_update |= gui::mouse_camera_update(*scene.cam, params.rot_sensitivity);
@@ -135,6 +142,9 @@ int main(int argc, char** argv) {
         if (params.material_update) {
             scene.update_materials();
             CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
+        }
+        if (params.medium_update) {
+            scene.update_media();
         }
         if (params.camera_update) {
             renderer->update_camera(scene.cam);

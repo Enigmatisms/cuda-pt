@@ -22,7 +22,7 @@ public:
     int __padding;
 public:
     CPT_CPU_GPU BSDF() {}
-    CPT_CPU_GPU BSDF(Vec4 _k_d, Vec4 _k_s, Vec4 _k_g, int flag = BSDFFlag::BSDF_NONE):
+    CPT_CPU_GPU BSDF(Vec4 _k_d, Vec4 _k_s, Vec4 _k_g, int flag = ScatterStateFlag::BSDF_NONE):
         k_d(std::move(k_d)), k_s(std::move(_k_s)), k_g(std::move(_k_g)), bsdf_flag(flag)
     {}
 
@@ -37,10 +37,10 @@ public:
 
     CPT_GPU virtual Vec3 sample_dir(
         const Vec3& indir, const Interaction& it, Vec4& throughput, float& pdf, 
-        Sampler& sp, BSDFFlag& samp_lobe, int index, bool is_radiance = false
+        Sampler& sp, ScatterStateFlag& samp_lobe, int index, bool is_radiance = false
     ) const = 0;
 
-    CPT_GPU_INLINE bool require_lobe(BSDFFlag flags) const noexcept {
+    CPT_GPU_INLINE bool require_lobe(ScatterStateFlag flags) const noexcept {
         return (bsdf_flag & (int)flags) > 0;
     }
 };
