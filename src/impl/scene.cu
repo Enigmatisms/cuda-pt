@@ -49,59 +49,7 @@ static std::string get_folder_path(std::string filePath) {
     return ""; // include empty str if depth is 0
 }
 
-template <typename Ty>
-Ty extract_from(
-    const tinyxml2::XMLElement* elem, 
-    std::string value_name = "value"
-) {
-    tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
-    Ty result;
-    if constexpr (std::is_same_v<std::decay_t<Ty>, bool>) {
-        e_ret = elem->QueryBoolAttribute(value_name.c_str(), &result);
-    } else if constexpr (std::is_same_v<std::decay_t<Ty>, float>) {
-        e_ret = elem->QueryFloatAttribute(value_name.c_str(), &result);
-    } else if constexpr (std::is_same_v<std::decay_t<Ty>, int>) {
-        e_ret = elem->QueryIntAttribute(value_name.c_str(), &result);
-    } else if constexpr(std::is_same_v<std::decay_t<Ty>, std::string>) {
-        result = elem->Attribute(value_name.c_str());
-    } else {
-        std::cerr << "Unsupported type '" << typeid(Ty).name() << "' for extraction.\n";
-        throw std::runtime_error("`extract_from` unsupported type.");
-    }
-
-    if (e_ret != tinyxml2::XML_SUCCESS) {
-        throw std::runtime_error("`extract_from` parsing failed");
-    }
-    return result;
-}
-
-template <typename Ty>
-Ty parse_attribute(
-    const tinyxml2::XMLElement* elem, 
-    std::initializer_list<std::string>&& names,
-    std::string value_name = "value",
-    std::string name_name = "name"
-) {
-    if (elem == nullptr) {
-        std::cerr << "Error while parsing '";
-        for (auto name: names) std::cout << name << ", ";
-        std::cerr << "'\n";
-        throw std::runtime_error("Empty element pointer, parsing stops.");
-    }
-    bool name_check = false;
-    const std::string elem_name = elem->Attribute(name_name.c_str());
-    for (auto name: names) {
-        if (name == elem_name) {
-            name_check = true;
-            break;
-        }
-    }
-    Ty result;
-    if (!name_check) return result;
-    return extract_from<Ty>(elem, value_name);
-}
-
-Vec4 parseColor(const std::string& value) {
+Vec4 parseColor(std::string value) {
     float r, g, b;
     if (value[0] == '#') {
         std::stringstream ss;
@@ -138,11 +86,75 @@ Vec3 parsePoint(const tinyxml2::XMLElement* element) {
         std::cerr << "Point not specified for point source.\n";
         throw std::runtime_error("Point element is null");
     }
-    float x = extract_from<float>(element, "x");
-    float y = extract_from<float>(element, "y");
-    float z = extract_from<float>(element, "z");
-
+    std::string err_what = "Point parsing failed.\n";
+    float x = 0, y = 0, z = 0;
+    if (element->QueryFloatAttribute("x", &x) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Warning: point element 'x' attribute not set. Using default value 0.\n";
+    }
+    if (element->QueryFloatAttribute("y", &y) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Warning: point element 'y' attribute not set. Using default value 0.\n";
+    }
+    if (element->QueryFloatAttribute("z", &z) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Warning: point element 'z' attribute not set. Using default value 0.\n";
+    }
     return Vec3(x, y, z);
+}
+
+template <typename Ty>
+Ty extract_from(
+    const tinyxml2::XMLElement* elem, 
+    std::string value_name = "value",
+    std::string error_what = ""
+) {
+    tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
+    Ty result;
+    if constexpr (std::is_same_v<std::decay_t<Ty>, bool>) {
+        e_ret = elem->QueryBoolAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, float>) {
+        e_ret = elem->QueryFloatAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, int>) {
+        e_ret = elem->QueryIntAttribute(value_name.c_str(), &result);
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, std::string>) {
+        result = elem->Attribute(value_name.c_str());
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, Vec4>) {
+        result = parseColor(elem->Attribute(value_name.c_str()));
+    } else if constexpr (std::is_same_v<std::decay_t<Ty>, Vec3>) {
+        result = parsePoint(elem);
+    } else {
+        std::cerr << "Unsupported type '" << typeid(Ty).name() << "' for extraction.\n";
+        std::cerr << error_what;
+        throw std::runtime_error("`extract_from` unsupported type.");
+    }
+
+    if (e_ret != tinyxml2::XML_SUCCESS) {
+        throw std::runtime_error("`extract_from` parsing failed");
+    }
+    return result;
+}
+
+template <typename Ty>
+bool parse_attribute(
+    const tinyxml2::XMLElement* elem, 
+    Ty& inout_value,
+    std::initializer_list<std::string>&& names,
+    std::string error_what = "",
+    std::string value_name = "value",
+    std::string name_name = "name"
+) {
+    if (elem == nullptr) {
+        return false;
+    }
+    bool name_check = false;
+    const std::string elem_name = elem->Attribute(name_name.c_str());
+    for (auto name: names) {
+        if (name == elem_name) {
+            name_check = true;
+            break;
+        }
+    }
+    if (!name_check) return false;
+    inout_value = extract_from<Ty>(elem, value_name, error_what);
+    return true;
 }
 
 void parseBSDF(
@@ -164,16 +176,10 @@ void parseBSDF(
 
     const tinyxml2::XMLElement* element = bsdf_elem->FirstChildElement("rgb");
     while (element) {
-        std::string name = element->Attribute("name");
-        std::string value = element->Attribute("value");
-        Vec4 color = parseColor(value);
-        if (name == "k_d") {
-            k_d = color;
-        } else if (name == "k_s") {
-            k_s = color;
-        } else if (name == "k_g" || name == "sigma_a") {
-            k_g = color;
-        }
+        std::string err_what = "[BSDF] Vec4 parsing failed.\n";
+        parse_attribute<Vec4>(element, k_d, {"k_d"}, err_what);
+        parse_attribute<Vec4>(element, k_s, {"k_s"}, err_what);
+        parse_attribute<Vec4>(element, k_g, {"k_g", "sigma_a"}, err_what);
         element = element->NextSiblingElement("rgb");
     }
 
@@ -254,18 +260,13 @@ void parseBSDF(
             }
         }
         element = bsdf_elem->FirstChildElement("float");
-        tinyxml2::XMLError eResult;
+        std::string error_what = "[Conductor-GGX] Roughness parsing failed.\n";
         while (element) {
-            std::string name = element->Attribute("name");
-            if (name == "roughness_x" || name == "rough_x") {
-                eResult = element->QueryFloatAttribute("value", &roughness_x);
+            if (parse_attribute<float>(element, roughness_x, {"roughness_x", "rough_x"}, error_what)) {
                 roughness_x = std::clamp(roughness_x, 0.001f, 1.f);
-            } else if (name == "roughness_y" || name == "rough_y") {
-                eResult = element->QueryFloatAttribute("value", &roughness_y);
+            } else if (parse_attribute<float>(element, roughness_y, {"roughness_y", "rough_y"}, error_what)) {
                 roughness_y = std::clamp(roughness_y, 0.001f, 1.f);
             }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'roughness' attribute");
             element = element->NextSiblingElement("float");
         }
         info.bsdf.store_ggx_params(mtype, k_g, roughness_x, roughness_y);
@@ -275,29 +276,17 @@ void parseBSDF(
         k_g = Vec4(0, 1);
         element = bsdf_elem->FirstChildElement("float");
         float trans_scaler = 1.f, thickness = 0.f, ior = 1.33f;
-        bool penetrable = false;
+        std::string error_what = "[Plastic] BSDF Param parsing failed.\n";
         while (element) {
-            std::string name = element->Attribute("name");
-            tinyxml2::XMLError eResult;
-            if (name == "trans_scaler") {
-                eResult = element->QueryFloatAttribute("value", &trans_scaler);
-            } else if (name == "thickness") {
-                eResult = element->QueryFloatAttribute("value", &thickness);
-            } else if (name == "ior") {
-                eResult = element->QueryFloatAttribute("value", &ior);
-            }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
+            parse_attribute<float>(element, trans_scaler, {"trans_scaler"}, error_what);
+            parse_attribute<float>(element, thickness, {"thickness"}, error_what);
+            parse_attribute<float>(element, ior, {"ior"}, error_what);
             element = element->NextSiblingElement("float");
         }
+        bool penetrable = false;
         element = bsdf_elem->FirstChildElement("bool");
-        if (element) {
-            if (std::string(element->Attribute("name")) == "penetrable") {
-                auto eResult = element->QueryBoolAttribute("value", &penetrable);
-                if (eResult != tinyxml2::XML_SUCCESS)
-                    throw std::runtime_error("Error parsing 'plastic BRDF' attribute");
-            }
-        }
+        parse_attribute<bool>(element, penetrable, {"penetrable"}, error_what);
+
         if (type == "plastic") {
             info.type = BSDFType::Plastic;
             create_plastic_bsdf<PlasticBSDF><<<1, 1>>>(bsdfs + index, 
@@ -370,14 +359,8 @@ void parseEmitter(
 
     const tinyxml2::XMLElement* element = emitter_elem->FirstChildElement("rgb");
     while (element) {
-        std::string name = element->Attribute("name");
-        std::string value = element->Attribute("value");
-        Vec4 color = parseColor(value);
-        if (name == "emission") {
-            emission = color;
-        } else if (name == "scaler") {
-            scaler = color;
-        }
+        parse_attribute<Vec4>(element, emission, {"emission"});
+        parse_attribute<Vec4>(element, scaler, {"scaler"});
         element = element->NextSiblingElement("rgb");
     }
     scaler.w() = scaler.x();
@@ -409,22 +392,13 @@ void parseEmitter(
     if (type == "point") {
         element = emitter_elem->FirstChildElement("point");
         Vec3 pos(0, 0, 0);
-        std::string name = element->Attribute("name");
-        if (name == "center" || name == "pos")
-            pos = parsePoint(element);
+        parse_attribute(element, pos, {"center", "pos"});
         create_point_source<<<1, 1>>>(emitters[index], emission * scaler, pos);
     } else if (type == "area-spot") {
         element = emitter_elem->FirstChildElement("float");
         float cos_val = 0.99;
-        if (element) {
-            std::string name = element->Attribute("name");
-            tinyxml2::XMLError eResult;
-            if (name == "half-angle" || name == "angle") {
-                eResult = element->QueryFloatAttribute("value", &cos_val);
-                cos_val = cosf(cos_val * DEG2RAD);
-            }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'Area Spot Emitter' attribute");
+        if (parse_attribute(element, cos_val, {"half-angle", "angle"})) {
+            cos_val = cosf(cos_val * DEG2RAD);
         }
         element = emitter_elem->FirstChildElement("string");
         std::string attr_name = element->Attribute("name");
@@ -448,17 +422,9 @@ void parseEmitter(
         element = emitter_elem->FirstChildElement("float");
         float scaler = 1.f, azimuth = 0.f, zenith = 0.f;
         while (element) {
-            std::string name = element->Attribute("name");
-            tinyxml2::XMLError eResult;
-            if (name == "scaler") {
-                eResult = element->QueryFloatAttribute("value", &scaler);
-            } else if (name == "azimuth") {
-                eResult = element->QueryFloatAttribute("value", &azimuth);
-            } else if (name == "zenith") {
-                eResult = element->QueryFloatAttribute("value", &zenith);
-            }
-            if (eResult != tinyxml2::XML_SUCCESS)
-                throw std::runtime_error("Error parsing 'EnvMap Emitter' attribute");
+            parse_attribute(element, scaler, {"scaler"});
+            parse_attribute(element, azimuth, {"azimuth"});
+            parse_attribute(element, zenith, {"zenith"});
             element = element->NextSiblingElement("float");
         }
         e_props.back().second = Vec4(-1, scaler, azimuth, zenith);
@@ -518,15 +484,11 @@ void parseSphereShape(
     float radius = 0;
     Vec3 center(0, 0, 0);
     element = shapeElement->FirstChildElement("point");
-    std::string name = element->Attribute("name");
-    if (name == "center" || name == "pos")
-        center = parsePoint(element);
+    parse_attribute(element, center, {"center", "pos"});
 
     element = shapeElement->FirstChildElement("float");
-    name = element->Attribute("name");
-    if (name == "r" || name == "radius") {
-        element->QueryFloatAttribute("value", &radius);
-    }
+    parse_attribute(element, radius, {"radius", "r"});
+
     verts_list[0].emplace_back(std::move(center));
     verts_list[1].emplace_back(radius, radius, radius);
     verts_list[2].emplace_back(0, 0, 0);
@@ -556,9 +518,8 @@ void parseObjShape(
 
     const tinyxml2::XMLElement* element = shapeElement->FirstChildElement("string");
     while (element) {
-        name = element->Attribute("name");
-        if (name == "filename") {
-            filename = folder_prefix + element->Attribute("value");
+        if (parse_attribute(element, filename, {"filename"})) {
+            filename = folder_prefix + filename;
         }
         element = element->NextSiblingElement("string");
     }
@@ -630,7 +591,7 @@ void parseObjShape(
                 }
             }
             if (!has_normal) {      // compute normals ourselves
-                printf("Normal vector not found in '%s' primitive %llu, computing yet normal direction is not guaranteed.\n", name.c_str(), i);
+                printf("Normal vector not found in '%s' primitive %lu, computing yet normal direction is not guaranteed.\n", name.c_str(), i);
                 Vec3 diff = verts_list[1][i] - verts_list[0][i];
                 Vec3 normal = diff.cross(verts_list[2][i] - verts_list[0][i]).normalized_h();
                 for (int j = 0; j < 3; j++) {
@@ -654,23 +615,23 @@ void parseTexture(
         TextureInfo info;
         const tinyxml2::XMLElement* element = tex_elem->FirstChildElement("string");
         while (element) {
-            std::string name = element->Attribute("name");
-            if (name == "diffuse" || name == "emission") {
-                info.diff_path = folder_prefix + element->Attribute("value");
-            } else if (name == "specular") {
-                info.spec_path = folder_prefix + element->Attribute("value");
-            } else if (name == "glossy" || name == "sigma_a") {
-                info.glos_path = folder_prefix + element->Attribute("value");
-            } else if (name == "rough1" || name == "roughness_1" || name == "ior") {
-                info.rough_path1 = folder_prefix + element->Attribute("value");
-                info.is_rough_ior = name == "ior";
-            } else if (name == "rough2" || name == "roughness_2") {
+            std::string path_value;
+            if (parse_attribute(element, path_value, {"diffuse", "emission"})) {
+                info.diff_path = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"specular"})) {
+                info.spec_path = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"glossy", "sigma_a"})) {
+                info.glos_path = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"rough1", "roughness_1", "ior"})) {
+                info.rough_path1 = folder_prefix + path_value;
+                info.is_rough_ior = element->Attribute("name") == "ior";
+            } else if (parse_attribute(element, path_value, {"rough2", "roughness_2"})) {
                 info.is_rough_ior = false;
-                info.rough_path2 = folder_prefix + element->Attribute("value");
-            } else if (name == "normal") {
-                info.normal_path = folder_prefix + element->Attribute("value");
+                info.rough_path2 = folder_prefix + path_value;
+            } else if (parse_attribute(element, path_value, {"normal"})) {
+                info.normal_path = folder_prefix + path_value;
             } else {
-                std::cerr << "Unsupported texture type '" << name << "'\n";
+                std::cerr << "Unsupported texture type '" << element->Attribute("name") << "'\n";
                 throw std::runtime_error("Unexpected texture type.");
             }
             element = element->NextSiblingElement("string");
@@ -706,18 +667,10 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
         std::string type = phase_elem->Attribute("type");
         type = type.empty() ? "homogeneous" : type;
 
-        tinyxml2::XMLError e_ret = tinyxml2::XML_SUCCESS;
         if (type == "hg") {
             float g = 0.2;
             const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
-            if (sub_elem) {
-                std::string name = sub_elem->Attribute("name");
-                if (name.length()) {
-                    if (name == "g") {
-                        e_ret = sub_elem->QueryFloatAttribute("value", &g);
-                    }
-                }
-            }
+            parse_attribute(sub_elem, g, {"g"});
             create_device_phase<HenyeyGreensteinPhase><<<1, 1>>>(phase_funcs, i, g);
         } else if (type == "isotropic") {
             create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
@@ -726,15 +679,9 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
             const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
             while (sub_elem) {
                 std::string name = sub_elem->Attribute("name");
-                if (name.length()) {
-                    if (name == "g1") {
-                        e_ret = sub_elem->QueryFloatAttribute("value", &g1);
-                    } else if (name == "g2") {
-                        e_ret = sub_elem->QueryFloatAttribute("value", &g2);
-                    } else if (name == "weight") {
-                        e_ret = sub_elem->QueryFloatAttribute("value", &weight);
-                    }
-                }
+                parse_attribute(sub_elem, g1, {"g1"});
+                parse_attribute(sub_elem, g2, {"g2"});
+                parse_attribute(sub_elem, weight, {"weight"});
                 sub_elem = sub_elem->NextSiblingElement("string");
             }
             create_device_phase<MixedHGPhaseFunction><<<1, 1>>>(phase_funcs, i, g1, g2, weight);
@@ -746,10 +693,6 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
         } else {
             std::cerr << "Phase type '" << type << "' not supported. Fall back to 'isotropic'\n";
             create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
-        }
-        if (e_ret != tinyxml2::XML_SUCCESS) {
-            std::cerr << "Unexcepted error occurred during parsing of phase function '" << type << "'\n";
-            throw std::runtime_error("Error parsing Phase Function.");
         }
     }
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -805,13 +748,7 @@ std::pair<Medium**, size_t> parseMedium(
         element = vol_elem->FirstChildElement("float");
         float scale = 1;
         while (element) {
-            std::string name = element->Attribute("name");
-            if (name == "scale" || name == "scaler") {
-                if (element->QueryFloatAttribute("value", &scale) != tinyxml2::XML_SUCCESS) {
-                    std::cerr << "Volume '" << id << "' scale parsing unexpected error.\n";
-                    throw std::runtime_error("Density scaler parsing error.");
-                }
-            }
+            parse_attribute(element, scale, {"scale", "scaler"}, "Density scaler parsing error.");
             element = element->NextSiblingElement("float");
         }
         
@@ -819,12 +756,8 @@ std::pair<Medium**, size_t> parseMedium(
             element = vol_elem->FirstChildElement("rgb");
             Vec4 sigma_a(0, 1), sigma_s(1, 1);
             while (element) {
-                std::string name = element->Attribute("name");
-                if (name == "sigma_a") {
-                    sigma_a = parseColor(element->Attribute("value"));
-                } else if (name == "sigma_s") {
-                    sigma_s = parseColor(element->Attribute("value"));
-                }
+                parse_attribute(element, sigma_a, {"sigma_a"});
+                parse_attribute(element, sigma_s, {"sigma_s"});
                 element = element->NextSiblingElement("rgb");
             }
             create_homogeneous_volume<<<1, 1>>>(d_volumes, d_phase_funcs, i, phase_id, sigma_a, sigma_s, scale);
@@ -833,32 +766,25 @@ std::pair<Medium**, size_t> parseMedium(
             std::string name = element->Attribute("name"),
                         density_path, albedo_path = "", emission_path = "";
             while (element) {
-                name = element->Attribute("name");
-                if (name == "density") {
-                    density_path = folder_prefix + extract_from<std::string>(element);
-                } else if (name == "albedo") {
-                    albedo_path  = folder_prefix + extract_from<std::string>(element);
-                } else if (name == "emission") {
-                    emission_path = folder_prefix + extract_from<std::string>(element);
+                if (parse_attribute(element, density_path, {"density"})) {
+                    density_path = folder_prefix + density_path;
+                } else if (parse_attribute(element, albedo_path, {"albedo"})) {
+                    albedo_path = folder_prefix + albedo_path;
+                } else if (parse_attribute(element, emission_path, {"emission"})) {
+                    emission_path = folder_prefix + emission_path;
                 }
                 element = element->NextSiblingElement("string");
             }
 
             element = vol_elem->FirstChildElement("rgb");
-            name = element->Attribute("name");
             Vec4 albedo(1, 1, 1);
-            if (name == "albedo")
-                albedo = parseColor(element->Attribute("value"));
+            parse_attribute(element, albedo, {"albedo"});
 
             element = vol_elem->FirstChildElement("float");
-            float temp_scale = 1, emission_scale;
+            float temp_scale = 1, emission_scale = 1;
             while (element) {
-                std::string name = element->Attribute("name");
-                if (name == "temp-scale" || name == "temp_scale") {
-                    temp_scale = extract_from<float>(element);
-                } else if (name == "emission-scale" || name == "em-scale") {
-                    emission_scale = extract_from<float>(element);
-                }
+                parse_attribute(element, temp_scale, {"temp-scale", "temp_scale"});
+                parse_attribute(element, emission_scale, {"emission-scale", "em-scale"});
                 element = element->NextSiblingElement("float");
             }
 
@@ -899,16 +825,10 @@ void parseObjectMediumRef(
     }
     bool cullable = false;
     elem = node->FirstChildElement("bool");
-    if (elem) {
-        std::string name = elem->Attribute("name");
-        if (name == "cullable") {
-            if (elem->QueryBoolAttribute("value", &cullable) == tinyxml2::XML_SUCCESS) {
-                // object_id (32bit): (31: is_sphere), (30: is_cullable), (29, 28 reserved), (27 - 20: medium idx)
-                idx += static_cast<int>(cullable) << 10;        // shift by 10 bit (then shift by 20, will be 30)
-            }
-        }
+    if (parse_attribute(elem, cullable, {"cullable"})) {
+        // object_id (32bit): (31: is_sphere), (30: is_cullable), (29, 28 reserved), (27 - 20: medium idx)
+        idx += static_cast<int>(cullable) << 10;        // shift by 10 bit (then shift by 20, will be 30)
     }
-
     obj_med_idxs.push_back(idx);
 }
 
@@ -995,7 +915,7 @@ Scene::Scene(std::string path):
         throw std::runtime_error("Too many BSDF defined.");
     }
     CUDA_CHECK_RETURN(cudaMalloc(&bsdfs, sizeof(BSDF*) * num_bsdfs));
-    CUDA_CHECK_RETURN(cudaMemset(bsdfs, NULL, sizeof(BSDF*) * num_bsdfs));
+    CUDA_CHECK_RETURN(cudaMemset(bsdfs, 0, sizeof(BSDF*) * num_bsdfs));
 
     textures.init(num_bsdfs);
     for (int i = 0; i < num_bsdfs; i++) {
@@ -1041,8 +961,6 @@ Scene::Scene(std::string path):
 
         shape_elem = shape_elem->NextSiblingElement("shape");
     }
-
-    printf("Here 4.\n");
 
     num_prims = prim_offset;
     if (num_prims > MAX_PRIMITIVE_NUM) {
@@ -1101,7 +1019,7 @@ Scene::Scene(std::string path):
     printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
     // The nodes.size is actually twice the number of nodes
     // since Each BVH node will be separated to two float4, nodes will store two float4 for each node
-    printf("[BVH] Total nodes: %llu, leaves: %llu\n", nodes.size(), prim_idxs.size());
+    printf("[BVH] Total nodes: %lu, leaves: %lu\n", nodes.size(), prim_idxs.size());
 
     tp = std::chrono::system_clock::now();
     std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
