@@ -10,6 +10,8 @@
  */
 
 #include "core/vec3.cuh"
+#include "core/vec4.cuh"
+#include "core/enums.cuh"
 #include "core/sampler.cuh"
 
 // POD: phase function sampling sample
@@ -30,4 +32,8 @@ public:
     CPT_GPU virtual PhaseSample sample(Sampler& sp, Vec3 indir) const {
         return {std::move(indir), 1};
     } 
+
+    CPT_GPU virtual void set_param(Vec4&& data) {;}
 };
+
+extern const std::array<const char*, NumSupportedPhase> PHASES_NAMES;

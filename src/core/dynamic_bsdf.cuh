@@ -1,7 +1,72 @@
 #pragma once
 #include "bsdf/bsdf.cuh"
+#include "core/medium.cuh"
 #include "core/virtual_funcs.cuh"
 #include "core/preset_params.cuh"
+
+class MediumInfo {
+private:
+    int phase_id;
+public:
+    std::string name;       // medium name
+    std::string p_name;     // phase function name
+    MediumType mtype;
+    PhaseFuncType ptype;
+    mutable bool updated;
+    mutable bool phase_changed; // whether we have changed the phase function
+
+    MediumInfo(int phase_id = 0): phase_id(phase_id), name(""), p_name(""), mtype(MediumType::Homogeneous),
+            ptype(PhaseFuncType::NullForward), med_param{}, updated(false), phase_changed(false) {}
+    MediumInfo(std::string n, std::string pn, int phase_id, 
+        MediumType m_t = MediumType::Homogeneous, 
+        PhaseFuncType p_t = PhaseFuncType::NullForward):
+            phase_id(phase_id), name(n), p_name(""), mtype(m_t), ptype(p_t), med_param{}, updated(false), phase_changed(false) {}
+
+    int pid() const { return phase_id; };
+
+    struct MediumParams {
+        Vec4 sigma_a;           // const albedo for grid, or absorption for homo medium 
+        Vec4 sigma_s;           // emission scale and tempature scale
+        Vec4 phase;             // phase function param (at most 4 floats)
+        float scale;
+
+        MediumParams() {}
+        CONDITION_TEMPLATE_SEP_3(VType1, VType2, VType3, Vec4, Vec4, Vec4)
+        MediumParams(VType1&& _sa, VType2&& _ss, VType3&& _ph, float scale):
+            sigma_a(std::forward<VType1>(_sa)), 
+            sigma_s(std::forward<VType2>(_ss)), 
+            phase(std::forward<VType3>(_ph)), scale(scale)
+        {}
+
+        float& emission_scale() { return sigma_s.x(); }
+        float& temperature_scale() { return sigma_s.y(); }
+        float& g() { return phase.x(); }
+        float& g1() { return phase.x(); }
+        float& g2() { return phase.y(); }
+        float& weight() { return phase.z(); }
+
+        inline float emission_scale() const { return sigma_s.x(); }
+        inline float temperature_scale() const { return sigma_s.y(); }
+        inline float g() const { return phase.x(); }
+        inline float g1() const { return phase.x(); }
+        inline float g2() const { return phase.y(); }
+        inline float weight() const { return phase.z(); }
+    } med_param;
+
+    // this will update the GPU data, but will not create new vptr and vtable
+    void copy_to_gpu(Medium*& to_store, PhaseFunction** phases) const;
+
+    void create_on_gpu(Medium*& medium, PhaseFunction** phases);
+
+    void clamp_phase_vals() {
+        if (std::abs(med_param.phase.x()) < 1e-3) {
+            med_param.phase.x() = med_param.phase.x() >= 0 ? 1e-3f : -1e-3f;
+        }
+        if (std::abs(med_param.phase.y()) < 1e-3) {
+            med_param.phase.y() = med_param.phase.y() >= 0 ? 1e-3f : -1e-3f;
+        }
+    }
+};
 
 class BSDFInfo {
 public:

@@ -11,6 +11,7 @@
 static constexpr int MAX_PRIMITIVE_NUM = 64000000;
 static constexpr int MAX_ALLOWED_BSDF = 48;
 static constexpr const char* SCENE_VERSION = "1.2";
+using TypedVec4 = std::pair<Vec4, PhaseFuncType>;
 
 const std::unordered_map<std::string, MetalType> conductor_mapping = {
     {"Au", MetalType::Au},
@@ -643,7 +644,8 @@ void parseTexture(
 
 std::pair<PhaseFunction**, size_t> parsePhaseFunction(
     const tinyxml2::XMLElement* phase_elem,
-    std::unordered_map<std::string, int>& phase_maps
+    std::unordered_map<std::string, int>& phase_maps,
+    std::vector<TypedVec4>& phase_params
 ) {
     const tinyxml2::XMLElement* traverser = phase_elem;
     size_t num_phase = 1;          // allocate a dummy volume 
@@ -653,7 +655,7 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
     }
 
     PhaseFunction** phase_funcs = nullptr;
-
+    phase_params.emplace_back();
     // We need at least one (Dummy), this won't cost much
     CUDA_CHECK_RETURN(cudaMalloc(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
     create_device_phase<PhaseFunction><<<1, 1>>>(phase_funcs, 0);
@@ -663,14 +665,17 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
     }     
 
     for (size_t i = 1; i < num_phase; i++, phase_elem = phase_elem->NextSiblingElement("phase")) {
+        phase_params.emplace_back(Vec4(), PhaseFuncType::Isotropic);
         phase_maps[phase_elem->Attribute("id")] = i;
         std::string type = phase_elem->Attribute("type");
-        type = type.empty() ? "homogeneous" : type;
+        type = type.empty() ? "hg" : type;
 
         if (type == "hg") {
             float g = 0.2;
             const tinyxml2::XMLElement* sub_elem = phase_elem->FirstChildElement("float");
             parse_attribute(sub_elem, g, {"g"});
+            phase_params.back().first.x() = g;
+            phase_params.back().second = PhaseFuncType::HenyeyGreenstein;
             create_device_phase<HenyeyGreensteinPhase><<<1, 1>>>(phase_funcs, i, g);
         } else if (type == "isotropic") {
             create_device_phase<IsotropicPhase><<<1, 1>>>(phase_funcs, i);
@@ -684,8 +689,11 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
                 parse_attribute(sub_elem, weight, {"weight"});
                 sub_elem = sub_elem->NextSiblingElement("string");
             }
+            phase_params.back().first  = Vec4(g1, g2, weight);
+            phase_params.back().second = PhaseFuncType::DuoHG;
             create_device_phase<MixedHGPhaseFunction><<<1, 1>>>(phase_funcs, i, g1, g2, weight);
         } else if (type == "rayleigh") {
+            phase_params.back().second = PhaseFuncType::Rayleigh;
             create_device_phase<RayleighPhase><<<1, 1>>>(phase_funcs, i);
         } else if (type == "sggx") {
             std::cerr << "Current SGGX is not implemented but will be in the future. Fall back to 'isotropic'\n";
@@ -702,6 +710,8 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
 std::pair<Medium**, size_t> parseMedium(
     const tinyxml2::XMLElement* vol_elem, 
     const std::unordered_map<std::string, int>& phase_maps,
+    const std::vector<TypedVec4>& phase_params,
+    std::vector<MediumInfo>& med_infos,
     std::unordered_map<std::string, int>& medium_maps,
     GridVolumeManager&  gvm,
     PhaseFunction**     d_phase_funcs,                  // device_memory
@@ -716,6 +726,7 @@ std::pair<Medium**, size_t> parseMedium(
 
     // We need at least one (Dummy), this won't cost much
     Medium** d_volumes = nullptr;
+    med_infos.emplace_back();
     CUDA_CHECK_RETURN(cudaMalloc(&d_volumes, sizeof(Medium*) * num_volume));
     create_device_medium<Medium><<<1, 1>>>(d_volumes, d_phase_funcs, 0, 0);
     if (num_volume == 1) {
@@ -744,6 +755,7 @@ std::pair<Medium**, size_t> parseMedium(
             std::cerr << "Volume '" << id << "' has no valid phase function.\n";
             throw std::runtime_error("No valid phase function attached.");
         }
+        MediumInfo med_info(id, element->Attribute("id"), phase_id, MediumType::Homogeneous, phase_params[phase_id].second);
 
         element = vol_elem->FirstChildElement("float");
         float scale = 1;
@@ -760,8 +772,10 @@ std::pair<Medium**, size_t> parseMedium(
                 parse_attribute(element, sigma_s, {"sigma_s"});
                 element = element->NextSiblingElement("rgb");
             }
+            med_info.med_param = MediumInfo::MediumParams(sigma_a, sigma_s, phase_params[phase_id].first, scale);
             create_homogeneous_volume<<<1, 1>>>(d_volumes, d_phase_funcs, i, phase_id, sigma_a, sigma_s, scale);
         } else if (type == "grid") {
+            med_info.mtype = MediumType::Grid;
             element = vol_elem->FirstChildElement("string");
             std::string name = element->Attribute("name"),
                         density_path, albedo_path = "", emission_path = "";
@@ -793,7 +807,11 @@ std::pair<Medium**, size_t> parseMedium(
             } else {
                 gvm.push(i, phase_id, density_path, scale, temp_scale, emission_scale, albedo_path, emission_path);
             }
+
+            med_info.med_param = MediumInfo::MediumParams(albedo, 
+                    Vec4(emission_scale, temp_scale, 0), phase_params[phase_id].first, scale);
         }
+        med_infos.emplace_back(std::move(med_info));
     }
     if (!gvm.empty()) {
         gvm.to_gpu(d_volumes, d_phase_funcs);
@@ -895,14 +913,16 @@ Scene::Scene(std::string path):
     
     std::unordered_map<std::string, TextureInfo> tex_map;
     std::unordered_map<std::string, int> phase_maps, medium_maps;
+    std::vector<TypedVec4> phase_params;
 
     parseTexture(texture_elem, tex_map, folder_prefix);
 
-    auto phase_pr = parsePhaseFunction(phase_elem, phase_maps);
+    auto phase_pr = parsePhaseFunction(phase_elem, phase_maps, phase_params);
     phases = phase_pr.first;
     num_phase_func = phase_pr.second;
 
-    auto media_pr = parseMedium(medium_elem, phase_maps, medium_maps, gvm, phases, folder_prefix);
+    auto media_pr = parseMedium(medium_elem, phase_maps, phase_params, 
+                medium_infos, medium_maps, gvm, phases, folder_prefix);
     gvm.load_black_body_data(folder_prefix);
     media = media_pr.first;
     num_medium = media_pr.second;
@@ -1141,6 +1161,21 @@ void Scene::update_materials() {
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
+void Scene::update_media() {
+    if (rdr_type != RendererType::MegaKernelVPT) return;
+    for (size_t i = 1; i < medium_infos.size(); i++) {
+        auto& med_info = medium_infos[i];
+        if (med_info.phase_changed) {
+            med_info.clamp_phase_vals();
+            med_info.create_on_gpu(media[i], phases);
+        } else {
+            med_info.clamp_phase_vals();
+            med_info.copy_to_gpu(media[i], phases);
+        }
+    }
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+}
+
 template <typename T>
 static void free_resource(std::vector<T>& vec) {
     vec.clear();
@@ -1159,6 +1194,7 @@ void Scene::free_resources() {
     free_resource(nodes);
     free_resource(cache_nodes);
     free_resource(emitter_prims);
+    gvm.free_resources();
 }
 
 void Scene::export_prims(PrecomputedArray& verts, NormalArray& norms, ConstBuffer<PackedHalf2>& uvs) const {

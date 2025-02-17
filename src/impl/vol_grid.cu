@@ -322,3 +322,19 @@ CPT_CPU void GridVolumeManager::load_black_body_data(std::string path_prefix) {
     _emit_tex = createArrayTexture1D<float4>(data.data(), _bb_emission, data.size());
     CUDA_CHECK_RETURN(cudaMemcpyToSymbol(emit_tex, &_emit_tex, sizeof(cudaTextureObject_t)));
 }
+
+CPT_CPU void GridVolumeManager::free_resources() {
+    medium_indices.clear();
+    phase_indices.clear();
+    const_albedos.clear();
+    scales.clear();
+    temp_scales.clear();
+    em_scales.clear();
+
+    medium_indices.shrink_to_fit();
+    phase_indices.shrink_to_fit();
+    const_albedos.shrink_to_fit();
+    scales.shrink_to_fit();
+    temp_scales.shrink_to_fit();
+    em_scales.shrink_to_fit();
+}

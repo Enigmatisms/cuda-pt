@@ -129,7 +129,8 @@ int main(int argc, char** argv) {
             break;
         }
         gui::render_settings_interface(
-            *scene.cam, scene.emitter_props, scene.bsdf_infos, scene.config.md, params, scene.rdr_type
+            *scene.cam, scene.emitter_props, scene.bsdf_infos, 
+            scene.medium_infos, scene.config.md, params, scene.rdr_type
         );
         if (!io.WantCaptureMouse) {        // no sub window (setting window or main menu) is focused
             params.camera_update |= gui::mouse_camera_update(*scene.cam, params.rot_sensitivity);
@@ -141,6 +142,9 @@ int main(int argc, char** argv) {
         if (params.material_update) {
             scene.update_materials();
             CUDA_CHECK_RETURN(cudaMemcpyToSymbol(c_material, scene.bsdfs, scene.num_bsdfs * sizeof(BSDF*)));
+        }
+        if (params.medium_update) {
+            scene.update_media();
         }
         if (params.camera_update) {
             renderer->update_camera(scene.cam);

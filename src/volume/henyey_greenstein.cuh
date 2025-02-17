@@ -50,6 +50,11 @@ public:
         sincospif(2.f * uv.y(), &sin_phi, &cos_phi);
         return {Vec3(cos_phi * sin_theta, sin_phi * sin_theta, cos_theta), 1.f};
     } 
+
+    CPT_GPU void set_param(Vec4&& data) override {
+        g = data.x();
+        g2 = data.x() * data.x();
+    }
 };
 
 class MixedHGPhaseFunction: public PhaseFunction {
@@ -78,4 +83,10 @@ public:
         mis_w /= weight * pdf1 + (1.f - weight) * pdf2;
         return {use_first ? dir1 : dir2, mis_w};
     } 
+
+    CPT_GPU void set_param(Vec4&& data) override {
+        ph1.set_param(Vec4(data.x()));
+        ph2.set_param(Vec4(data.y()));
+        weight = data.z();
+    }
 };

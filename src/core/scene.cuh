@@ -54,6 +54,7 @@ public:
     // modify the emitter emission on-the-fly
     std::vector<std::pair<std::string, Vec4>> emitter_props;
     std::vector<BSDFInfo> bsdf_infos;
+    std::vector<MediumInfo> medium_infos;
     GridVolumeManager gvm;
 
     RenderingConfig config;
@@ -83,6 +84,7 @@ public:
 
     void update_emitters();
     void update_materials();
+    void update_media();
 
     void print() const noexcept;
 };

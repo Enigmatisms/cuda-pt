@@ -98,6 +98,14 @@ public:
     CPT_GPU_INLINE Vec4 transmittance(const Ray& ray, Sampler& sp, float dist) const override;
 
     CPT_GPU Vec4 query_emission(Vec3 pos, Sampler& sp) const override;
+
+    CONDITION_TEMPLATE(VType, Vec4)
+    CPT_GPU_INLINE void set_params(VType&& _const_alb, float _s, float _tp_s, float _em_s) {
+        const_alb      = Vec3(_const_alb.x(), _const_alb.y(), _const_alb.z());
+        scale          = _s;
+        temp_scale     = _tp_s;
+        emission_scale = _em_s;
+    }
 };
 
 class GridVolumeManager {
@@ -169,4 +177,6 @@ public:
     }
 
     CPT_CPU void load_black_body_data(std::string path_prefix);
+
+    CPT_CPU void free_resources();
 };

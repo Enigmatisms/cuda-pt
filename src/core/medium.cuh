@@ -7,11 +7,13 @@
  * @date 2025-02-02
  * @copyright Copyright (c) 2025
  */
-
+#include <array>
 #include <type_traits>
 #include "core/so3.cuh"
 #include "core/aabb.cuh"
 #include "core/phase.cuh"   
+
+extern const std::array<const char*, NumSupportedMedium> MEDIUM_NAMES;
 
 // POD, compacted Index Bound
 struct IndexBound {

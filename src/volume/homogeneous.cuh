@@ -67,6 +67,13 @@ public:
     CPT_GPU_INLINE Vec4 transmittance(const Ray& ray, Sampler& /* sp */, float dist) const override {
         return (-sigma_t * dist).exp_xyz();
     }
+
+    CONDITION_TEMPLATE_SEP_2(VType1, VType2, Vec4, Vec4)
+    CPT_GPU_INLINE void set_params(VType1&& _sig_a, VType2&& _sig_s) {
+        sigma_t = _sig_a + _sig_s;
+        sigma_a = std::forward<VType1>(_sig_a);
+        sigma_s = std::forward<VType2>(_sig_s);
+    }
 };
 
 CPT_KERNEL void create_homogeneous_volume(

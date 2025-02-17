@@ -47,16 +47,16 @@
 	<phase type="isotropic" id="bunny-vol"/>
 
 	<medium type="homogeneous" id="large-vol">
-		<rgb name="sigma_a" value="0.001"/>
-		<rgb name="sigma_s" value="20.0"/>
-		<float name="scale" value="1"/>
+		<rgb name="sigma_a" value="0.0001"/>
+		<rgb name="sigma_s" value="1.0"/>
+		<float name="scale" value="20"/>
 		<ref type="phase" id="large-vol"/>
 	</medium>
 
 	<medium type="homogeneous" id="bunny-vol">
-		<rgb name="sigma_a" value="0.001"/>
-		<rgb name="sigma_s" value="100.0, 90.0, 80.0"/>
-		<float name="scale" value="0.1"/>
+		<rgb name="sigma_a" value="0.00001"/>
+		<rgb name="sigma_s" value="1.0, 0.9, 0.8"/>
+		<float name="scale" value="10.0"/>
 		<ref type="phase" id="bunny-vol"/>
 	</medium>
 

@@ -19,6 +19,9 @@ CPT_KERNEL void create_device_phase(PhaseFunction** dst, int index, Args... args
                   "PhaseType must be derived from PhaseFunction");
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
+        if (dst[index]) delete dst[index];
         dst[index] = new PhaseType(args...);
     }
 }
+
+CPT_KERNEL void load_phase_kernel(PhaseFunction** dst, int index, Vec4 data);

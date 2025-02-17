@@ -27,3 +27,13 @@ CPT_KERNEL void create_device_medium(
         dst[med_id]->bind_phase_function(phases[ph_id]);
     }
 }
+
+CPT_KERNEL void load_homogeneous_kernel(Medium** dst, Vec4 sigma_a, Vec4 sigma_s, float scale);
+
+CPT_KERNEL void load_grid_kernel(Medium** dst, Vec4 const_alb, float scale, float tp_scale, float em_scale);
+
+CPT_KERNEL void bind_phase_func_kernel(
+    Medium** dst, 
+    PhaseFunction** phases, 
+    int ph_id
+);
