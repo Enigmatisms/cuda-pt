@@ -32,8 +32,8 @@ CPT_GPU_INLINE int extract_tracing_info(int obj_idx, int& hit_med_idx, bool& is_
 struct BankStack {
     uchar4 data;
 
-    // null medium is not allowed
-    CPT_GPU_INLINE BankStack(int val = 0): data{0, 0, 0, 0} {
+    CPT_GPU BankStack() {}
+    CPT_GPU BankStack(int val): data{0, 0, 0, 0} {
         if (val > 0) {
             data.x = 1;
             data.y = uint8_t(val);
@@ -187,13 +187,15 @@ CPT_KERNEL void render_vpt_kernel(
     int px = threadIdx.x + blockIdx.x * blockDim.x, py = threadIdx.y + blockIdx.y * blockDim.y;
     // You see, I only provide one cam_vol_idx, meaning that camera itself can not be placed in the inner levels
     // of nested volumes. Also, this cam_vol_idx is fixed, camera movement will not update it (might be incorrect)
-    BankStack nested_vols(cam_vol_idx);
+    __shared__ BankStack nested_vol_arr[128];
+
     Sampler sampler(px + py * image.w(), seed_offset);
     // step 1: generate ray
 
     // step 2: bouncing around the scene until the max depth is reached
     int min_index = -1, diff_b = 0, spec_b = 0, trans_b = 0, volm_b = 0;
     int tid = threadIdx.x + threadIdx.y * blockDim.x;
+    nested_vol_arr[tid] = BankStack(cam_vol_idx);
     extern __shared__ uint4 s_cached[];
     // cache near root level BVH nodes for faster traversal
     if (tid < cache_num) {      // no more than 256 nodes will be cached
@@ -230,7 +232,7 @@ CPT_KERNEL void render_vpt_kernel(
         objects[object_id].unpack(material_id, emitter_id);
         hit_emitter = emitter_id > 0;
 
-        const Medium* medium  = media[nested_vols.top()];        
+        const Medium* medium  = media[nested_vol_arr[tid].top()];        
         MediumSample md = medium->sample(ray, sampler);
         throughput *= md.local_thp;
 
@@ -242,9 +244,9 @@ CPT_KERNEL void render_vpt_kernel(
             bool same_hemisphere = ray.d.dot(it.shading_norm) > 0;
             if ((it.shading_norm.dot(ray.d) > 0 ^ same_hemisphere) == false) {
                 if (same_hemisphere) {  // if we are exiting from a medium
-                    nested_vols.pop();
+                    nested_vol_arr[tid].pop();
                 } else {                // if we are entering a medium
-                    nested_vols.push(hit_med_idx);
+                    nested_vol_arr[tid].push(hit_med_idx);
                 }
             }
             continue;
@@ -258,13 +260,13 @@ CPT_KERNEL void render_vpt_kernel(
         float direct_pdf = 1;       // direct_pdf is the product of light_sampling_pdf and emitter_pdf
         Emitter* emitter = sample_emitter(sampler, direct_pdf, num_emitter, md.flag > 0 ? 0 : emitter_id);
         // (2) sample a point on the emitter (we avoid sampling the hit emitter)
-        emitter_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
-        emitter_id = emitter_prims[emitter_id];               // extra mapping, introduced after BVH primitive reordering
+        int emitter_prim_id = objects[emitter->get_obj_ref()].sample_emitter_primitive(sampler.discrete1D(), direct_pdf);
+        emitter_prim_id = emitter_prims[emitter_prim_id];               // extra mapping, introduced after BVH primitive reordering
         Ray shadow_ray(ray.advance(md.dist), Vec3(0, 0, 0));
 
         // sacrificing the hemispherical sampling for envmap
         shadow_ray.d = emitter->sample(
-            shadow_ray.o, Vec3(0, 0, 1), direct_comp, direct_pdf, sampler.next2D(), verts, norms, uvs, emitter_id
+            shadow_ray.o, Vec3(0, 0, 1), direct_comp, direct_pdf, sampler.next2D(), verts, norms, uvs, emitter_prim_id
         ) - shadow_ray.o;
         
         float emit_len_mis = shadow_ray.d.length();
@@ -278,19 +280,19 @@ CPT_KERNEL void render_vpt_kernel(
             nee_tr = occlusion_transmittance_estimate(
                 shadow_ray, sampler, bvh_leaves, nodes, 
                 s_cached, verts, norms, media, node_num, 
-                cache_num, nested_vols, emit_len_mis - EPSILON 
+                cache_num, nested_vol_arr[tid], emit_len_mis - EPSILON 
             );
         }
         // even if the emitter is c_emitter[0], we are still going to evaluate direct component, in order to
         // introduce fewer diverging threads. Evaluating direct component is not a bottleneck
         ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;
+        Vec4 nee_thp;
         if (md.flag > 0) {  // medium event
             radiance += throughput * medium->query_emission(shadow_ray.o, sampler);
 
             float phase_pdf = medium->eval(shadow_ray.d, ray.d);
+            nee_thp = Vec4(phase_pdf, 1.f);
             emit_len_mis = direct_pdf + phase_pdf;
-            radiance += nee_tr * throughput * direct_comp * \
-                (phase_pdf * float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
             // printf("Here: %d, phase_pdf: %f, (%f, %f, %f)\n", nested_vols.top(), phase_pdf, throughput.x(), nee_tr.y(), );
 
             // Bounce the ray via material scattering
@@ -300,9 +302,6 @@ CPT_KERNEL void render_vpt_kernel(
             ray.set_delta(false);               // currently, there is no delta lobe for phase function
         } else {
             auto it = Primitive::get_interaction(verts, norms, uvs, ray.advance(ray.hit_t), prim_u, prim_v, min_index, is_triangle);
-
-            int material_id = 0, emitter_id = -1;
-            objects[object_id].unpack(material_id, emitter_id);
             hit_emitter = emitter_id > 0;
 
             // emitter MIS
@@ -316,8 +315,7 @@ CPT_KERNEL void render_vpt_kernel(
             // MIS for BSDF / light sampling, to achieve better rendering
             // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
             emit_len_mis = direct_pdf + c_material[material_id]->pdf(it, shadow_ray.d, ray.d, material_id) * emitter->non_delta();
-            radiance += nee_tr * throughput * direct_comp * c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id) * \
-                (float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
+            nee_thp = c_material[material_id]->eval(it, shadow_ray.d, ray.d, material_id);
 
             // Bounce the ray via material scattering
             
@@ -331,12 +329,14 @@ CPT_KERNEL void render_vpt_kernel(
             if ((it.shading_norm.dot(ray.d) > 0 ^ same_hemisphere) == false) {
                 // necessary branch, sigh... hate branches
                 if (same_hemisphere) {  // if we are exiting from a medium
-                    nested_vols.pop();
+                    nested_vol_arr[tid].pop();
                 } else {                // if we are entering a medium
-                    nested_vols.push(hit_med_idx);
+                    nested_vol_arr[tid].push(hit_med_idx);
                 }
             }
         }
+        radiance += nee_tr * throughput * direct_comp * \
+                (nee_thp * float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
         ray.o = std::move(shadow_ray.o);
         
         if (radiance.numeric_err())
