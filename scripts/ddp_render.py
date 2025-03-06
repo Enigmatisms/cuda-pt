@@ -115,7 +115,7 @@ def ddp_main(local_rank, args):
 
             if args.record_var:
                 var_image: torch.Tensor = renderer.variance()
-                if var_image.numel() is not None:
+                if var_image is not None and var_image.numel() is not None:
                     var_avg, _ = reduce_rendered_image(var_image, renderer.counter(), device, spp_total)
                     if local_rank == args.device_id_offset:
                         writer.add_scalar("variance/Average Variance", var_avg.mean() * world_size / spp_total, step+1)
