@@ -5,7 +5,6 @@
  * @date: 5.20.2024
  * @author: Qianyue He
 */
-#pragma once
 #include <array>
 #include "core/aos.cuh"
 #include "core/aabb.cuh"

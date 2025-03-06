@@ -2,7 +2,7 @@
 Distributed Rendering Via PyTorch DDP
 Use the following command for testing
 ```
-torchrun --nproc_per_node=2 ddp_render.py --config ./configs/run.conf
+torchrun --nproc_per_node=8 serial_render.py --config ./configs/serial.conf
 ```
 """
 import os
@@ -52,6 +52,17 @@ def update_density_value_in_xml(xml_path: str, new_density_path: str, new_emissi
         if emission_element is not None and new_emission_path:
             emission_element.set("value", new_emission_path)
 
+    tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+
+def update_minmax_time_in_xml(xml_path: str, min_time: float, max_time: float):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    
+    for elem in root.findall(".//renderer/float[@name='min_time']"):
+        elem.set("value", str(min_time))
+    for elem in root.findall(".//renderer/float[@name='max_time']"):
+        elem.set("value", str(max_time))
+    
     tree.write(xml_path, encoding="utf-8", xml_declaration=True)
 
 def get_all_nvdb_files_in_folder(folder_path: str, path_prefix: str):
@@ -126,9 +137,7 @@ def ddp_main(local_rank, args, file_index):
     renderer.release()
     dist.barrier()
 
-def main():
-    dist.init_process_group(backend="nccl", init_method="env://")
-    args = parse_args()
+def job_steady_vdb_serial(args):
     files_dn = get_all_nvdb_files_in_folder(args.volume_path, args.replace_path_dn)
     files_em = get_all_nvdb_files_in_folder(args.emission_path, args.replace_path_em)
     files_dn = natsort.natsorted(files_dn)
@@ -144,7 +153,27 @@ def main():
         CONSOLE.rule()
         CONSOLE.log(f"({i + 1:3d} / {len(files_dn):3d}) Current file: '{file_dn}' | '{file_em}'")
         CONSOLE.rule()
+
+def job_tof_rendering(args):
+    start_time = 0
+    time_interval = 0.022222222222222222222222
+    frame = 315
+    for i in range(frame, -1, -1):
+        local_rank = int(os.environ["LOCAL_RANK"])
+        time_min = start_time + float(i) * time_interval
+        time_max = time_min + time_interval
+        if local_rank == args.device_id_offset:
+            update_minmax_time_in_xml(args.scene_path, time_min, time_max)
+        ddp_main(local_rank + args.device_id_offset, args, i)
+        CONSOLE.rule()
+        CONSOLE.log(f"({i + 1:3d} / {frame:3d})")
+        CONSOLE.rule()
+
+def main(job):
+    dist.init_process_group(backend="nccl", init_method="env://")
+    args = parse_args()
+    job(args)
     dist.destroy_process_group()
 
 if __name__ == "__main__":
-    main()
+    main(job_tof_rendering)

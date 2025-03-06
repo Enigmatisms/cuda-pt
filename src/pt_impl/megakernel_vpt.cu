@@ -355,6 +355,9 @@ CPT_KERNEL void render_vpt_kernel(
                     (nee_thp * float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
         }
         total_dist += sampled_lobe != ScatterStateFlag::BSDF_NONE ? md.dist : 0;
+        CONDITION_BLOCK(md_params.max_time > 0 && total_dist >= md_params.max_time) {
+            break;
+        }
         ray.o = std::move(shadow_ray.o);
         
         if (radiance.numeric_err())

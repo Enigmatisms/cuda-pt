@@ -658,6 +658,7 @@ std::pair<PhaseFunction**, size_t> parsePhaseFunction(
     phase_params.emplace_back();
     // We need at least one (Dummy), this won't cost much
     CUDA_CHECK_RETURN(cudaMalloc(&phase_funcs, sizeof(PhaseFunction*) * num_phase));
+    CUDA_CHECK_RETURN(cudaMemset(phase_funcs, 0, sizeof(PhaseFunction*) * num_phase));
     create_device_phase<PhaseFunction><<<1, 1>>>(phase_funcs, 0);
     if (num_phase == 1) {      // return when there is no valid phase function
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -1115,8 +1116,8 @@ Scene::Scene(std::string path):
 Scene::~Scene() {
     destroy_gpu_alloc<<<1, num_bsdfs>>>(bsdfs);
     destroy_gpu_alloc<<<1, num_emitters + 1>>>(emitters);
-    destroy_gpu_alloc<<<1, num_phase_func + 1>>>(phases);
     destroy_gpu_alloc<<<1, num_medium + 1>>>(media);
+    destroy_gpu_alloc<<<1, num_phase_func + 1>>>(phases);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
     CUDA_CHECK_RETURN(cudaFree(bsdfs));

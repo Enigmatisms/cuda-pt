@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 #include "core/max_depth.h"
-#include "core/Vec4.cuh"
+#include "core/vec4.cuh"
 
 class DeviceCamera;
 class BSDFInfo;
