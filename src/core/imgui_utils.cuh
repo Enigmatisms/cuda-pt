@@ -5,7 +5,11 @@
 
 #include <driver_types.h>
 #include <GLFW/glfw3.h>
+#include <vector>
+#include <memory>
+#include <string>
 #include "core/max_depth.h"
+#include "core/Vec4.cuh"
 
 class DeviceCamera;
 class BSDFInfo;

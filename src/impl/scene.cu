@@ -1240,4 +1240,10 @@ void Scene::print() const noexcept {
     std::cout << "\t\tConfig: height:\t\t" << config.height << std::endl;
     std::cout << "\t\tConfig: Gamma corr:\t" << config.gamma_correction << std::endl;
     std::cout << std::endl;
+
+    if (config.md.max_time > 0) {
+        std::cout << "\tToF statistics: " << std::endl;
+        std::cout << "\t\tMin Time (unwarped):\t" << config.md.min_time << std::endl;
+        std::cout << "\t\tMax Time (unwarped):\t" << config.md.max_time << std::endl;
+    }
 }

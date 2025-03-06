@@ -25,6 +25,16 @@ CPT_GPU_INLINE int extract_tracing_info(int obj_idx, int& hit_med_idx, bool& is_
     return obj_idx & 0x000fffff;                            // extract low 20bits, return the object index
 }
 
+#ifdef SUPPORTS_TOF_RENDERING
+CPT_GPU_INLINE bool time_in_range(const MaxDepthParams& mdp, float t) {
+    return mdp.max_time <= 0 || (t < mdp.max_time && t > mdp.min_time);
+}
+#else
+constexpr CPT_GPU_INLINE bool time_in_range(const MaxDepthParams& mdp, float t) {
+    return true;
+}
+#endif // SUPPORTS_TOF_RENDERING
+
 /**
  * @brief Stack with only one bank (4B), used for handling nested volumes
  * x is the ptr, if x == 0, it means that active volume is 0 (not within a volume)
@@ -208,7 +218,7 @@ CPT_KERNEL void render_vpt_kernel(
     __syncthreads();
 
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
-    float emission_weight = 1.f;
+    float emission_weight = 1.f, total_dist = 0;
     
     for (int b = 0; b < md_params.max_depth; b++) {
         float prim_u = 0, prim_v = 0;
@@ -269,7 +279,7 @@ CPT_KERNEL void render_vpt_kernel(
             shadow_ray.o, Vec3(0, 0, 1), direct_comp, direct_pdf, sampler.next2D(), verts, norms, uvs, emitter_prim_id
         ) - shadow_ray.o;
         
-        float emit_len_mis = shadow_ray.d.length();
+        float emit_len_mis = shadow_ray.d.length(), shadow_length = emit_len_mis;
         shadow_ray.d *= __frcp_rn(emit_len_mis);              // normalized direction
 
         // After the emitter is sampled, we first perform NEE transmittance testing, for surface event
@@ -288,7 +298,9 @@ CPT_KERNEL void render_vpt_kernel(
         ScatterStateFlag sampled_lobe = ScatterStateFlag::BSDF_NONE;
         Vec4 nee_thp;
         if (md.flag > 0) {  // medium event
-            radiance += throughput * medium->query_emission(shadow_ray.o, sampler);
+            CONDITION_BLOCK(time_in_range(md_params, total_dist)) {
+                radiance += throughput * medium->query_emission(shadow_ray.o, sampler);
+            }
 
             float phase_pdf = medium->eval(shadow_ray.d, ray.d);
             nee_thp = Vec4(phase_pdf, 1.f);
@@ -310,7 +322,9 @@ CPT_KERNEL void render_vpt_kernel(
                     hit_emitter * (b > 0) * ray.non_delta());
 
             // check if the ray hits an emitter
-            radiance += throughput * c_emitter[emitter_id]->eval_le(&ray.d, &it) * emission_weight;
+            CONDITION_BLOCK(time_in_range(md_params, total_dist + shadow_length)) {
+                radiance += throughput * c_emitter[emitter_id]->eval_le(&ray.d, &it) * emission_weight;
+            }
 
             // MIS for BSDF / light sampling, to achieve better rendering
             // 1 / (direct + ...) is mis_weight direct_pdf / (direct_pdf + material_pdf), divided by direct_pdf
@@ -335,8 +349,12 @@ CPT_KERNEL void render_vpt_kernel(
                 }
             }
         }
-        radiance += nee_tr * throughput * direct_comp * \
-                (nee_thp * float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
+        // VPT time constraint
+        CONDITION_BLOCK(time_in_range(md_params, total_dist + shadow_length)) {
+            radiance += nee_tr * throughput * direct_comp * \
+                    (nee_thp * float(emit_len_mis > EPSILON) * __frcp_rn(emit_len_mis < EPSILON ? 1.f : emit_len_mis));
+        }
+        total_dist += sampled_lobe != ScatterStateFlag::BSDF_NONE ? md.dist : 0;
         ray.o = std::move(shadow_ray.o);
         
         if (radiance.numeric_err())

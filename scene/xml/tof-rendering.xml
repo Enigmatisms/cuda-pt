@@ -1,0 +1,168 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- A test file for mitsuba-like scene xml file parser -->
+<!-- Author: Qianyue He / Original credit goes to Wenzel Jakob -->
+<!-- Only Steady state rendering are supported -->
+<!-- Only RGB or rgb spectrums are supported -->
+<scene version="1.2">
+	<renderer type="vpt">
+		<integer name="sample_count" value="1024"/>
+        <integer name="max_bounce"   value="16"/>
+        <integer name="max_diffuse"  value="16"/>
+        <integer name="max_specular" value="16"/>
+        <integer name="max_transmit" value="16"/>
+
+		<integer name="specular_constraint" value="-1"/>
+		<bool name="bidirectional" value="false"/>
+		<float name="caustic_scaling" value="1.5"/>
+		<float name="min_time" value="4"/>
+		<float name="max_time" value="4.1"/>
+	</renderer>
+
+	<accelerator type="bvh">
+		<integer name="cache_level" value="6"/>
+        <integer name="max_node_num" value="8"/>
+
+		<float name="overlap_w" value="0.6"/>
+	</accelerator>
+	
+	<sensor type="perspective">
+		<float name="fov" value="20"/>
+        <bool name="hflip" value="true"/>
+		
+		<transform name="toWorld">
+			<lookat target="-16.710297, 2.659388, -1.069139" origin="-17.687838, 2.648695, -1.279611" up="0, 1, 0"/>
+		</transform>
+
+		<film type="film">
+			<integer name="width" value="800"/>
+			<integer name="height" value="800"/>
+			<bool name="gamma_correction" value="false"/>
+		</film>
+	</sensor>
+
+	<brdf type="conductor-ggx" id="large-box">
+		<string name="conductor" value="Au"/>
+		<float name="roughness_x" value="0.001"/>
+		<float name="roughness_y" value="0.001"/>
+		<rgb name="k_g" value="1"/>
+	</brdf>
+
+	<brdf type="lambertian" id="box">
+		<rgb name="k_d" value="#BCBCBC"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="white">
+		<rgb name="k_d" value="#BDBDBD"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="left_wall">
+		<rgb name="k_d" value="#DD2525"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="right_wall">
+		<rgb name="k_d" value="#25DD25"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<brdf type="lambertian" id="light">
+		<rgb name="k_d" value="#555555"/>
+		<rgb name="k_g" value="1.0"/>
+		<rgb name="k_s" value="0.0"/>
+	</brdf>
+
+	<emitter type="point" id="point1">
+		<rgb name="emission" value="1, 1, 1"/>
+		<rgb name="scaler" value="20"/>
+		<point name="center" x="3" y="4.8" z="3"/>
+	</emitter>
+
+	<phase type="isotropic" id="large-vol"/>
+
+	<medium type="homogeneous" id="large-vol">
+		<rgb name="sigma_a" value="0.00001"/>
+		<rgb name="sigma_s" value="1.0"/>
+		<float name="scale" value="0.5"/>
+		<ref type="phase" id="large-vol"/>
+	</medium>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/volume-bound.obj"/>
+		<ref type="material" id="large-box"/>
+		<ref type="medium" id="large-vol"/>
+		<bool name="cullable" value="true"/>
+	</shape>
+
+	<brdf type="plastic" id="bunny1">
+		<rgb name="k_d" value="0.6, 0, 0"/>
+		<rgb name="k_s" value="1.0, 1.0, 1.0"/>
+		<rgb name="sigma_a" value="0.1, 0.1, 0.1"/>
+		<float name="trans_scaler" value="0.5"/>
+		<float name="thickness" value="1"/>
+		<float name="ior" value="1.5"/>
+	</brdf>
+
+	<brdf type="specular" id="bunny2">
+		<rgb name="k_d" value="1.5"/>
+		<rgb name="k_s" value="0.99, 0.99, 0.99"/>
+		<rgb name="k_g" value="1.0"/>
+	</brdf>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/bunny.obj"/>
+		<ref type="material" id="bunny2"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/back.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/floor-bunny.obj"/>
+		<ref type="material" id="bunny1"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/ceiling.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/floor.obj"/>
+		<ref type="material" id="white"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/left_wall.obj"/>
+		<ref type="material" id="left_wall"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/tall-box.obj"/>
+		<ref type="material" id="large-box"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/short-box.obj"/>
+		<ref type="material" id="right_wall"/>
+	</shape>
+
+	<!-- <shape type="obj">
+		<string name="filename" value="../meshes/cbox/light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="area"/>
+	</shape>
+
+	<shape type="obj">
+		<string name="filename" value="../meshes/cbox/side-light.obj"/>
+		<ref type="material" id="light"/>
+		<ref type="emitter" id="side-light"/>
+	</shape> -->
+</scene>

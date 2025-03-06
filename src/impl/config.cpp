@@ -40,6 +40,10 @@ RenderingConfig RenderingConfig::from_xml(
             std::string name = node->Attribute("name");
             if (name == "caustic_scaling") {
                 node->QueryFloatAttribute("value", &config.caustic_scaling);
+            } else if (name == "min_time") {
+                node->QueryFloatAttribute("value", &config.md.min_time);
+            } else if (name == "max_time") {
+                node->QueryFloatAttribute("value", &config.md.max_time);
             }
             node = node->NextSiblingElement("float");
         }

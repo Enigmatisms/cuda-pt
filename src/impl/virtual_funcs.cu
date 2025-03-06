@@ -100,7 +100,7 @@ CPT_KERNEL void create_forward_bsdf(
 ) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         if (*dst) delete *dst;
-        *dst = new ForwardBSDF(ScatterStateFlag::BSDF_TRANSMIT);
+        *dst = new ForwardBSDF(ScatterStateFlag::BSDF_NONE);
     }
 }
 
