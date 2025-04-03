@@ -1,62 +1,50 @@
-# Code of Conduct for cuda-pt
-## Our Pledge
+# Contributing to CUDA-PT
 
-We as contributors and maintainers pledge to foster an open, welcoming, and harassment-free environment for everyone involved in this project. We value participation regardless of age, body size, disability, ethnicity, gender identity/expression, experience level, education, nationality, personal appearance, race, religion, or sexual orientation.
+We welcome contributions! Here's how to get started:
 
-## Expected Behavior
+## Before You Start
+- Check existing [Issues](https://github.com/Enigmatisms/cuda-pt/issues) and [PRs](https://github.com/Enigmatisms/cuda-pt/pulls)
+- Discuss major changes by opening an Issue first
 
-All community members should:
-- Show empathy and kindness in technical discussions
-- Respect differing perspectives and experience levels
-- Accept constructive criticism gracefully
-- Focus on collaborative problem-solving
-- Acknowledge mistakes and learn from them
+## Development Setup
+1. Fork the repository
+2. Install dependencies (check the README.md)
 
-## Unacceptable Behavior
+## Making Changes
+1. Create a feature branch:
+   ```bash
+   git checkout -b feat/your-feature-name
+   ```
+2. Follow our coding style:
+   - CUDA best practices
+   - 4-space indentation
+   - Descriptive variable names
+3. Test your changes:
+   ```bash
+   make test
+   ```
 
-Prohibited conduct includes but is not limited to:
-- Sexualized language/imagery or unwelcome advances
-- Derogatory comments, personal/political attacks, or trolling
-- Public/private harassment of any form
-- Publishing others' private information without consent
-- Other conduct inappropriate for professional settings
+## Submitting a PR
+1. Push to your fork: `git push origin your-branch-name`
+2. Open a [Pull Request](https://github.com/Enigmatisms/cuda-pt/compare)
+3. Include:
+   - Description of changes
+   - Related issues (e.g., "Closes #123")
+   - Test results/output
 
-## Enforcement Responsibilities
+## Code Review
+- Maintainers will review within 3 business days
+- Be prepared to:
+  - Discuss implementation choices
+  - Make requested changes
+  - Update documentation
 
-Project maintainers will:
-- Clarify and enforce standards of acceptable behavior
-- Remove/edit inappropriate content (issues, PRs, comments)
-- Communicate moderation decisions transparently when appropriate
+## Style Guide
+- Currently not applicable, I will manually adjust the coding style.
 
-## Scope
-
-This Code applies to all project spaces including:
-- GitHub repositories
-- Issue trackers and PR discussions
-- Official communication channels
-- Events representing the project
-
-## Enforcement Process
-
-Violations should be reported in the **Issues** sections. All reports will be:
-- Reviewed promptly and confidentially
-- Investigated fairly by project maintainers
-- Addressed with appropriate corrective actions
-
-### Consequences may include:
-1. **Correction**: Private warning with explanation (may request public apology)
-2. **Warning**: Temporary interaction restrictions
-3. **Temporary Ban**: Limited-time exclusion from participation
-4. **Permanent Ban**: Indefinite removal from community spaces
-
-## Attribution
-
-This Code adapts the [Contributor Covenant 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html) with enforcement guidelines inspired by Mozilla's standards.
+## Need Help?
+Ask in [Discussions](https://github.com/Enigmatisms/cuda-pt/discussions) or contact @Enigmatisms
 
 ---
 
-**Implementation Notes:**
-1. Insert your actual contact, like your email
-2. Consider adding localized translations if needed
-3. Link to enforcement FAQ from Contributor Covenant
-4. Pin this document in your repository's COMMUNITY section
+All contributors must follow our [Code of Conduct](CODE_OF_CONDUCT.md).
