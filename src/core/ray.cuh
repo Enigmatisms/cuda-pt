@@ -1,14 +1,30 @@
+// Copyright (C) 2025 Qianyue He
+//
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License
+// as published by the Free Software Foundation, either
+// version 3 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
+// the GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General
+// Public License along with this program. If not, see
+//
+//             <https://www.gnu.org/licenses/>.
+
 /**
- * Ray definition
- * TODO (6.18): Stream Compaction
  * @author: Qianyue He
+ * @brief Ray definition
  * @date:  (modified) 6.18.2024
-*/
+ */
 
 #pragma once
 #include "vec3.cuh"
 
-// the ray contains 32 Bytes (128 bit). Our ray is able to be transfered
+// the ray contains 32 Bytes (128 bit). Our ray is able to be transferred
 // by two LDS.128 / ST.128
 struct Ray {
     Vec3 o;
@@ -26,20 +42,22 @@ struct Ray {
     // the ray is marked active since construction
     CONDITION_TEMPLATE_2(T1, T2, Vec3)
     CPT_CPU_GPU
-    Ray(T1&& o_, T2&& d_, float hitT = MAX_DIST) : 
-        o(std::forward<T1>(o_)), hit_t(hitT), d(std::forward<T2>(d_)), ray_tag(0x10000000) {}
+    Ray(T1 &&o_, T2 &&d_, float hitT = MAX_DIST)
+        : o(std::forward<T1>(o_)), hit_t(hitT), d(std::forward<T2>(d_)),
+          ray_tag(0x10000000) {}
 
     CPT_CPU_GPU_INLINE
     Vec3 advance(float t) const noexcept {
-        return Vec3(fmaf(d.x(), t, o.x()), fmaf(d.y(), t, o.y()), fmaf(d.z(), t, o.z()));
-    } 
+        return Vec3(fmaf(d.x(), t, o.x()), fmaf(d.y(), t, o.y()),
+                    fmaf(d.z(), t, o.z()));
+    }
 
     CPT_CPU_GPU_INLINE bool is_active() const noexcept {
         return (ray_tag & 0x10000000) > 0;
     }
 
     CPT_CPU_GPU_INLINE void set_active(bool v) noexcept {
-        ray_tag &= 0xefffffff;      // clear bit 28
+        ray_tag &= 0xefffffff; // clear bit 28
         ray_tag |= uint32_t(v) << 28;
     }
 
@@ -48,7 +66,7 @@ struct Ray {
     }
 
     CPT_CPU_GPU_INLINE void set_hit_index(uint32_t min_index) noexcept {
-        ray_tag = (0xf0000000 & ray_tag) | min_index; 
+        ray_tag = (0xf0000000 & ray_tag) | min_index;
     }
 
     CPT_CPU_GPU_INLINE bool is_hit() const noexcept {
@@ -56,7 +74,7 @@ struct Ray {
     }
 
     CPT_CPU_GPU_INLINE void clr_hit() noexcept {
-        ray_tag &= 0xdfffffff;      // clear bit 29
+        ray_tag &= 0xdfffffff; // clear bit 29
     }
 
     CPT_CPU_GPU_INLINE void set_hit(bool is_hit = true) noexcept {
@@ -65,11 +83,11 @@ struct Ray {
     }
 
     CPT_CPU_GPU_INLINE bool non_delta() const noexcept {
-        return (ray_tag & 0x40000000) == 0;      // check bit 30
+        return (ray_tag & 0x40000000) == 0; // check bit 30
     }
 
     CPT_CPU_GPU_INLINE void set_delta(bool v) noexcept {
-        ray_tag &= 0xbfffffff;      // clear bit 30
+        ray_tag &= 0xbfffffff; // clear bit 30
         ray_tag |= uint32_t(v) << 30;
     }
 

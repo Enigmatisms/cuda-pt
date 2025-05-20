@@ -1,27 +1,44 @@
+// Copyright (C) 2025 Qianyue He
+//
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License
+// as published by the Free Software Foundation, either
+// version 3 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
+// the GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General
+// Public License along with this program. If not, see
+//
+//             <https://www.gnu.org/licenses/>.
+
 /**
- * Scene parser (from xml)
  * @author: Qianyue He
+ * @brief Scene parser (from xml)
  * @date:   2024.5.24
-*/
+ */
 #pragma once
-#include <vector>
-#include <string>
+#include "bsdf/bsdf.cuh"
+#include "core/bvh.cuh"
+#include "core/camera_model.cuh"
+#include "core/config.h"
+#include "core/dynamic_bsdf.cuh"
+#include "core/emitter.cuh"
+#include "core/object.cuh"
+#include "core/textures.cuh"
+#include "core/virtual_funcs.cuh"
+#include "volume/medium_registry.cuh"
+#include <cuda_runtime.h>
 #include <iostream>
 #include <sstream>
+#include <string>
+#include <tiny_obj_loader.h>
 #include <tinyxml2.h>
 #include <unordered_map>
-#include <cuda_runtime.h>
-#include <tiny_obj_loader.h>
-#include "core/config.h"
-#include "core/bvh.cuh"
-#include "bsdf/bsdf.cuh"
-#include "core/object.cuh"
-#include "core/emitter.cuh"
-#include "core/textures.cuh"
-#include "core/camera_model.cuh"
-#include "core/virtual_funcs.cuh"
-#include "core/dynamic_bsdf.cuh"
-#include "volume/medium_registry.cuh"
+#include <vector>
 
 using Vec4Arr = std::vector<Vec4>;
 using Vec3Arr = std::vector<Vec3>;
@@ -30,11 +47,11 @@ using Vec2Arr = std::vector<Vec2>;
 extern const std::array<std::string, NumRendererType> RENDER_TYPE_STR;
 
 class Scene {
-public:
-    BSDF** bsdfs;
-    Emitter** emitters;
-    PhaseFunction** phases;
-    Medium** media;
+  public:
+    BSDF **bsdfs;
+    Emitter **emitters;
+    PhaseFunction **phases;
+    Medium **media;
     std::vector<ObjInfo> objects;
     std::vector<bool> sphere_flags;
     std::vector<int> obj_idxs;
@@ -59,7 +76,7 @@ public:
 
     RenderingConfig config;
 
-    DeviceCamera* cam;
+    DeviceCamera *cam;
 
     int num_bsdfs;
     int num_prims;
@@ -71,16 +88,16 @@ public:
     int num_medium;
 
     RendererType rdr_type;
-public:
+
+  public:
     Scene(std::string path);
     ~Scene();
 
-    void export_prims(PrecomputedArray& verts, NormalArray& norms, ConstBuffer<PackedHalf2>& uvs) const;
+    void export_prims(PrecomputedArray &verts, NormalArray &norms,
+                      ConstBuffer<PackedHalf2> &uvs) const;
     void free_resources();
 
-    bool bvh_available() const noexcept {
-        return !nodes.empty();
-    }
+    bool bvh_available() const noexcept { return !nodes.empty(); }
 
     void update_emitters();
     void update_materials();

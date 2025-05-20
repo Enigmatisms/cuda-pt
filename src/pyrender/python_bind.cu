@@ -1,8 +1,30 @@
-#include <nanobind/nanobind.h>
-#include "./python_render.cuh"
+// Copyright (C) 2025 Qianyue He
+//
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License
+// as published by the Free Software Foundation, either
+// version 3 of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
+// the GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General
+// Public License along with this program. If not, see
+//
+//             <https://www.gnu.org/licenses/>.
 
-const char* CONSTRUCTOR_DOC = 
-R"doc(
+/**
+ * @author Qianyue He
+ * @brief DDP renderer python binding
+ * @date Unknown
+ */
+#include "./python_render.cuh"
+#include <nanobind/nanobind.h>
+
+const char *CONSTRUCTOR_DOC =
+    R"doc(
 Initialize the renderer with the given scene path to an XML scene file.
 
 Parameters:
@@ -12,8 +34,8 @@ Parameters:
         so that the rendering output is different
 )doc";
 
-const char* RENDER_DOC      = \
-R"doc(
+const char *RENDER_DOC =
+    R"doc(
 Render a frame using the specified path tracer settings.
 
 Parameters:
@@ -25,11 +47,14 @@ Parameters:
 Returns:
     torch.Tensor: A tensor containing the rendered image.
 )doc";
-const char* INFO_DOC       = "Print the basic settings of the PythonRenderer.";
-const char* RELEASE_DOC    = "Release the resource of the PythonRenderer.";
-const char* COUNTER_DOC    = "Return the frames accumulated of the current instance.";
-const char* FRAME_TIME_DOC = "Return the average frame time of the renderer (in milliseconds).";
-const char* VARIANCE_DOC   = "Return the variance estimation buffer (single channel float32).";
+const char *INFO_DOC = "Print the basic settings of the PythonRenderer.";
+const char *RELEASE_DOC = "Release the resource of the PythonRenderer.";
+const char *COUNTER_DOC =
+    "Return the frames accumulated of the current instance.";
+const char *FRAME_TIME_DOC =
+    "Return the average frame time of the renderer (in milliseconds).";
+const char *VARIANCE_DOC =
+    "Return the variance estimation buffer (single channel float32).";
 
 namespace nb = nanobind;
 

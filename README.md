@@ -18,7 +18,7 @@ Distributed parallel rendering supported, via [nanobind](https://github.com/wjak
 | ---------------------------------- | ----------------------- | -------------------------- |
 | ![](./assets/kitchen-variance.jpg) | ![](./assets/depth.jpg) | ![](./assets/bvh-cost.jpg) |
 
-| Online Param Setter                | Volumetric Path Tracing[^1]            | 
+| Online Param Setter                | Volumetric Path Tracing[^1]            |
 | ---------------------------------- | --------------------------- |
 | <div align="center"><video src="https://github.com/user-attachments/assets/fc098d93-7acb-4232-8a7e-c39518af2db4"/></div> | <div align="center"><video src="https://github.com/user-attachments/assets/89a5234e-44f7-48a6-bed4-ee2beb6fe7b3"/></div> |
 [^1]: The video is offline-rendered with my distributed parallel renderer. The smoke is simulated by Blender and exported to `.nvdb` format for my renderer.
@@ -50,7 +50,7 @@ Note that, if you have built the code and you have changed the code in `src` aft
 
 ##### Linux
 
-The following dependencies should be satisified:
+The following dependencies should be satisfied:
 
 ```shell
 sudo apt install libglew-dev libwayland-dev libxkbcommon-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
@@ -82,9 +82,9 @@ Currently, this repo supports:
 
 - [x] Megakernel unidirectional path tracing.
 - [x] Wavefront unidirectional path tracing with stream compaction. Currently, WFPT is a bit slower than Megakernel PT.
-- [x] GPU volumetric path tracer (Megakernel). Supports homogeneous and grid volume (NanoVDB), with online parameter setters. 
+- [x] GPU volumetric path tracer (Megakernel). Supports homogeneous and grid volume (NanoVDB), with online parameter setters.
 - [x] BVH cost visualizer and depth renderer.
-- [x] GPU BVH: A stackless GPU surface area heuristic BVH. 
+- [x] GPU BVH: A stackless GPU surface area heuristic BVH.
 - [x] CUDA pitched textures for environment maps, normal, roughness, index of refraction and albedo.
 - [x] Online hot reloading of the scene params. Check out the video down below.
 
@@ -98,7 +98,7 @@ Currently, this repo supports:
 I've tried a handful of tricks, unfortunately, due to the limitation of time I haven't document any of these (including statistical profiling and analysis) and I currently only have vague (somewhat) concepts of DOs and DON'Ts. Emmm... I really want to summarize all of them, in November, after landing on a good job. So wish me good luck.
 
 - [x] Divergence control part I (loop 'pre-converge')
-- [x] Divergence control part II: megakernel or wavefront? 
+- [x] Divergence control part II: megakernel or wavefront?
 - [x] Stream compaction for WFPT. Shader Execution Reordering (SER) on Ada Lovelace architecture (NVIDIA 40x GPU) (More in-depth reading on this topic, since NVIDIA said almost nothing important in their SER white-book).
 - [x] Coalesced access: SoA in WFPT and lg-throttle problem for AoS
 - [x] Local memory: dynamic indexing considered harmful
@@ -121,4 +121,4 @@ I've tried a handful of tricks, unfortunately, due to the limitation of time I h
 
 ### Visualizer Notes
 - [x] `imgui` has no CMakeLists.txt so we should write it ourselves.
-- [x] I think it is painful to use GLEW for windows: after compilation, `glew32.dll` should be manually copied to `Windows/System32`. Also, we should build GLEW manually.   
+- [x] I think it is painful to use GLEW for windows: after compilation, `glew32.dll` should be manually copied to `Windows/System32`. Also, we should build GLEW manually.
