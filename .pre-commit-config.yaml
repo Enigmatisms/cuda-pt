@@ -48,10 +48,6 @@ repos:
           --force-exclude,
           --config=.typos.toml
         ]
-        # exclude: |
-        #   (?x)^(
-        #     src/viewer_impl/imgui_utils.cu
-        #   )$
   # For Python files
   - repo: https://github.com/psf/black-pre-commit-mirror
     rev: 24.8.0
@@ -71,22 +67,6 @@ repos:
         entry: python ./scripts/codestyle/clang_format.py
         language: system
         files: \.(c|cc|cxx|cpp|cu|cuh|h|hpp)$
-        # exclude: |
-        #   (?x)^(
-        #     src/viewer_impl/imgui_utils.cu
-        #   )$
-  - repo: local
-    hooks:
-      - id: cpplint-cpp-source
-        name: cpplint
-        description: Check C++ code style using cpplint.py.
-        entry: python ./scripts/codestyle/cpplint_pre_commit.py
-        language: system
-        files: \.(cc|cxx|cpp|cu|cuh|h|hpp)$
-        args:
-          - --extensions=cc,cxx,cpp,cu,cuh,h,hpp
-          - --filter=-readability/fn_size,-build/include_what_you_use,-build/c++17,-whitespace/parens,-runtime/references,-whitespace/comments
-          - --quiet
   - repo: local
     hooks:
       - id: clang-tidy

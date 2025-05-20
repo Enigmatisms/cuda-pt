@@ -1,9 +1,5 @@
 IncludeCategories:
   - Regex:           '^<GL/glew\.h>'
     Priority:        0
-  - Regex:           '^<imgui.*>'
-    Priority:        1
-  - Regex:           '^<.*>'
-    Priority:        2
-  - Regex:           '.*'
-    Priority:        3
+
+IndentWidth: 4

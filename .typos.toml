@@ -1,9 +1,16 @@
-[default.extend-identifiers]
-fov = "fov"
-FoV = "FoV"
-FOV = "FOV"
 
 [default.extend-words]
 fov = "fov"
 FoV = "FoV"
 FOV = "FOV"
+mis = "mis"
+MIS = "MIS"
+Ba  = "Ba"
+Fo  = "Fo"
+tht = "tht"
+SER = "SER"
+pn  = "pn"
+Optin = "Optin"
+
+[default]
+check-strings = true
