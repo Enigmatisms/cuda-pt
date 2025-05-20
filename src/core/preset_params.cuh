@@ -15,10 +15,13 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
-#pragma once
 /**
+ * @author Qianyue He
  * @brief Metal Parameters & Dispersion Params
+ * @date 2025.02.05
  */
+#pragma once
+
 #include "core/enums.cuh"
 #include "core/vec3.cuh"
 #include <array>

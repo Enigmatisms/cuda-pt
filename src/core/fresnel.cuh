@@ -15,13 +15,12 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
-#pragma once
 /**
- * @brief Fresnel Term
  * @author: Qianyue He
+ * @brief Fresnel Term
  * @date: 2024.12.10
  */
-
+#pragma once
 #include "core/vec3.cuh"
 #include "core/vec4.cuh"
 

@@ -16,8 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Frequently used sampler
  * @author: Qianyue He
+ * @brief Frequently used sampler
  * @date:   5.12.2024
  */
 #pragma once

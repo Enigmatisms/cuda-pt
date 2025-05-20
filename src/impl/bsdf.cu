@@ -16,10 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file bsdf.cu
  * @author Qianyue He
- * @date 2024-11-06
- * @copyright Copyright (c) 2024
+ * @brief BSDF implementation
+ * @date 2024.11.06
  */
 #include "bsdf/bsdf.cuh"
 

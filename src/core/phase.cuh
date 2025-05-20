@@ -15,16 +15,13 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
-#pragma once
 /**
- * @file phase.cuh
  * @author Qianyue He
  * @brief Phase function base definition
- * @version 0.1
- * @date 2025-02-05
- * @copyright Copyright (c) 2025
- *
+ * @date 2025.02.05
  */
+
+#pragma once
 
 #include "core/enums.cuh"
 #include "core/sampler.cuh"

@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Megakernel Path Tracing
- * @date: 9.15.2024
  * @author: Qianyue He
+ * @brief Megakernel Path Tracing
+ * @date: 2024.9.15
  */
 #pragma once
 #include "core/camera_model.cuh"

@@ -18,7 +18,9 @@
 #include "bsdf/ggx_conductor.cuh"
 
 /**
- * GGX microfacet model
+ * @author Qianyue He
+ * @brief GGX microfacet model
+ * @date 2024.11.06
  */
 class GGX {
   private:

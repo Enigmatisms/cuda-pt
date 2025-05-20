@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file plastic.cuh
  * @author Qianyue He
  * @brief Plastic and PlasticForward BSDF
- * @date 2025-01-06
- * @copyright Copyright (c) 2025
+ * @date 2025.01.06
  */
 
 #pragma once

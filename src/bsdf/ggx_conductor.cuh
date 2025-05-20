@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file ggx_conductor.cuh
  * @author Qianyue He
  * @brief GGX microfacet normal distribution based BSDF
- * @date 2025-01-06
- * @copyright Copyright (c) 2025
+ * @date 2025.01.06
  */
 
 #pragma once

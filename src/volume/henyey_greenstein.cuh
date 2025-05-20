@@ -15,15 +15,12 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
-#pragma once
 /**
- * @file henyey_greenstein.cuh
  * @author Qianyue He
  * @brief Henyey Greenstein phase function
- * @version 0.1
- * @date 2025-02-05
- * @copyright Copyright (c) 2025
+ * @date 2025.02.05
  */
+#pragma once
 #include "core/constants.cuh"
 #include "core/phase.cuh"
 #include "core/sampling.cuh"

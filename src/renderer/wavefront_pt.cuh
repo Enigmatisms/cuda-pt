@@ -16,7 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * (W)ave(f)ront (S)imple path tracing with stream multiprocessing
+ * @author Qianyue He
+ * @brief (W)ave(f)ront (S)imple path tracing with stream multiprocessing
  * We first consider how to make a WF tracer, then we start optimizing it, hence
  * this is a 'Simple' one
  *
@@ -36,7 +37,6 @@
  * (64, 128), (128, 128), (192, 128)        |  1   2   3   4  | stream 4: (0,
  * 192), (64, 192), (128, 192), (192, 192)        |  1   2   3   4  |
  *
- * @author Qianyue He
  * @date   2024.6.20
  */
 #pragma once

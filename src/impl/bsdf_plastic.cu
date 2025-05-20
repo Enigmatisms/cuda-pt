@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Plastic BSDF model
+ * @date 2024.11.06
+ */
 #include "bsdf/plastic.cuh"
 
 CPT_CPU_GPU PlasticBSDF::PlasticBSDF(Vec4 _k_d, Vec4 _k_s, Vec4 sigma_a,

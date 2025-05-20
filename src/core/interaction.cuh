@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Ray intersection (or scattering event) interaction point
- * @author: Qianyue He
- * @date:   4.29.2024
+ * @author Qianyue He
+ * @brief Ray intersection (or scattering event) interaction point
+ * @date  2024.4.29
  */
 #pragma once
 #include "core/vec2_half.cuh"

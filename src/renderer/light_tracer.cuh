@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Light tracing for caustics rendering
- * @date: 9.28.2024
  * @author: Qianyue He
+ * @brief Light tracing for caustics rendering
+ * @date: 2024.9.28
  */
 #pragma once
 #include "core/progress.h"

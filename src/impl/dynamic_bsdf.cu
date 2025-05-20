@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Dynamic BSDF hot reloading
+ * @date Unknown
+ */
 #include "core/dynamic_bsdf.cuh"
 #include "volume/medium_registry.cuh"
 #include "volume/phase_registry.cuh"

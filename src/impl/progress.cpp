@@ -16,9 +16,11 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Solution from
+ * @author Unknown
+ * @brief Solution from
  * https://stackoverflow.com/questions/14539867/how-to-display-a-progress-indicator-in-pure-c-c-cout-printf
  * C++ progress bar
+ * @date Unknown
  */
 #include "core/progress.h"
 

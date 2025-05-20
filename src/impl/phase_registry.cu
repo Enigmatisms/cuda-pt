@@ -14,7 +14,11 @@
 // Public License along with this program. If not, see
 //
 //             <https://www.gnu.org/licenses/>.
-
+/**
+ * @author Qianyue He
+ * @brief Phase function registry
+ * @date Unknown
+ */
 #include "volume/phase_registry.cuh"
 
 CPT_KERNEL void load_phase_kernel(PhaseFunction **dst, int index, Vec4 data) {

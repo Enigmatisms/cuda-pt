@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file bsdf_registry.cuh
  * @author Qianyue He
  * @brief Includes all the derived class of BSDF
- * @date 2025-01-06
- * @copyright Copyright (c) 2025
+ * @date 2025.01.06
  */
 
 #pragma once

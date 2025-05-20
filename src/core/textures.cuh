@@ -15,12 +15,13 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
-#pragma once
 /**
- * @brief Support for CUDA texture. Online loading is not supported
  * @author Qianyue He
+ * @brief Support for CUDA texture. Online loading is not supported
  * @date   2024.12.24
  */
+
+#pragma once
 
 #include "core/enums.cuh"
 #include "core/interaction.cuh"

@@ -16,8 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Rendering configuration
  * @author: Qianyue He
+ * @brief Rendering configuration
  * @date:   2024.5.24
  */
 

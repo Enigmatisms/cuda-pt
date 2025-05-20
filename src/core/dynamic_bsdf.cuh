@@ -15,6 +15,12 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author: Qianyue He
+ * @brief Hot reloading BSDF utility functions
+ * @date: 2024
+ */
+
 #pragma once
 #include "bsdf/bsdf.cuh"
 #include "core/medium.cuh"

@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file xyz.cuh
  * @author Qianyue He
  * @brief XYZ space conversion
- * @date 2024-12-27
- * @copyright Copyright (c) 2024
+ * @date 2024.12.27
  */
 #pragma once
 #include "core/vec3.cuh"

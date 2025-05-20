@@ -16,15 +16,15 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Megakernel Light Tracing (Implementation)
+ * @author: Qianyue He
+ * @brief Megakernel Light Tracing (Implementation)
  * Note that though LT and PT are both declared in `megakernel_pt.cuh`
  * We separate LT and PT implementation, for the sake of clarity
  * Also, I only intend to implement the megakernel version
  * Since LT is not so tile-based, WF ideas are less intuitive
  * just for me
  *
- * @date: 9.28.2024
- * @author: Qianyue He
+ * @date: 2024.9.28
  */
 #include "renderer/megakernel_pt.cuh"
 

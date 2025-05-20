@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Megakernel Volumetric Path Tracing (Implementation)
- * @date: 2025.2.7
  * @author: Qianyue He
+ * @brief Megakernel Volumetric Path Tracing (Implementation)
+ * @date: 2025.2.7
  */
 #include "core/camera_model.cuh"
 #include "core/max_depth.h"

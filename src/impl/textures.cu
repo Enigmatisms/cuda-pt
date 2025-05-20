@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Texture utility function
+ * @date Unknown
+ */
 #include "core/textures.cuh"
 #include <iostream>
 #include <omp.h>

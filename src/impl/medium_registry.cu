@@ -14,7 +14,11 @@
 // Public License along with this program. If not, see
 //
 //             <https://www.gnu.org/licenses/>.
-
+/**
+ * @author Qianyue He
+ * @brief Medium Registry
+ * @date Unknown
+ */
 #include "volume/medium_registry.cuh"
 
 CPT_KERNEL void load_homogeneous_kernel(Medium **dst, Vec4 sigma_a,

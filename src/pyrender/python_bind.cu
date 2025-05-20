@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief DDP renderer python binding
+ * @date Unknown
+ */
 #include "./python_render.cuh"
 #include <nanobind/nanobind.h>
 

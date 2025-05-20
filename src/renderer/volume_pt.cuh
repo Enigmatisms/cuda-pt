@@ -17,12 +17,9 @@
 
 #pragma once
 /**
- * @file volume_pt.cuh
  * @author Qianyue He
  * @brief Volume Path Tracer class definition
- * @version 0.1
- * @date 2025-02-09
- * @copyright Copyright (c) 2025
+ * @date 2025.02.09
  */
 
 #include "core/medium.cuh"

@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
+ * @author: Qianyue He
  * @brief CUDA/CPU 2D vector (Half) implementation
  * Note that Half Vector is only used in GPU, host has no access to half
- * @author: Qianyue He
  * @date:  2024.11.4
  */
 #pragma once

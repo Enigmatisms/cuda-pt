@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file forward.cuh
  * @author Qianyue He
  * @brief Forward BSDF that does not influence radiance
- * @date 2025-02-09
- * @copyright Copyright (c) 2025
+ * @date 2025.02.09
  *
  */
 #pragma once

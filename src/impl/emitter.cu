@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Emitter Method Implementation
+ * @date Unknown
+ */
 #include "core/emitter.cuh"
 #include "core/textures.cuh"
 

@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file specular.cuh
  * @author Qianyue He
  * @brief Mirror Specular BSDF
- * @date 2025-01-06
- * @copyright Copyright (c) 2025
+ * @date 2025.01.06
  */
 #pragma once
 

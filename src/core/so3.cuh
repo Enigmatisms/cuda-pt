@@ -16,10 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * I have to write the linear algebra myself...
- * this is the definition of rotation matrix
- * @date: 4.29.2024
  * @author: Qianyue He
+ * @brief Definition of SO3 transformation
+ * @date: 2024.4.29
  */
 #pragma once
 #include "core/quaternion.cuh"

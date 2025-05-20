@@ -16,16 +16,13 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file rayleigh.cuh
  * @author Qianyue He
  * @brief Rayleigh phase function
- * @version 0.1
- * @date 2025-02-05
- * @copyright Copyright (c) 2025
- *
  * Implement the direct inverse CDF from paper:
  * Importance Sampling the Rayleigh Phase Function
+ * @date 2025.02.05
  */
+#pragma once
 
 #include "core/constants.cuh"
 #include "core/phase.cuh"

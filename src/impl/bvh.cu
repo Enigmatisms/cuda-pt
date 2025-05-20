@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file bvh.cpp
  * @author Qianyue He
- * @date 2023.5 -> 2024.9
  * @brief BVH construction main logic
- * @copyright Copyright (c) 2023-2024
+ * @date 2023.5 -> 2024.9
  */
 
 #include "core/bvh_opt.cuh"

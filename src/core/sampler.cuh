@@ -16,12 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Random value generator CUDA
- * @date: 5.5.2024
  * @author: Qianyue He
- *
- * Note that CUDA supports Sobol sequence
- * therefore... well, very interesting
+ * @brief Random value generator CUDA
+ * @date: 2024.5.5
  */
 #pragma once
 #include "core/cuda_utils.cuh"

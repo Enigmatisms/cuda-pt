@@ -16,11 +16,10 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
-*   Timer utility
-    @date 2023.12.27
-    @author: Qianyue He
-
-    Adapted from my repo: https://github.com/Enigmatisms/scds-pb.git
+ * @author Qianyue He
+ * @brief Timer utility
+ * Adapted from my repo: https://github.com/Enigmatisms/scds-pb.git
+ * @date 2023.12.27
  */
 
 #pragma once

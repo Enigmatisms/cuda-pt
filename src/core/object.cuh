@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * CUDA object information
- * @date: 5.20.2024
  * @author: Qianyue He
+ * @brief CUDA object information
+ * @date: 2024.5.20
  */
 #pragma once
 #include "core/aabb.cuh"

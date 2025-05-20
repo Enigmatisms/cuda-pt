@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file enums.cuh
  * @author Qianyue He
- * @version 0.1
- * @date 2025-01-09
- * @copyright Copyright (c) 2025
+ * @brief Enum types
+ * @date 2025.01.09
  */
 #pragma once
 #include <stdint.h>

@@ -15,6 +15,12 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author: Qianyue He
+ * @brief Intrinsic Utilities for CUDA
+ * @date: 2024
+ */
+
 #pragma once
 #include <algorithm>
 #include <chrono>

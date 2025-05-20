@@ -16,9 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Megakernel Volumetric Path Tracing
- * @date: 2025.2.7
  * @author: Qianyue He
+ * @brief Megakernel Volumetric Path Tracing
  *
  * Note that, the current implementation does not support nested volume that are
  * 4 or more levels. [volume-1  [volume-2 [volume-3]   ]   ]  is the limit
@@ -28,6 +27,7 @@
  * Also, non-strict nesting ( [vol-1    [vol-1 & vol-2 intersection]    vol-2])
  * will also be erroneous, it won't break down but the result will also be
  * incorrect.
+ * @date: 2025.2.7
  */
 #pragma once
 #include "core/camera_model.cuh"

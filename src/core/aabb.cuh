@@ -16,17 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * The definition of two common shapes: Sphere & Triangle
- * the classes defined here will contain the primitive ID and object ID
- * primitive ID points to the primitive data, including:
- * (1) vertex id: 3 vec3 (indicating the position of the vertices). For spheres
- * only the first vec3 and the first value of the second vec3 will be used
- * AABB id is the same as vertex id
- * (2) normal id: 3 vec3 for vertex normal, sphere idx will have this idx set to
- * -1 (3) uv id: 3 vec2 for UV coordinates,  sphere idx will have this idx set
- * to -1 (4) object id: to query material property or texture
- *
- * method: intersect
+ * @author Qianyue He
+ * @brief Axis Aligned Bounding Box
+ * @date 2025.01.06
  */
 
 #pragma once

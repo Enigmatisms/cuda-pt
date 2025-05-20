@@ -16,8 +16,10 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Online visualization based on imgui
+ * @author Qianyue He
+ * @brief Online visualization based on imgui
  * There we have some utility functions
+ * @date Unknown
  */
 
 #include "core/max_depth.h"

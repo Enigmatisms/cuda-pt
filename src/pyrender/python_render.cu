@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file python_render.cpp
  * @author Qianyue He
  * @brief Renderer Nanobind bindings
- * @date 2025-01-10
- * @copyright Copyright (c) 2025
+ * @date 2025.01.10
  */
 #include "./python_render.cuh"
 #include "core/scene.cuh"

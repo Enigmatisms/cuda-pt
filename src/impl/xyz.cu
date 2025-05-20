@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief XYZ color space definition
+ * @date Unknown
+ */
 #include "core/xyz.cuh"
 CPT_GPU_CONST ColorSpaceXYZ XYZ;
 

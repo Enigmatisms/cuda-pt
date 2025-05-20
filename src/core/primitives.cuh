@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Simplified primitive ray intersection implementation
- * without GPU variant
  * @author: Qianyue He
+ * @brief Simplified primitive ray intersection implementation
+ * without GPU variant
  * @date:   2024.10.5
  */
 

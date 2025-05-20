@@ -16,8 +16,10 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
+ * @author Qianyue He
  * @brief Color Map used for false color mapping in depth tracer
  * https://github.com/opencv/opencv/blob/7e2ebecd52232d02e2d53f3e073c076be73e3470/modules/imgproc/src/colormap.cpp
+ * @date Unknown
  */
 // ===================== Plasma ===================
 extern const float PLASMA_R[];

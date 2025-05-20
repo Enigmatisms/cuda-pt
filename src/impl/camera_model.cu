@@ -16,12 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file camera_model.cu
- *
  * @author Qianyue He
  * @brief implementation for some of the functions
- * @date 2024-09-06
- * @copyright Copyright (c) 2024
+ * @date 2024.09.06
  */
 #include "core/camera_model.cuh"
 #include <cmath>

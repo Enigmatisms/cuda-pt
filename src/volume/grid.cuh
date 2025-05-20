@@ -15,15 +15,12 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
-#pragma once
 /**
- * @file homogeneous.cuh
  * @author Qianyue He
  * @brief Grid volume
- * @version 0.1
- * @date 2025-02-05
- * @copyright Copyright (c) 2025
+ * @date 2025.02.05
  */
+#pragma once
 
 #include "core/medium.cuh"
 #include <nanovdb/GridHandle.h>

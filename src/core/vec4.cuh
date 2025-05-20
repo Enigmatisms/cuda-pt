@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @brief CUDA/CPU 3D vector implementation
  * @author: Qianyue He
- * @date:   4.10.2024
+ * @brief CUDA/CPU 3D vector implementation
+ * @date:   2024.4.10
  */
 #pragma once
 #include "core/constants.cuh"

@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Simple tile-based path tracer
- * @date: 5.12.2024
  * @author: Qianyue He
+ * @brief Simple tile-based path tracer
+ * @date: 2024.5.12
  */
 #pragma once
 #include "core/progress.h"

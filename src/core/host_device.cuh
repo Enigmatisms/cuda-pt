@@ -16,8 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Host Device memory transaction util function
- * @date: 5.5.2024
+ * @date: 2024.5.5
+ * @brief Host Device memory transaction util function
  * @author: Qianyue He
  */
 #pragma once

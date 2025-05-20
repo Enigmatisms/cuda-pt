@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file wf_path_tracer.cu
  * @author Qianyue He
  * @brief Wavefront Path Tracer implementation
  * @date 2024.10.10
- * @copyright Copyright (c) 2024
  */
 
 #include "renderer/wf_path_tracer.cuh"

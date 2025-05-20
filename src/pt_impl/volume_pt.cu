@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file volume_pt.cu
  * @author Qianyue He
  * @brief Megakernel Volumetric Path Tracer implementation
  * @date 2025.2.9
- * @copyright Copyright (c) 2024
  */
 #include "renderer/megakernel_vpt.cuh"
 #include "renderer/volume_pt.cuh"

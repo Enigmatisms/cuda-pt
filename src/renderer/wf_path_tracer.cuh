@@ -16,10 +16,10 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * (W)ave(f)ront (S)imple path tracing with stream multiprocessing
+ * @author Qianyue He
+ * @brief (W)ave(f)ront (S)imple path tracing with stream multiprocessing
  * This is the updated version, here we opt for a
  * gigantic payload (ray) pool
- * @author Qianyue He
  * @date   2024.6.20 -> 2025.1.18
  */
 #pragma once

@@ -14,6 +14,13 @@
 // Public License along with this program. If not, see
 //
 //             <https://www.gnu.org/licenses/>.
+
+/**
+ * @author Qianyue He
+ * @brief Camera Model Definition
+ * @date Unknown
+ */
+
 #pragma once
 #include "core/ray.cuh"
 #include "core/sampler.cuh"

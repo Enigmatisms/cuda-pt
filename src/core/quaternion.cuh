@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file quaternion.cuh
  * @author Qianyue He
  * @brief Implement simple Quaternion to avoid Gimbal lock
- * @date 9.17.2024
- * @copyright Copyright (c) 2024
+ * @date 2024.9.17
  */
 #pragma once
 #include "core/vec3.cuh"

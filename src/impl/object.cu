@@ -18,9 +18,9 @@
 #include "core/object.cuh"
 
 /**
- * CUDA object information
- * @date: 5.20.2024
  * @author: Qianyue He
+ * @brief CUDA object information
+ * @date: 5.20.2024
  */
 #include "core/aabb.cuh"
 #include "core/aos.cuh"

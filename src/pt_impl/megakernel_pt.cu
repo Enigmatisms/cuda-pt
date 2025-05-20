@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Megakernel Path Tracing (Implementation)
- * @date: 9.15.2024
  * @author: Qianyue He
+ * @brief Megakernel Path Tracing (Implementation)
+ * @date: 9.15.2024
  */
 #include "core/textures.cuh"
 #include "renderer/megakernel_pt.cuh"

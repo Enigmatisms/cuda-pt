@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Ray tracing depth configs
+ * @date  Unknown
+ */
 #pragma once
 #include <utility>
 

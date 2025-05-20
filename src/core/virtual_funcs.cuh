@@ -16,8 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Utilization function to copy the classes with virtual functions to GPU
  * @author: Qianyue He
+ * @brief Utilization function to copy the classes with virtual functions to GPU
  * @date:   2024.5.22
  */
 

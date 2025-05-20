@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief BVH optimization
+ * @date Unknown
+ */
 #include "core/bvh_opt.cuh"
 
 static void calculate_cost_recursive(const BVHNode *node, float &sum_intr,

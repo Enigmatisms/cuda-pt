@@ -17,9 +17,9 @@
 
 #pragma once
 /**
+ * @author Qianyue He
  * @brief Fresnel Term
- * @author: Qianyue He
- * @date: 2024.12.10
+ * @date 2024.12.10
  */
 
 #include "core/vec3.cuh"

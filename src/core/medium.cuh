@@ -15,15 +15,12 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
-#pragma once
 /**
- * @file medium.cuh
  * @author Qianyue He
  * @brief Medium base class definition
- * @version 0.1
- * @date 2025-02-02
- * @copyright Copyright (c) 2025
+ * @date 2025.02.02
  */
+#pragma once
 #include "core/aabb.cuh"
 #include "core/phase.cuh"
 #include "core/so3.cuh"

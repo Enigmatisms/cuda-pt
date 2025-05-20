@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Some general constants
  * @author: Qianyue He
- * @date:   5.12.2024
+ * @brief Some general constants
+ * @date:   2024.5.12
  */
 
 #pragma once

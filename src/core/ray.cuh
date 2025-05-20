@@ -16,9 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Ray definition
- * TODO (6.18): Stream Compaction
  * @author: Qianyue He
+ * @brief Ray definition
  * @date:  (modified) 6.18.2024
  */
 

@@ -16,10 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file bvh.h
  * @author Qianyue He
  * @brief BVH utilities
- * @copyright Copyright (c) 2023-2024
+ * @date Unknown
  */
 
 #pragma once

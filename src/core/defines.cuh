@@ -15,6 +15,12 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Compile Time Definitions
+ * @date 2024
+ */
+
 #pragma once
 
 #define TRIANGLE_ONLY     // Use only triangles as primitives (10% faster for

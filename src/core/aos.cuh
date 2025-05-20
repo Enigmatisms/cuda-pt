@@ -16,12 +16,14 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Easy SoA (Struct of Arrays) encapsulation
+ * @author Qianyue He
+ * @brief Easy SoA (Struct of Arrays) encapsulation
  * SoA can facilitate coalesced memory access
  * and cache coherence
  *
  * SoA3 aims to hold three different field in a array
  * for example, vec3 (x, y, z)
+ * @date 2025.01.06
  */
 
 #pragma once

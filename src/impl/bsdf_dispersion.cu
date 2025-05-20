@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Dispersion BSDF
+ * @date 2024.11.06
+ */
 #include "bsdf/dispersion.cuh"
 #include "core/xyz.cuh"
 

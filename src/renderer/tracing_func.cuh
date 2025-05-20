@@ -17,12 +17,9 @@
 
 #pragma once
 /**
- * @file tracing_func.cuh
  * @author Qianyue He
  * @brief Important Path Tracing Functions common to multiple tracers
- * @version 0.1
- * @date 2025-02-09
- * @copyright Copyright (c) 2025
+ * @date 2025.02.09
  */
 
 #include "bsdf/bsdf.cuh"

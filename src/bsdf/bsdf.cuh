@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * CUDA BSDF base class implementation
- * @date: 5.20.2024
- * @author: Qianyue He
+ * @author Qianyue He
+ * @brief CUDA BSDF base class implementation
+ * @date 2024.5.20
  */
 #pragma once
 #include "core/enums.cuh"

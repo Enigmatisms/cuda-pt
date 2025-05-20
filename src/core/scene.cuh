@@ -16,8 +16,8 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Scene parser (from xml)
  * @author: Qianyue He
+ * @brief Scene parser (from xml)
  * @date:   2024.5.24
  */
 #pragma once

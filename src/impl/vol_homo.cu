@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Homogeneous volume creator
+ * @date Unknown
+ */
 #include "volume/homogeneous.cuh"
 
 CPT_KERNEL void create_homogeneous_volume(Medium **media,

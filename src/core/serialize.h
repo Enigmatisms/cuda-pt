@@ -16,13 +16,12 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file serialize.h
  * @author Qianyue He
  * @brief Simple serialization & de-serialization utility functions
  * for a std::vector<char> byte buffer
- * @date 2025-01-07
- * @copyright Copyright (c) 2025
+ * @date 2025.01.07
  */
+#pragma once
 
 #include <stdexcept>
 #include <vector>

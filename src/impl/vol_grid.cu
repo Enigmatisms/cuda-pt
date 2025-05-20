@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Volumetric grid definition
+ * @date Unknown
+ */
 #include "core/xyz.cuh"
 #include "volume/grid.cuh"
 

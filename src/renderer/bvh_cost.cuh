@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Simple tile-based depth renderer
- * @date: 5.6.2024
  * @author: Qianyue He
+ * @brief Simple tile-based depth renderer
+ * @date: 2024.5.6
  */
 #pragma once
 #include "core/stats.h"

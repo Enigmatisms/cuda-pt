@@ -16,11 +16,10 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Emitters
- * I only plan to support spot light, area light and point source
- *
  * @author: Qianyue He
- * @date:   5.13.2024
+ * @brief Emitters
+ * I only plan to support spot light, area light and point source
+ * @date:   2024.5.13
  */
 #pragma once
 #include "core/aos.cuh"

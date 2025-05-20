@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file path_tracer.cu
  * @author Qianyue He
  * @brief Megakernel Path Tracer implementation
  * @date 2024.10.10
- * @copyright Copyright (c) 2024
  */
 
 #include "core/color_map.cuh"

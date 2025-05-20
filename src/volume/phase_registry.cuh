@@ -16,13 +16,10 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file phase_registry.cuh
  * @author Qianyue He
  * @brief Includes all the derived class of PhaseFunction
- * @date 2025-02-09
- * @copyright Copyright (c) 2025
+ * @date 2025.02.09
  */
-
 #pragma once
 
 #include "core/enums.cuh"

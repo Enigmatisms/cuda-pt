@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief Visualization Color Map
+ * @date Unknown
+ */
 #include "core/color_map.cuh"
 
 const float PLASMA_R[] = {

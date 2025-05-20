@@ -15,6 +15,11 @@
 //
 //             <https://www.gnu.org/licenses/>.
 
+/**
+ * @author Qianyue He
+ * @brief GUI viewer organization
+ * @date Unknown
+ */
 #include <GL/glew.h>
 #include "core/camera_model.cuh"
 #include "core/cuda_utils.cuh"

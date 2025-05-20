@@ -16,10 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file medium.cu
  * @author Qianyue He
+ * @brief Medium Info
  * @date 2025-2-17
- * @copyright Copyright (c) 2024
  */
 #include "core/medium.cuh"
 

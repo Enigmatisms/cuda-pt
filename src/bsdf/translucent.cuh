@@ -16,11 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file translucent.cuh
  * @author Qianyue He
  * @brief Fresnel Translucent BSDF
- * @date 2025-01-06
- * @copyright Copyright (c) 2025
+ * @date 2025.01.06
  *
  */
 #pragma once

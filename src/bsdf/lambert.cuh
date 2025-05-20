@@ -16,12 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * @file lambert.cuh
  * @author Qianyue He
  * @brief Lambertian BSDF
- * @date 2025-01-06
- * @copyright Copyright (c) 2025
- *
+ * @date 2025.01.06
  */
 #pragma once
 

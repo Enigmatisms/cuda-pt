@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Wavefront Path Tracing (Implementation)
- * @date: 9.15.2024
  * @author: Qianyue He
+ * @brief Wavefront Path Tracing (Implementation)
+ * @date: 9.15.2024
  */
 #include "renderer/wavefront_pt.cuh"
 

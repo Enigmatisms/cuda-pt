@@ -16,9 +16,9 @@
 //             <https://www.gnu.org/licenses/>.
 
 /**
- * Scene parser (from xml)
- * This is the implementation file
  * @author: Qianyue He
+ * @brief Scene parser (from xml)
+ * This is the implementation file
  * @date:   2024.9.6
  */
 #include "core/scene.cuh"
