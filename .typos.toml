@@ -1,0 +1,9 @@
+[default.extend-identifiers]
+fov = "fov"
+FoV = "FoV"
+FOV = "FOV"
+
+[default.extend-words]
+fov = "fov"
+FoV = "FoV"
+FOV = "FOV"
