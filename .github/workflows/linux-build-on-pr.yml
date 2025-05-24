@@ -1,0 +1,55 @@
+name: CUDA Compilation Check
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  cuda-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install Base Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            make \
+            gcc-11 g++-11 \
+            libglew-dev libwayland-dev libxkbcommon-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            xorg-dev libx11-dev
+
+      - name: Install CUDA Toolkit 12.2
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+          sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+          sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
+          sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /"
+          sudo apt-get update
+          sudo apt-get install -y cuda-toolkit-12-2
+
+          echo "export PATH=/usr/local/cuda-12.2/bin:\$PATH" >> ~/.bashrc
+          echo "export LD_LIBRARY_PATH=/usr/local/cuda-12.2/lib64:\$LD_LIBRARY_PATH" >> ~/.bashrc
+          source ~/.bashrc
+
+      - name: Verify CUDA Environment
+        run: |
+          nvcc --version
+          nvidia-smi
+
+      - name: Build Project
+        shell: bash
+        run: |
+          mkdir -p build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release
+          
+          make -j7
+
+          # ./your_executable
