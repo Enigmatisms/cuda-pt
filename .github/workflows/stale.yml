@@ -7,7 +7,8 @@ name: Mark stale issues and pull requests
 
 on:
   schedule:
-  - cron: '00 18 * * *'
+    # Run at 3:00 am every Sunday
+    - cron: '0 3 * * 0'
 
 jobs:
   stale:
