@@ -36,7 +36,7 @@ Dependent on GLEW for the interactive viewer (`./build/xx/cpt`). If GLEW is not 
 ```shell
 mkdir build && cd build
 cmake --DCMAKE_BUILD_TYPE=release ..
-cmake --build . --config Release --parallel 7 -j 7
+cmake --build . --config Release --parallel 8 -j 8
 ```
 
 (`./build/xx/cpt.exe`) and (`./build/xx/pt.exe`) will be the executable files. To run the code, an example is:
