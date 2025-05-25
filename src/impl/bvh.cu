@@ -26,15 +26,6 @@
 #include <array>
 #include <numeric>
 
-struct PrimMappingInfo {
-    int obj_id;
-    int prim_id;
-    bool is_sphere;
-    PrimMappingInfo() : obj_id(0), prim_id(0), is_sphere(false) {}
-    PrimMappingInfo(int _obj_id, int _prim_id, bool _is_sphere)
-        : obj_id(_obj_id), prim_id(_prim_id), is_sphere(_is_sphere) {}
-};
-
 struct AxisBins {
     AABB bound;
     int prim_cnt;

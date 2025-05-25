@@ -90,6 +90,12 @@ class AABB {
         return *this;
     }
 
+    CONDITION_TEMPLATE(PointType, Vec3)
+    CPT_CPU void extend(PointType &&pt) noexcept {
+        mini.minimized(pt);
+        maxi.maximized(std::forward<PointType>(pt));
+    }
+
     // intersection of two AABB
     CONDITION_TEMPLATE(AABBType, AABB)
     CPT_CPU float intersection_area(AABBType &&_aabb) const noexcept {
