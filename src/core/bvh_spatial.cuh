@@ -18,7 +18,7 @@
 /**
  * @author Qianyue He
  * @brief Spatial BVH utilities
- * @date Unknown
+ * @date 2025.5.25
  */
 
 #pragma once
@@ -26,6 +26,7 @@
 #include "core/constants.cuh"
 #include "core/object.cuh"
 #include <algorithm>
+#include <array>
 
 class SBVHNode {
   public:
@@ -34,6 +35,11 @@ class SBVHNode {
           lchild(nullptr), rchild(nullptr) {
         prims.reserve(4);
     }
+
+    SBVHNode(AABB &&_bound, std::vector<int> &&_prims)
+        : lchild(nullptr), rchild(nullptr), bound(std::move(_bound)),
+          axis(AXIS_NONE), prims(std::move(_prims)) {}
+
     ~SBVHNode() {
         if (lchild != nullptr)
             delete lchild;
@@ -82,6 +88,8 @@ template <int N> class SpatialSplitter {
 
     std::vector<AABB> bounds;
 
+    AABB fwd_bound, bwd_bound;
+    std::array<int, N> prim_cnts; // cumsum of primitive cnts
   public:
     // ID of the triangles that enters the specified bin
     std::array<std::vector<int>, N> enter_tris;
@@ -109,10 +117,14 @@ template <int N> class SpatialSplitter {
     // in the given range
     void operator()(SBVHNode *const cur_node, std::vector<BVHInfo> &bvh_infos);
 
-    AABB &operator[](int index) { return bounds[index]; }
-    const AABB &operator[](int index) const { return bounds[index]; }
+    float eval_spatial_split(const SBVHNode *const cur_node,
+                             std::vector<BVHInfo> &bvh_infos, int &seg_bin_idx,
+                             float traverse_cost);
 
-    int num_entering(int index) const { return enter_tris[index]; }
+    std::pair<AABB, AABB> apply_spatial_split(const SBVHNode *const cur_node,
+                                              std::vector<int> &left_prims,
+                                              std::vector<int> &right_prims,
+                                              int seg_bin_idx);
 };
 
 void sbvh_build(std::vector<Vec3> &points1, std::vector<Vec3> &points2,
@@ -122,4 +134,4 @@ void sbvh_build(std::vector<Vec3> &points1, std::vector<Vec3> &points2,
                 const Vec3 &world_max, std::vector<int> &obj_idxs,
                 std::vector<int> &prim_idxs, std::vector<float4> &nodes,
                 std::vector<CompactNode> &cache_nodes, int &max_cache_level,
-                const int max_node_num, const float overlap_w);
+                const int max_node_num, const float overlap_w) {}
