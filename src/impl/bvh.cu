@@ -26,18 +26,6 @@
 #include <array>
 #include <numeric>
 
-struct AxisBins {
-    AABB bound;
-    int prim_cnt;
-
-    AxisBins() : bound(1e5f, -1e5f, 0, 0), prim_cnt(0) {}
-
-    void push(const BVHInfo &bvh) {
-        bound += bvh.bound;
-        prim_cnt++;
-    }
-};
-
 static constexpr int num_bins = 16;
 static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;

@@ -100,7 +100,13 @@ template <int N> class SpatialSplitter {
     // given the vertices of a triangle, update the spatial splitter bins,
     // entering and exiting triangle records via one-sweep line-drawing-like
     // fast AABB bins update algorithm
-    void update(const Vec3 &v1, const Vec3 &v2, const Vec3 &v3, int prim_id);
+    void update_triangle(const Vec3 &v1, const Vec3 &v2, const Vec3 &v3,
+                         int prim_id);
+
+    void update_sphere(const Vec3 &center, float radius, int prim_id) {
+        throw std::runtime_error(
+            "SBVH with sphere primitive is not yet supported.");
+    }
 
     inline int get_bin_id(const Vec3 &p) const {
         return std::min(static_cast<int>(std::floor(
@@ -114,11 +120,13 @@ template <int N> class SpatialSplitter {
           interval((_e_pos - _s_pos) / static_cast<float>(N)) {}
 
     // given a node and the current BVHInfo vector, try to split the triangles
-    // in the given range
-    void operator()(SBVHNode *const cur_node, std::vector<BVHInfo> &bvh_infos);
+    // in the given range, the update is exact
+    void update_bins(const std::vector<Vec3> &points1,
+                     const std::vector<Vec3> &points2,
+                     const std::vector<Vec3> &points3,
+                     const SBVHNode *const cur_node);
 
-    float eval_spatial_split(const SBVHNode *const cur_node,
-                             std::vector<BVHInfo> &bvh_infos, int &seg_bin_idx,
+    float eval_spatial_split(const SBVHNode *const cur_node, int &seg_bin_idx,
                              float traverse_cost);
 
     std::pair<AABB, AABB> apply_spatial_split(const SBVHNode *const cur_node,

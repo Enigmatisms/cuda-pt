@@ -241,6 +241,31 @@ struct PrimMappingInfo {
         : obj_id(_obj_id), prim_id(_prim_id), is_sphere(_is_sphere) {}
 };
 
+struct AxisBins {
+    AABB bound;
+    int prim_cnt;
+
+    AxisBins() : bound(1e5f, -1e5f, 0, 0), prim_cnt(0) {}
+
+    void push(const BVHInfo &bvh) {
+        bound += bvh.bound;
+        prim_cnt++;
+    }
+};
+
+void index_input(const std::vector<ObjInfo> &objs,
+                 const std::vector<bool> &sphere_flags,
+                 std::vector<PrimMappingInfo> &idxs, size_t num_primitives);
+
+inline int object_index_packing(int obj_med_idx, int obj_id, bool is_sphere);
+
+void create_bvh_info(const std::vector<Vec3> &points1,
+                     const std::vector<Vec3> &points2,
+                     const std::vector<Vec3> &points3,
+                     const std::vector<PrimMappingInfo> &idxs,
+                     const std::vector<int> &obj_med_idxs,
+                     std::vector<BVHInfo> &bvh_infos);
+
 void bvh_build(const std::vector<Vec3> &points1,
                const std::vector<Vec3> &points2,
                const std::vector<Vec3> &points3,

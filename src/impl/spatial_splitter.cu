@@ -24,8 +24,8 @@
 #include <unordered_set>
 
 template <int N>
-void SpatialSplitter<N>::update(const Vec3 &v1, const Vec3 &v2, const Vec3 &v3,
-                                int prim_id) {
+void SpatialSplitter<N>::update_triangle(const Vec3 &v1, const Vec3 &v2,
+                                         const Vec3 &v3, int prim_id) {
     // 1. sort the points according to the position on the split axis
     // we won't have degenerate triangles here.
     float p1_v = v1[axis], p2_v = v2[axis], p3_v = v3[axis];
@@ -96,8 +96,19 @@ void SpatialSplitter<N>::update(const Vec3 &v1, const Vec3 &v2, const Vec3 &v3,
 }
 
 template <int N>
+void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
+                                     const std::vector<Vec3> &points2,
+                                     const std::vector<Vec3> &points3,
+                                     /* possibly, add sphere flag later */
+                                     const SBVHNode *const cur_node) {
+    for (int prim_id : cur_node->prims) {
+        update_triangle(points1[prim_id], points2[prim_id], points3[prim_id],
+                        prim_id);
+    }
+}
+
+template <int N>
 float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
-                                             std::vector<BVHInfo> &bvh_infos,
                                              int &seg_bin_idx,
                                              float traverse_cost) {
     float min_cost = 5e9f, node_prim_cnt = float(cur_node->prim_num());
@@ -120,7 +131,6 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
     }
     float node_inv_area = 1. / cur_node->bound.area();
 
-    seg_bin_idx = 0;
     for (int i = 0; i < N - 1; i++) {
         float cost = traverse_cost +
                      node_inv_area *
@@ -131,6 +141,7 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
             seg_bin_idx = i;
         }
     }
+    return min_cost;
 }
 
 template <int N>
