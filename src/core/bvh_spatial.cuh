@@ -133,6 +133,24 @@ template <int N> class SpatialSplitter {
                                               std::vector<int> &left_prims,
                                               std::vector<int> &right_prims,
                                               int seg_bin_idx);
+
+    template <bool reverse>
+    template <int N>
+    AABB partial_sum(const int index) const {
+        AABB result;
+        result.clear();
+        if constexpr (reverse) {
+            for (int i = index + 1; i < N; i++) {
+                result += bounds[i];
+            }
+        } else {
+            for (int i = 0; i < index + 1; i++) {
+                result += bounds[i];
+            }
+        }
+    }
+
+    AABB partial_sum(const int index, const bool reverse = false) const;
 };
 
 void sbvh_build(std::vector<Vec3> &points1, std::vector<Vec3> &points2,

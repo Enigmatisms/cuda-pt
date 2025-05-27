@@ -112,10 +112,9 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         // Step 3: forward-backward linear sweep for heuristic calculation
         std::array<int, num_bins> prim_cnts;
         std::array<float, num_bins> fwd_areas, bwd_areas;
-        std::vector<AABB> fwd_aabbs,
-            bwd_aabbs; // to calculate AABB intersection
-        fwd_aabbs.reserve(num_bins);
-        bwd_aabbs.reserve(num_bins);
+        std::vector<int> lchild_idxs, rchild_idxs;
+        lchild_idxs.reserve(prim_num / 2);
+        rchild_idxs.reserve(prim_num / 2);
         prim_cnts.fill(0);
         fwd_areas.fill(0);
         bwd_areas.fill(0);
@@ -123,11 +122,9 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             fwd_bound += idx_bins[i].bound;
             prim_cnts[i] = idx_bins[i].prim_cnt;
             fwd_areas[i] = fwd_bound.area();
-            fwd_aabbs.push_back(fwd_bound);
             if (i > 0) {
                 bwd_bound += idx_bins[num_bins - i].bound;
                 bwd_areas[num_bins - 1 - i] = bwd_bound.area();
-                bwd_aabbs.push_back(bwd_bound);
             }
         }
         cur_node->bound.mini = fwd_bound.mini;
@@ -135,16 +132,14 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         float node_inv_area = 1. / cur_node->bound.area();
         std::partial_sum(prim_cnts.begin(), prim_cnts.end(), prim_cnts.begin());
 
-        // Step 4: use the calculated area to computed the segment boundary
+        // Step 4: use the calculated area to computed the segment boundary, for
+        // SBVH there is no need using spatial overlap penalty for BVH
         int seg_bin_idx = 0;
         for (int i = 0; i < num_bins - 1; i++) {
-            float intrsct_a = fwd_aabbs[i].intersection_area(bwd_aabbs.back());
             float cost =
                 traverse_cost +
                 node_inv_area *
-                    (intrsct_a * std::max(bvh_overlap_w - 0.5f, 0.f) *
-                         node_prim_cnt +
-                     float(prim_cnts[i]) * fwd_areas[i] +
+                    (node_prim_cnt + float(prim_cnts[i]) * fwd_areas[i] +
                      (node_prim_cnt - float(prim_cnts[i])) * bwd_areas[i]);
             if (cost < min_cost) {
                 min_cost = cost;
@@ -153,7 +148,6 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             bwd_aabbs.pop_back();
         }
 
-        int sbvh_seg_idx = -1;
         if (false /*Some unknown criteria I didn't come up with yet*/) {
             // if the crieria are met, we calculate the SBVH split cost
             SpatialSplitter<num_bins> ssp(
@@ -162,21 +156,35 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
 
             ssp.update_bins(points1, points2, points3, cur_node);
 
+            int sbvh_seg_idx = 0;
             float sbvh_cost =
                 ssp.eval_spatial_split(cur_node, sbvh_seg_idx, traverse_cost);
-            if (sbvh_cost < min_cost) { // Spatial split should be applied
-                // ssp.apply_spatial_split(cur_node, );
+            if (sbvh_cost < min_cost &&
+                (sbvh_cost < node_prim_cnt ||
+                 prim_num > max_prim_node)) { // Spatial split should be applied
+                min_cost = sbvh_cost;
+                ssp.apply_spatial_split(cur_node, lchild_idxs, rchild_idxs,
+                                        sbvh_seg_idx);
+                fwd_bound = ssp.partial_sum<false>(sbvh_seg_idx);
+                bwd_bound = ssp.partial_sum<true>(sbvh_seg_idx);
             }
         }
-        // Step 5: reordering the BVH info in the vector to make the segment
-        // contiguous (partition around pivot)
-        if (min_cost < node_prim_cnt || prim_num > max_prim_node) {
-            std::partition(
-                bvh_infos.begin() + base, bvh_infos.begin() + max_pos,
-                [pivot = min_range + interval * float(seg_bin_idx + 1),
-                 dim = max_axis](const BVHInfo &bvh) {
-                    return bvh.centroid[dim] < pivot;
-                });
+
+        // 1. SBVH is not applied ; 2. when the cost of splitting is lower or 3.
+        // when there are more primitives than allowed
+        if (lchild_idxs.empty() && (min_cost < node_prim_cnt ||
+                                    prim_num > max_prim_node)) { // object split
+            // We cannot partition here, since partition will change the index
+            // of the BVH
+            float pivot = min_range + interval * float(seg_bin_idx + 1);
+            for (int bvh_id : cur_node->prims) {
+                const BVHInfo &bvh = bvh_infos[bvh_id];
+                if (bvh.centroid[max_axis] < pivot) {
+                    lchild_idxs.push_back(bvh_id);
+                } else {
+                    rchild_idxs.push_back(bvh_id);
+                }
+            }
             child_prim_cnt = prim_cnts[seg_bin_idx];
         }
 

@@ -23,6 +23,8 @@
 #include "core/bvh_spatial.cuh"
 #include <unordered_set>
 
+static constexpr bool SSP_DEBUG = false;
+
 template <int N>
 void SpatialSplitter<N>::update_triangle(const Vec3 &v1, const Vec3 &v2,
                                          const Vec3 &v3, int prim_id) {
@@ -163,6 +165,15 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
         if (exit_from_left.count(prim_id))
             continue;
         right_prims.push_back(prim_id);
+    }
+
+    if constexpr (SSP_DEBUG) {
+        if (left_prims.empty() || right_prims.empty()) {
+            std::cerr << "Spatial split results in empty child nodes: "
+                      << left_prims.size() << ", " << right_prims.size()
+                      << std::endl;
+            throw std::runtime_error("Spatial split failed.");
+        }
     }
 
     fwd_bound.clear();
