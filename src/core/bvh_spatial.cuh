@@ -47,6 +47,12 @@ class SBVHNode {
             delete rchild;
     }
 
+    // for non-leaf node, release memory to reduce overhead
+    void release() {
+        prims.clear();
+        prims.shrink_to_fit();
+    }
+
     bool is_leaf() const { return lchild == nullptr; }
 
     int prim_num() const { return prims.size(); }
@@ -134,9 +140,7 @@ template <int N> class SpatialSplitter {
                                               std::vector<int> &right_prims,
                                               int seg_bin_idx);
 
-    template <bool reverse>
-    template <int N>
-    AABB partial_sum(const int index) const {
+    template <bool reverse> AABB partial_sum(const int index) const {
         AABB result;
         result.clear();
         if constexpr (reverse) {
@@ -149,8 +153,6 @@ template <int N> class SpatialSplitter {
             }
         }
     }
-
-    AABB partial_sum(const int index, const bool reverse = false) const;
 };
 
 void sbvh_build(std::vector<Vec3> &points1, std::vector<Vec3> &points2,
