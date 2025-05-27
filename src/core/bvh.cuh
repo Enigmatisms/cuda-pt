@@ -76,7 +76,7 @@ class BVHNode {
             delete rchild;
     }
 
-    bool is_leaf() const { return lchild == nullptr; }
+    bool non_leaf() const { return lchild != nullptr; }
 
     int base() const { return bound.base(); }
     int &base() { return bound.base(); }

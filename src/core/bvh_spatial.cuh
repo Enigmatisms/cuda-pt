@@ -53,11 +53,15 @@ class SBVHNode {
         prims.shrink_to_fit();
     }
 
-    bool is_leaf() const { return lchild == nullptr; }
+    int base() const { return bound.base(); }
+    int &base() { return bound.base(); }
 
-    int prim_num() const { return prims.size(); }
+    int prim_num() const { return bound.prim_cnt(); }
+    int &prim_num() { return bound.prim_cnt(); }
+    int size() const { return prims.size(); }
 
-    // TODO: this might need to be refactored
+    bool non_leaf() const { return prims.empty(); }
+
     void get_float4(float4 &node_f, float4 &node_b) const {
         node_f.x = bound.mini.x();
         node_f.y = bound.mini.y();

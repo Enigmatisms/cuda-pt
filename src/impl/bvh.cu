@@ -311,7 +311,7 @@ static int recursive_linearize(BVHNode *cur_node, std::vector<float4> &nodes,
         // (int)    jump offset to next cached node
         // (float3) aabb.max
         // (int)    index to the global memory node (if -1, means it it not a
-        // leave node, we should continue)
+        // leaf node, we should continue)
         cache_nodes.emplace_back(node_f, node_b);
     }
     /**
@@ -323,7 +323,7 @@ static int recursive_linearize(BVHNode *cur_node, std::vector<float4> &nodes,
      * non-leaf
      * - for leaf nodes, we don't modify the float4.w
      */
-    if (cur_node->lchild != nullptr) {
+    if (cur_node->non_leaf()) {
         // non-leaf node
         int lnodes = recursive_linearize(cur_node->lchild, nodes, cache_nodes,
                                          depth + 1, cache_max_depth);
