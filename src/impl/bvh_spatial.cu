@@ -24,6 +24,7 @@
 #include "core/bvh_opt.cuh"
 #include "core/bvh_spatial.cuh"
 #include <numeric>
+#include <unordered_set>
 
 static constexpr int num_bins = 16;
 static constexpr int no_div_threshold = 2;
@@ -32,9 +33,6 @@ static constexpr int sah_split_threshold = 8;
 // 1e-3] is ill-posed. If there is more than 64 primitives, the primitives will
 // be discarded
 static constexpr float traverse_cost = 0.2f;
-static constexpr int unordered_threshold = 512;
-
-static float bvh_overlap_w = 1.f;
 static int max_depth = 0;
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
@@ -83,9 +81,9 @@ inline int object_index_packing(int obj_med_idx, int obj_id, bool is_sphere) {
 int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                        const std::vector<Vec3> &points2,
                        const std::vector<Vec3> &points3,
+                       const std::vector<BVHInfo> &bvh_infos,
                        std::vector<int> &flattened_idxs,
-                       SBVHNode *const cur_node,
-                       std::vector<BVHInfo> &bvh_infos, int depth = 0,
+                       SBVHNode *const cur_node, int depth = 0,
                        int max_prim_node = 16) {
     auto process_leaf = [&]() {
         // leaf node processing function
@@ -259,13 +257,13 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         cur_node->axis = max_axis;
 
         int node_num = 1;
-        node_num += recursive_sbvh_SAH(points1, points2, points3,
+        node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
                                        flattened_idxs, cur_node->lchild,
-                                       bvh_infos, depth + 1, max_prim_node);
+                                       depth + 1, max_prim_node);
 
-        node_num += recursive_sbvh_SAH(points1, points2, points3,
+        node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
                                        flattened_idxs, cur_node->rchild,
-                                       bvh_infos, depth + 1, max_prim_node);
+                                       depth + 1, max_prim_node);
         return node_num;
     } else {
         return process_leaf();
@@ -320,32 +318,116 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
     printf("[SBVH] World max: ");
     print_vec3(world_max);
     SBVHNode *root_node = new SBVHNode(AABB(world_min, world_max, 0, 0), {});
-    node_num = recursive_sbvh_SAH(points1, points2, points3, flattened_idxs,
-                                  root_node, bvh_infos, max_prim_node);
+    node_num = recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
+                                  flattened_idxs, root_node, max_prim_node);
 
     return root_node;
 }
 
+template <typename ContainerTy, size_t Dim = 3>
+void remap_helper_func(const std::vector<int> &flattened_idxs,
+                       ContainerTy &source) {
+    static constexpr int n_threads = 4;
+    const size_t num_new_prims = flattened_idxs.size();
+    const size_t padded_size =
+        (num_new_prims + 3) / 4; // workload for each thread
+
+    ContainerTy mapped_vals;
+    if constexpr (Dim == 1) {
+        mapped_vals.resize(num_new_prims);
+    } else {
+        for (int i = 0; i < 3; i++) {
+            mapped_vals[i].resize(num_new_prims);
+        }
+    }
+#pragma omp parallel for num_threads(n_threads)
+    for (int tid = 0; tid < n_threads; tid++) {
+        const size_t s_pos = tid * padded_size,
+                     e_pos = std::min(s_pos + padded_size, num_new_prims);
+#pragma unroll
+        if constexpr (Dim == 1) {
+            for (int dim = 0; dim < Dim; dim++) {
+                const auto &old_vec = source[dim];
+                auto &new_vec = source[dim];
+                for (size_t i = s_pos; i < e_pos; i++) {
+                    int index = flattened_idxs[i];
+                    new_vec[i] = old_vec[index];
+                }
+            }
+        } else {
+            for (size_t i = s_pos; i < e_pos; i++) {
+                int index = flattened_idxs[i];
+                mapped_vals[i] = source[index];
+            }
+        }
+    }
+    source = std::move(mapped_vals);
+}
+
+void SBVHBuilder::post_process(std::vector<int> &obj_indices,
+                               std::vector<int> &emitter_prims) {
+    // remap all the vertices, normals, UVs and object indices for SBVH. There
+    // are two major step for this: (1) reordered vertices, normals, UVs, object
+    // index and sphere_flags using an multi-threading approach (or SIMD). (2)
+    // Deal with the emissive primitives (remove duplication)
+    remap_helper_func(flattened_idxs, vertices);
+    remap_helper_func(flattened_idxs, normals);
+    remap_helper_func(flattened_idxs, uvs);
+    remap_helper_func<std::vector<int>, 1>(flattened_idxs, obj_indices);
+    remap_helper_func<std::vector<bool>, 1>(flattened_idxs, sphere_flags);
+
+    const size_t num_prims = flattened_idxs.size();
+    std::vector<std::vector<int>> eprim_idxs(num_emitters);
+    std::vector<bool> visited(vertices.size(), false);
+    for (int i = 0; i < num_prims; i++) {
+        // skip duplicated emissive primitives, if the duplicated primitives are
+        // not skipped over, the emissive primitive sampling will be biased so
+        // the emissive indices should be unique
+        int origin_prim_id = flattened_idxs[i];
+        if (visited[origin_prim_id])
+            continue;
+        visited[origin_prim_id] = true;
+
+        int obj_idx = obj_indices[i] & 0x000fffff;
+        const auto &object = objects[obj_idx];
+        if (object.is_emitter()) {
+            int emitter_idx = object.emitter_id - 1;
+            eprim_idxs[emitter_idx].push_back(i);
+        }
+    }
+
+    std::vector<int> e_prim_offsets;
+    e_prim_offsets.push_back(0);
+    for (const auto &eprim_idx : eprim_idxs) {
+        e_prim_offsets.push_back(eprim_idx.size());
+        for (int index : eprim_idx)
+            emitter_prims.push_back(index);
+    }
+    std::partial_sum(e_prim_offsets.begin(), e_prim_offsets.end(),
+                     e_prim_offsets.begin());
+    for (ObjInfo &obj : objects) {
+        if (!obj.is_emitter())
+            continue;
+        obj.prim_offset = e_prim_offsets[obj.emitter_id - 1];
+    }
+}
+
 // Try to use two threads to build the BVH
-void sbvh_build(const std::vector<Vec3> &points1,
-                const std::vector<Vec3> &points2,
-                const std::vector<Vec3> &points3,
-                const std::vector<ObjInfo> &objects,
-                const std::vector<int> &obj_med_idxs,
-                const std::vector<bool> &sphere_flags, const Vec3 &world_min,
-                const Vec3 &world_max, std::vector<int> &obj_idxs,
-                std::vector<int> &prim_idxs, std::vector<float4> &nodes,
-                std::vector<CompactNode> &cache_nodes, int &cache_max_level,
-                const int max_prim_node, const float overlap_w) {
-    bvh_overlap_w = overlap_w;
+void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
+                        const Vec3 &world_min, const Vec3 &world_max,
+                        std::vector<int> &obj_idxs, std::vector<float4> &nodes,
+                        std::vector<CompactNode> &cache_nodes,
+                        int &cache_max_level) {
+    const auto &points1 = vertices[0], &points2 = vertices[1],
+               &points3 = vertices[2];
+
     std::vector<PrimMappingInfo> idx_prs;
     std::vector<BVHInfo> bvh_infos;
     int node_num = 0, num_prims_all = points1.size();
-    index_input(objects, sphere_flags, idx_prs, num_prims_all);
-    create_bvh_info(points1, points2, points3, idx_prs, obj_med_idxs,
-                    bvh_infos);
+    BVHBuilder::index_input(objects, sphere_flags, idx_prs, num_prims_all);
+    BVHBuilder::create_bvh_info(points1, points2, points3, idx_prs,
+                                obj_med_idxs, bvh_infos);
 
-    std::vector<int> flattened_idxs;
     // spatial split almost always ends up with more primitives
     flattened_idxs.reserve(num_prims_all * 2);
     SBVHNode *root_node =
@@ -357,18 +439,13 @@ void sbvh_build(const std::vector<Vec3> &points1,
     nodes.reserve(node_num << 1);
     cache_nodes.reserve(1 << cache_max_level);
 
-    // TODO(heqianyue): one last thing, re-organize prims, norms, uvs and object
-    // maps
-
+    recursive_linearize(root_node, nodes, cache_nodes, 0);
     printf("[SBVH] Number of nodes to cache: %llu (%d)\n", cache_nodes.size(),
            cache_max_level);
 
-    // FIXME: MASK ALPHA, change obj_idxs
     obj_idxs.reserve(bvh_infos.size());
-    prim_idxs.reserve(bvh_infos.size());
     for (BVHInfo &bvh : bvh_infos) {
         obj_idxs.emplace_back(bvh.bound.__bytes1);
-        prim_idxs.emplace_back(bvh.bound.__bytes2);
     }
     delete root_node;
 }

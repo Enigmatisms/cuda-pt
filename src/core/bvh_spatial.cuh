@@ -159,11 +159,34 @@ template <int N> class SpatialSplitter {
     }
 };
 
-void sbvh_build(std::vector<Vec3> &points1, std::vector<Vec3> &points2,
-                std::vector<Vec3> &points3, const std::vector<ObjInfo> &objects,
-                const std::vector<int> &obj_med_idxs,
-                std::vector<bool> &sphere_flags, const Vec3 &world_min,
-                const Vec3 &world_max, std::vector<int> &obj_idxs,
-                std::vector<int> &prim_idxs, std::vector<float4> &nodes,
-                std::vector<CompactNode> &cache_nodes, int &max_cache_level,
-                const int max_node_num, const float overlap_w) {}
+class SBVHBuilder {
+  public:
+    SBVHBuilder(std::array<std::vector<Vec3>, 3> &_vertices,
+                std::array<std::vector<Vec3>, 3> &_normals,
+                std::array<std::vector<Vec2>, 3> &_uvs,
+                std::vector<bool> &_sphere_flags,
+                std::vector<ObjInfo> &_objects, int _num_emitters,
+                int _max_prim_node)
+        : vertices(_vertices), normals(_normals), uvs(_uvs),
+          sphere_flags(_sphere_flags), objects(_objects),
+          num_emitters(_num_emitters), max_prim_node(_max_prim_node) {}
+
+    void build(const std::vector<int> &obj_med_idxs, const Vec3 &world_min,
+               const Vec3 &world_max, std::vector<int> &obj_idxs,
+               std::vector<float4> &nodes,
+               std::vector<CompactNode> &cache_nodes, int &cache_max_level);
+
+    void post_process(std::vector<int> &obj_indices,
+                      std::vector<int> &emitter_prims);
+
+  private:
+    std::array<std::vector<Vec3>, 3> &vertices;
+    std::array<std::vector<Vec3>, 3> &normals;
+    std::array<std::vector<Vec2>, 3> &uvs;
+    std::vector<bool> &sphere_flags;
+    std::vector<ObjInfo> &objects;
+    const int num_emitters;
+    const int max_prim_node;
+
+    std::vector<int> flattened_idxs;
+};

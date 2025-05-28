@@ -67,9 +67,10 @@ SplitAxis BVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
     return SplitAxis(split_axis);
 }
 
-void index_input(const std::vector<ObjInfo> &objs,
-                 const std::vector<bool> &sphere_flags,
-                 std::vector<PrimMappingInfo> &idxs, size_t num_primitives) {
+void BVHBuilder::index_input(const std::vector<ObjInfo> &objs,
+                             const std::vector<bool> &sphere_flags,
+                             std::vector<PrimMappingInfo> &idxs,
+                             size_t num_primitives) {
     // input follow the shape of the number of objects, for each position
     // the number of primitive / whether the primitive is sphere will be stored,
     // the index will be object id
@@ -87,14 +88,15 @@ void index_input(const std::vector<ObjInfo> &objs,
     }
 }
 
-inline int object_index_packing(int obj_med_idx, int obj_id, bool is_sphere) {
+inline int BVHBuilder::object_index_packing(int obj_med_idx, int obj_id,
+                                            bool is_sphere) {
     // take the lower 20 bits and shift up 20bits
     int truncated = (obj_med_idx & 0x00000fff) << 20;
     return (static_cast<int>(is_sphere) << 31) + truncated +
            (obj_id & 0x000fffff);
 }
 
-void create_bvh_info(
+void BVHBuilder::create_bvh_info(
     const std::vector<Vec3> &points1, const std::vector<Vec3> &points2,
     const std::vector<Vec3> &points3, const std::vector<PrimMappingInfo> &idxs,
     const std::vector<int>
@@ -343,17 +345,14 @@ static int recursive_linearize(BVHNode *cur_node, std::vector<float4> &nodes,
 }
 
 // Try to use two threads to build the BVH
-void bvh_build(const std::vector<Vec3> &points1,
-               const std::vector<Vec3> &points2,
-               const std::vector<Vec3> &points3,
-               const std::vector<ObjInfo> &objects,
-               const std::vector<int> &obj_med_idxs,
-               const std::vector<bool> &sphere_flags, const Vec3 &world_min,
-               const Vec3 &world_max, std::vector<int> &obj_idxs,
-               std::vector<int> &prim_idxs, std::vector<float4> &nodes,
-               std::vector<CompactNode> &cache_nodes, int &cache_max_level,
-               const int max_prim_node, const float overlap_w) {
-    bvh_overlap_w = overlap_w;
+void BVHBuilder::build(const std::vector<int> &obj_med_idxs,
+                       const Vec3 &world_min, const Vec3 &world_max,
+                       std::vector<int> &obj_idxs, std::vector<int> &prim_idxs,
+                       std::vector<float4> &nodes,
+                       std::vector<CompactNode> &cache_nodes,
+                       int &cache_max_level) {
+    const auto &points1 = vertices[0], &points2 = vertices[1],
+               &points3 = vertices[2];
     std::vector<PrimMappingInfo> idx_prs;
     std::vector<BVHInfo> bvh_infos;
     int node_num = 0, num_prims_all = points1.size();
@@ -382,4 +381,78 @@ void bvh_build(const std::vector<Vec3> &points1,
         prim_idxs.emplace_back(bvh.bound.__bytes2);
     }
     delete root_node;
+}
+
+void BVHBuilder::post_process(const std::vector<int> &prim_idxs,
+                              const std::vector<int> &obj_idxs,
+                              std::vector<int> &emitter_prims) {
+    using Vec3Arr = std::vector<Vec3>;
+    using Vec2Arr = std::vector<Vec2>;
+
+    size_t num_prims = vertices[0].size();
+    std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
+    std::array<Vec2Arr, 3> reorder_uvs;
+    std::vector<bool> reorder_sph_flags(num_prims);
+
+    for (int i = 0; i < 3; i++) {
+        Vec3Arr &reorder_vs = reorder_verts[i], &reorder_ns = reorder_norms[i];
+        Vec2Arr &reorder_uv = reorder_uvs[i];
+        const Vec3Arr &origin_vs = vertices[i], &origin_ns = normals[i];
+        const Vec2Arr &origin_uv = uvs[i];
+        reorder_vs.resize(num_prims);
+        reorder_ns.resize(num_prims);
+        reorder_uv.resize(num_prims);
+
+        for (int j = 0; j < num_prims; j++) {
+            int index = prim_idxs[j];
+            reorder_vs[j] = origin_vs[index];
+            reorder_ns[j] = origin_ns[index];
+            reorder_uv[j] = origin_uv[index];
+        }
+    }
+
+    // build an emitter primitive index map for emitter sampling
+    // before the reordering logic, the emitter primitives are guaranteed
+    // to be stored continuously, so we don't need an extra index map
+
+    // if we don't reorder the primitives, then we need to store the primitive
+    // index for the leaf node, and the access for the leaf node primitives
+    // won't be continuous
+    std::vector<std::vector<int>> eprim_idxs(num_emitters);
+    for (int i = 0; i < num_prims; i++) {
+        int index = prim_idxs[i], obj_idx = obj_idxs[i] & 0x000fffff;
+        const auto &object = objects[obj_idx];
+        reorder_sph_flags[i] = sphere_flags[index];
+        if (object.is_emitter()) {
+            int emitter_idx = object.emitter_id - 1;
+            eprim_idxs[emitter_idx].push_back(i);
+        }
+    }
+
+    // The following code does the following job:
+    // BVH op will 'shuffle' the primitive order (sort of)
+    // So, the emitter object might not have continuous
+    // primitives stored in the memory. In order to uniformly sample
+    // all the primitives on a given emitter, we should store the linearized
+    // indices to the primitives, so the following code (1) linearize
+    // the indices and (2) recalculate the object.prim_offset, while
+    // the object.prim_cnt stays unchanged
+    std::vector<int> e_prim_offsets;
+    e_prim_offsets.push_back(0);
+    for (const auto &eprim_idx : eprim_idxs) {
+        e_prim_offsets.push_back(eprim_idx.size());
+        for (int index : eprim_idx)
+            emitter_prims.push_back(index);
+    }
+    std::partial_sum(e_prim_offsets.begin(), e_prim_offsets.end(),
+                     e_prim_offsets.begin());
+    for (ObjInfo &obj : objects) {
+        if (!obj.is_emitter())
+            continue;
+        obj.prim_offset = e_prim_offsets[obj.emitter_id - 1];
+    }
+    vertices = std::move(reorder_verts);
+    normals = std::move(reorder_norms);
+    uvs = std::move(reorder_uvs);
+    sphere_flags = std::move(reorder_sph_flags);
 }

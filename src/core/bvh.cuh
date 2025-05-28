@@ -253,26 +253,49 @@ struct AxisBins {
     }
 };
 
-void index_input(const std::vector<ObjInfo> &objs,
-                 const std::vector<bool> &sphere_flags,
-                 std::vector<PrimMappingInfo> &idxs, size_t num_primitives);
+class BVHBuilder {
+  public:
+    BVHBuilder(std::array<std::vector<Vec3>, 3> &_vertices,
+               std::array<std::vector<Vec3>, 3> &_normals,
+               std::array<std::vector<Vec2>, 3> &_uvs,
+               std::vector<bool> &_sphere_flags, std::vector<ObjInfo> &_objects,
+               int _num_emitters, int _max_prim_node, float _overlap_w)
+        : vertices(_vertices), normals(_normals), uvs(_uvs),
+          sphere_flags(_sphere_flags), objects(_objects),
+          num_emitters(_num_emitters), max_prim_node(_max_prim_node),
+          overlap_w(_overlap_w) {}
 
-inline int object_index_packing(int obj_med_idx, int obj_id, bool is_sphere);
-
-void create_bvh_info(const std::vector<Vec3> &points1,
-                     const std::vector<Vec3> &points2,
-                     const std::vector<Vec3> &points3,
-                     const std::vector<PrimMappingInfo> &idxs,
-                     const std::vector<int> &obj_med_idxs,
-                     std::vector<BVHInfo> &bvh_infos);
-
-void bvh_build(const std::vector<Vec3> &points1,
-               const std::vector<Vec3> &points2,
-               const std::vector<Vec3> &points3,
-               const std::vector<ObjInfo> &objects,
-               const std::vector<int> &obj_med_idxs,
-               const std::vector<bool> &sphere_flags, const Vec3 &world_min,
+    void build(const std::vector<int> &obj_med_idxs, const Vec3 &world_min,
                const Vec3 &world_max, std::vector<int> &obj_idxs,
                std::vector<int> &prim_idxs, std::vector<float4> &nodes,
-               std::vector<CompactNode> &cache_nodes, int &max_cache_level,
-               const int max_node_num, const float overlap_w);
+               std::vector<CompactNode> &cache_nodes, int &cache_max_level);
+
+    void post_process(const std::vector<int> &prim_idxs,
+                      const std::vector<int> &obj_idxs,
+                      std::vector<int> &emitter_prims);
+
+    static void index_input(const std::vector<ObjInfo> &objs,
+                            const std::vector<bool> &sphere_flags,
+                            std::vector<PrimMappingInfo> &idxs,
+                            size_t num_primitives);
+
+    static int object_index_packing(int obj_med_idx, int obj_id,
+                                    bool is_sphere);
+
+    static void create_bvh_info(const std::vector<Vec3> &points1,
+                                const std::vector<Vec3> &points2,
+                                const std::vector<Vec3> &points3,
+                                const std::vector<PrimMappingInfo> &idxs,
+                                const std::vector<int> &obj_med_idxs,
+                                std::vector<BVHInfo> &bvh_infos);
+
+  private:
+    std::array<std::vector<Vec3>, 3> &vertices;
+    std::array<std::vector<Vec3>, 3> &normals;
+    std::array<std::vector<Vec2>, 3> &uvs;
+    std::vector<bool> &sphere_flags;
+    std::vector<ObjInfo> &objects;
+    const int num_emitters;
+    const int max_prim_node;
+    const float overlap_w;
+};
