@@ -26,14 +26,16 @@
 static constexpr bool SSP_DEBUG = false;
 
 template <int N>
-void SpatialSplitter<N>::update_triangle(const Vec3 &v1, const Vec3 &v2,
-                                         const Vec3 &v3, int prim_id) {
+void SpatialSplitter<N>::update_triangle(Vec3 v1, Vec3 v2, Vec3 v3,
+                                         int prim_id) {
     // 1. sort the points according to the position on the split axis
     // we won't have degenerate triangles here.
     float p1_v = v1[axis], p2_v = v2[axis], p3_v = v3[axis];
     Vec3 p1, p2, p3;
-    if (p1_v > p2_v)
+    if (p1_v > p2_v) {
         std::swap(v1, v2);
+        std::swap(p1_v, p2_v); // make sure p1_v <= p2_v
+    }
     // now v1[axis] <= v2[axis] always holds,
     // therefore, p1 can never be v2
     if (p3_v < p1_v) {

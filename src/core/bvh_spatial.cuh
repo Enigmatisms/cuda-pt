@@ -110,8 +110,7 @@ template <int N> class SpatialSplitter {
     // given the vertices of a triangle, update the spatial splitter bins,
     // entering and exiting triangle records via one-sweep line-drawing-like
     // fast AABB bins update algorithm
-    void update_triangle(const Vec3 &v1, const Vec3 &v2, const Vec3 &v3,
-                         int prim_id);
+    void update_triangle(Vec3 v1, Vec3 v2, Vec3 v3, int prim_id);
 
     void update_sphere(const Vec3 &center, float radius, int prim_id) {
         throw std::runtime_error(
@@ -120,7 +119,7 @@ template <int N> class SpatialSplitter {
 
     inline int get_bin_id(const Vec3 &p) const {
         return std::min(static_cast<int>(std::floor(
-                            std::max(p[axis] - s_pos, 0) / interval)),
+                            std::max(p[axis] - s_pos, 0.f) / interval)),
                         N - 1);
     }
 
@@ -156,6 +155,7 @@ template <int N> class SpatialSplitter {
                 result += bounds[i];
             }
         }
+        return result;
     }
 };
 

@@ -21,6 +21,7 @@
  * @date  Unknown
  */
 #pragma once
+#include <cmath>
 #include <utility>
 
 struct MaxDepthParams {

@@ -105,11 +105,10 @@ template <typename Ty> CPT_KERNEL void destroy_gpu_alloc(Ty **dst) {
 
 CPT_KERNEL void create_point_source(Emitter *&dst, Vec4 le, Vec3 pos);
 CPT_KERNEL void create_area_source(Emitter *&dst, Vec4 le, int obj_ref,
-                                   bool is_sphere,
-                                   cudaTextureObject_t obj = NULL);
+                                   bool is_sphere, cudaTextureObject_t obj = 0);
 CPT_KERNEL void create_area_spot_source(Emitter *&dst, Vec4 le, float cos_val,
                                         int obj_ref, bool is_sphere,
-                                        cudaTextureObject_t obj = NULL);
+                                        cudaTextureObject_t obj = 0);
 CPT_KERNEL void create_envmap_source(Emitter *&dst, cudaTextureObject_t obj,
                                      float scaler = 1, float azimuth = 0,
                                      float zenith = 0);

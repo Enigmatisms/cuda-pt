@@ -101,7 +101,6 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         return process_leaf();
     }
     AABB fwd_bound(1e5f, -1e5f, 0, 0), bwd_bound(1e5f, -1e5f, 0, 0);
-    int child_prim_cnt = 0; // this index is used for indexing variable `bins`
     const int prim_num = cur_node->size();
     float min_cost = 5e9f, node_prim_cnt = float(prim_num);
 
@@ -199,8 +198,6 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                     rchild_idxs.push_back(bvh_id);
                 }
             }
-            // TODO(heqianyue): child_prim_cnt might be able to be removed
-            child_prim_cnt = prim_cnts[seg_bin_idx];
             fwd_bound.clear();
             bwd_bound.clear();
             for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
@@ -346,6 +343,11 @@ void remap_helper_func(const std::vector<int> &flattened_idxs,
                      e_pos = std::min(s_pos + padded_size, num_new_prims);
 #pragma unroll
         if constexpr (Dim == 1) {
+            for (size_t i = s_pos; i < e_pos; i++) {
+                int index = flattened_idxs[i];
+                mapped_vals[i] = source[index];
+            }
+        } else {
             for (int dim = 0; dim < Dim; dim++) {
                 const auto &old_vec = source[dim];
                 auto &new_vec = source[dim];
@@ -353,11 +355,6 @@ void remap_helper_func(const std::vector<int> &flattened_idxs,
                     int index = flattened_idxs[i];
                     new_vec[i] = old_vec[index];
                 }
-            }
-        } else {
-            for (size_t i = s_pos; i < e_pos; i++) {
-                int index = flattened_idxs[i];
-                mapped_vals[i] = source[index];
             }
         }
     }
@@ -440,7 +437,7 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
     cache_nodes.reserve(1 << cache_max_level);
 
     recursive_linearize(root_node, nodes, cache_nodes, 0);
-    printf("[SBVH] Number of nodes to cache: %llu (%d)\n", cache_nodes.size(),
+    printf("[SBVH] Number of nodes to cache: %lu (%d)\n", cache_nodes.size(),
            cache_max_level);
 
     obj_idxs.reserve(bvh_infos.size());

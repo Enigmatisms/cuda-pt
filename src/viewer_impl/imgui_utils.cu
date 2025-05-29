@@ -312,7 +312,7 @@ bool mouse_camera_update(DeviceCamera &cam, float sensitivity) {
 static bool draw_color_picker(std::string label, std::string name,
                               float *color_start) {
     // squared box
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
     ImGuiColorEditFlags color_edit_flags =
         ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoAlpha |
@@ -326,7 +326,7 @@ static bool draw_coupled_slider_input(std::string id, std::string name,
                                       float &val, float min_val = 0.0,
                                       float max_val = 1.f) {
     bool updated = false;
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
 
     ImGui::PushItemWidth(120.0f);
@@ -342,7 +342,7 @@ static bool draw_coupled_slider_input(std::string id, std::string name,
 
 static bool draw_customized_check_box(std::string id, std::string name,
                                       bool &val) {
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
     std::string label = "##select-" + id;
     return ImGui::Checkbox(label.c_str(), &val);
@@ -352,7 +352,7 @@ static bool draw_integer_input(std::string id, std::string name, int &val,
                                int min_val = 1, int max_val = 64,
                                float width = 100.f) {
     bool updated = false;
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
     ImGui::PushItemWidth(width);
     updated |= ImGui::InputInt(("##" + id).c_str(), &val, min_val, max_val);
@@ -365,7 +365,7 @@ template <int N>
 static bool draw_selection_menu(const std::array<const char *, N> &picks,
                                 std::string id, std::string name,
                                 uint8_t &current_value) {
-    ImGui::Text("%s", name);
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
 
     const char *current_name = picks[current_value];
@@ -647,7 +647,7 @@ void render_settings_interface(
 
             if (ImGui::CollapsingHeader("Renderer Settings",
                                         ImGuiWindowFlags_AlwaysAutoResize)) {
-                ImGui::Text(RENDERER_NAMES[rdr_type]);
+                ImGui::Text("%s", RENDERER_NAMES[rdr_type]);
                 ImGui::Separator();
                 params.renderer_update |= draw_integer_input(
                     "max_depth", "Max Depth", md_params.max_depth);
@@ -689,7 +689,8 @@ void render_settings_interface(
                     if (rdr_type == RendererType::BVHCostViz) {
                         int max_query = ceilf(
                             Serializer::get<float>(params.serialized_data, 2));
-                        ImGui::Text(("Max value: " + std::to_string(max_query))
+                        ImGui::Text("%s",
+                                    ("Max value: " + std::to_string(max_query))
                                         .c_str());
 
                         int max_value =
