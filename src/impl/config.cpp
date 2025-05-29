@@ -116,6 +116,15 @@ RenderingConfig::from_xml(const tinyxml2::XMLElement *acc_node,
             }
             node = node->NextSiblingElement("float");
         }
+
+        node = acc_node->FirstChildElement("bool");
+        while (node) {
+            std::string name = node->Attribute("name");
+            if (name == "use_sbvh") {
+                node->QueryBoolAttribute("value", &config.use_sbvh);
+            }
+            node = node->NextSiblingElement("bool");
+        }
     }
 
     { // Sensor Element Parsing

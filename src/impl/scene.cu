@@ -1120,7 +1120,6 @@ Scene::Scene(std::string path)
         obj.export_bound(world_min, world_max);
     }
     auto tp = std::chrono::system_clock::now();
-    constexpr bool use_spatial_split = false;
 
 #define CHRONO_OUTPUT(fmt_str, ...)                                            \
     {                                                                          \
@@ -1132,12 +1131,13 @@ Scene::Scene(std::string path)
         printf(fmt_str, __VA_ARGS__);                                          \
     }
 
-    if constexpr (use_spatial_split) {
+    if (config.use_sbvh) {
+        printf("[SBVH] Using spatial split during BVH.\n");
         SBVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
                             objects, num_emitters, config.max_node_num);
+        tp = std::chrono::system_clock::now();
         builder.build(obj_medium_idxs, world_min, world_max, obj_idxs, nodes,
                       cache_nodes, config.cache_level);
-
         CHRONO_OUTPUT("[SBVH] BVH completed within %.3lf ms\n", elapsed);
 
         tp = std::chrono::system_clock::now();
@@ -1151,6 +1151,7 @@ Scene::Scene(std::string path)
         BVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
                            objects, num_emitters, config.max_node_num,
                            config.bvh_overlap_w);
+        tp = std::chrono::system_clock::now();
         builder.build(obj_medium_idxs, world_min, world_max, obj_idxs,
                       prim_idxs, nodes, cache_nodes, config.cache_level);
         CHRONO_OUTPUT("[BVH] BVH completed within %.3lf ms\n", elapsed);

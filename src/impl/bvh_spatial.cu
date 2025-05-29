@@ -244,9 +244,10 @@ bool spatial_split_criteria(float root_area, float cur_area, float intrs_area,
     // factor is in fact mentioned in the original paper.
     static constexpr float root_overlap_factor = 1e-5f;
 
-    return (depth >= spatial_split_depth) &&
-           ((intrs_area > cur_area * local_overlap_factor) ||
-            (intrs_area > root_overlap_factor * root_area));
+    // return (depth >= spatial_split_depth) &&
+    //        ((intrs_area > cur_area * local_overlap_factor) ||
+    //         (intrs_area > root_overlap_factor * root_area));
+    return false;
 }
 
 // TODO(heqianyue): note that we currently don't support
@@ -459,7 +460,10 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
     print_vec3(world_min);
     printf("[SBVH] World max: ");
     print_vec3(world_max);
-    SBVHNode *root_node = new SBVHNode(AABB(world_min, world_max, 0, 0), {});
+    std::vector<int> all_prims(points1.size());
+    std::iota(all_prims.begin(), all_prims.end(), 0);
+    SBVHNode *root_node =
+        new SBVHNode(AABB(world_min, world_max, 0, 0), std::move(all_prims));
     node_num = recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
                                   flattened_idxs, root_node,
                                   root_node->bound.area(), 0, max_prim_node);
@@ -473,7 +477,7 @@ void remap_helper_func(const std::vector<int> &flattened_idxs,
     static constexpr int n_threads = 4;
     const size_t num_new_prims = flattened_idxs.size();
     const size_t padded_size =
-        (num_new_prims + 3) / 4; // workload for each thread
+        (num_new_prims + n_threads - 1) / n_threads; // workload for each thread
 
     ContainerTy mapped_vals;
     if constexpr (Dim == 1) {
@@ -513,6 +517,7 @@ void SBVHBuilder::post_process(std::vector<int> &obj_indices,
     // are two major step for this: (1) reordered vertices, normals, UVs, object
     // index and sphere_flags using an multi-threading approach (or SIMD). (2)
     // Deal with the emissive primitives (remove duplication)
+    size_t original_size = vertices[0].size();
     remap_helper_func(flattened_idxs, vertices);
     remap_helper_func(flattened_idxs, normals);
     remap_helper_func(flattened_idxs, uvs);
@@ -521,7 +526,7 @@ void SBVHBuilder::post_process(std::vector<int> &obj_indices,
 
     const size_t num_prims = flattened_idxs.size();
     std::vector<std::vector<int>> eprim_idxs(num_emitters);
-    std::vector<bool> visited(vertices.size(), false);
+    std::vector<bool> visited(original_size, false);
     for (int i = 0; i < num_prims; i++) {
         // skip duplicated emissive primitives, if the duplicated primitives are
         // not skipped over, the emissive primitive sampling will be biased so
@@ -577,7 +582,8 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
         sbvh_root_start(points1, points2, points3, world_min, world_max,
                         flattened_idxs, bvh_infos, node_num, max_prim_node);
 
-    printf("[SBVH] SBVH tree max depth: %d\n", max_depth);
+    printf("[SBVH] SBVH tree max depth: %d, duplicated primitives: %d (%d)\n",
+           max_depth, flattened_idxs.size(), points1.size());
     cache_max_level = std::min(std::max(max_depth - 1, 0), cache_max_level);
     nodes.reserve(node_num << 1);
     cache_nodes.reserve(1 << cache_max_level);
