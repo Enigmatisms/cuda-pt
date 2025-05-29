@@ -97,8 +97,6 @@ template <int N> class SpatialSplitter {
     const float interval;
 
     std::vector<AABB> bounds;
-
-    AABB fwd_bound, bwd_bound;
     std::array<int, N> prim_cnts; // cumsum of primitive cnts
   public:
     // ID of the triangles that enters the specified bin
@@ -109,7 +107,7 @@ template <int N> class SpatialSplitter {
   private:
     // given the vertices of a triangle, update the spatial splitter bins,
     // entering and exiting triangle records via one-sweep line-drawing-like
-    // fast AABB bins update algorithm
+    // fast AABB bins update algorithm (chopped binning in the paper)
     void update_triangle(Vec3 v1, Vec3 v2, Vec3 v3, int prim_id);
 
     void update_sphere(const Vec3 &center, float radius, int prim_id) {
@@ -118,9 +116,8 @@ template <int N> class SpatialSplitter {
     }
 
     inline int get_bin_id(const Vec3 &p) const {
-        return std::min(static_cast<int>(std::floor(
-                            std::max(p[axis] - s_pos, 0.f) / interval)),
-                        N - 1);
+        return std::clamp(static_cast<int>((p[axis] - s_pos) / interval), 0,
+                          N - 1);
     }
 
   public:
@@ -142,21 +139,6 @@ template <int N> class SpatialSplitter {
                                               std::vector<int> &left_prims,
                                               std::vector<int> &right_prims,
                                               int seg_bin_idx);
-
-    template <bool reverse> AABB partial_sum(const int index) const {
-        AABB result;
-        result.clear();
-        if constexpr (reverse) {
-            for (int i = index + 1; i < N; i++) {
-                result += bounds[i];
-            }
-        } else {
-            for (int i = 0; i < index + 1; i++) {
-                result += bounds[i];
-            }
-        }
-        return result;
-    }
 };
 
 class SBVHBuilder {
@@ -187,6 +169,7 @@ class SBVHBuilder {
     std::vector<ObjInfo> &objects;
     const int num_emitters;
     const int max_prim_node;
+    AABB root_bound;
 
     std::vector<int> flattened_idxs;
 };

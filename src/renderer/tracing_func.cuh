@@ -146,12 +146,13 @@ ray_intersect_bvh(const Ray &ray, const cudaTextureObject_t bvh_leaves,
         node.get_range(beg_idx, end_idx);
         bool intersect_node = node.aabb.intersect(inv_d, o_div, aabb_tmin) &&
                               aabb_tmin < min_dist;
-        // The logic here: end_idx is reuse, if end_idx < 0, meaning that the
-        // current node is non-leaf, non-leaf node stores (-all_offset) as
+        // The logic here: end_idx is reused. if end_idx < 0, meaning that the
+        // current node is non-leaf, non-leaf node stores `-all_offset` as
         // end_idx, so to skip the node and its children -end_idx will be the
         // offset. While for leaf node, 1 will be the increment offset, and
         // `POSITIVE` end_idx is stored. So the following for loop can naturally
-        // run (while for non-leaf, naturally skip)
+        // run (while for non-leaf, naturally skip), also, for non-leaf node
+        // begin_idx is useless. For SBVH, begin_idx is always 0
         node_idx += (!intersect_node) * (end_idx < 0 ? -end_idx : 1) +
                     int(intersect_node);
         end_idx = intersect_node ? end_idx + beg_idx : 0;

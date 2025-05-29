@@ -33,6 +33,7 @@ static constexpr int sah_split_threshold = 8;
 // 1e-3] is ill-posed. If there is more than 64 primitives, the primitives will
 // be discarded
 static constexpr float traverse_cost = 0.2f;
+static constexpr bool SSP_DEBUG = false;
 static int max_depth = 0;
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
@@ -68,11 +69,184 @@ SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
     return SplitAxis(split_axis);
 }
 
-inline int object_index_packing(int obj_med_idx, int obj_id, bool is_sphere) {
-    // take the lower 20 bits and shift up 20bits
-    int truncated = (obj_med_idx & 0x00000fff) << 20;
-    return (static_cast<int>(is_sphere) << 31) + truncated +
-           (obj_id & 0x000fffff);
+template <int N>
+void SpatialSplitter<N>::update_triangle(Vec3 v1, Vec3 v2, Vec3 v3,
+                                         int prim_id) {
+    // 1. sort the points according to the position on the split axis
+    // we won't have degenerate triangles here.
+    float p1_v = v1[axis], p2_v = v2[axis], p3_v = v3[axis];
+    Vec3 p1, p2, p3;
+    if (p1_v > p2_v) {
+        std::swap(v1, v2);
+        std::swap(p1_v, p2_v); // make sure p1_v <= p2_v
+    }
+    // now v1[axis] <= v2[axis] always holds,
+    // therefore, p1 can never be v2
+    if (p3_v < p1_v) {
+        p1 = v3;
+        p2 = v1;
+        p3 = v2;
+    } else {
+        p1 = v1;
+        if (p2_v < p3_v) {
+            p2 = v2;
+            p3 = v3;
+        } else {
+            p2 = v3;
+            p3 = v2;
+        }
+    }
+    // After sorting, p1, p2, p3 should have increasing split axis coord
+    // convert the abs position to direction and normalize
+    Vec3 dir1 = p2 - p1;
+    Vec3 dir2 = p3 - p1;
+    dir1 *= 1.f / dir1[axis];
+    dir2 *= 1.f / dir2[axis];
+
+    // 2. get bin ID of p1, p2 and p3 and update the ID record
+    int v1_id = get_bin_id(p1);
+    int v2_id = get_bin_id(p2);
+    int v3_id = get_bin_id(p3);
+    enter_tris[v1_id].push_back(prim_id);
+    exit_tris[v3_id].push_back(prim_id);
+
+    float d2bin_start = s_pos + interval * static_cast<float>(v1_id) - p1[axis];
+    Vec3 end_p1 = p1 + d2bin_start * dir1, end_p2 = p1 + d2bin_start * dir2;
+    for (int id = v1_id; id <= v3_id; id++) {
+        AABB &aabb = bounds[id];
+
+        if (id != v1_id) {
+            aabb.extend(end_p1);
+            aabb.extend(end_p2);
+        } else {
+            aabb.extend(p1);
+        }
+
+        if (id == v2_id) {
+            aabb.extend(p2);
+            // reset the direction and normalize
+            dir1 = p3 - p2;
+            dir1 *= 1.f / dir1[axis];
+            // reset end point 1
+            end_p1 = p2 + dir1 * (s_pos + interval * static_cast<float>(v2_id) -
+                                  p2[axis]);
+        }
+
+        if (id != v3_id) {
+            end_p1 += interval * dir1;
+            end_p2 += interval * dir2;
+            aabb.extend(end_p1);
+            aabb.extend(end_p2);
+        } else {
+            aabb.extend(p3);
+        }
+    }
+}
+
+template <int N>
+void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
+                                     const std::vector<Vec3> &points2,
+                                     const std::vector<Vec3> &points3,
+                                     /* possibly, add sphere flag later */
+                                     const SBVHNode *const cur_node) {
+    for (int prim_id : cur_node->prims) {
+        update_triangle(points1[prim_id], points2[prim_id], points3[prim_id],
+                        prim_id);
+    }
+}
+
+template <int N>
+float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
+                                             int &seg_bin_idx,
+                                             float traverse_cost) {
+    float min_cost = 5e9f, node_prim_cnt = float(cur_node->prim_num());
+
+    std::array<float, N> fwd_areas, bwd_areas;
+    prim_cnts.fill(0);
+    fwd_areas.fill(0);
+    bwd_areas.fill(0);
+
+    AABB fwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0),
+        bwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0);
+    for (int i = 0; i < N; i++) {
+        fwd_bound += bounds[i];
+        prim_cnts[i] = enter_tris[i].size();
+        fwd_areas[i] = fwd_bound.area();
+        if (i > 0) {
+            prim_cnts[i] += prim_cnts[i - 1];
+            bwd_bound += bounds[N - i];
+            bwd_areas[N - 1 - i] = bwd_bound.area();
+        }
+    }
+    float node_inv_area = 1. / cur_node->bound.area();
+
+    for (int i = 0; i < N - 1; i++) {
+        float cost = traverse_cost +
+                     node_inv_area *
+                         (float(prim_cnts[i]) * fwd_areas[i] +
+                          (node_prim_cnt - float(prim_cnts[i])) * bwd_areas[i]);
+        if (cost < min_cost) {
+            min_cost = cost;
+            seg_bin_idx = i;
+        }
+    }
+    return min_cost;
+}
+
+template <int N>
+std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
+    const SBVHNode *const cur_node, std::vector<int> &left_prims,
+    std::vector<int> &right_prims, int seg_bin_idx) {
+    const int prim_num = cur_node->prim_num();
+    left_prims.reserve(prim_cnts[seg_bin_idx]);
+    right_prims.reserve(prim_num / 2);
+    std::unordered_set<int> exit_from_left;
+    for (int i = 0; i <= seg_bin_idx; i++) {
+        left_prims.insert(left_prims.begin(), enter_tris[i].begin(),
+                          enter_tris[i].end());
+        for (int v : exit_tris[i]) {
+            exit_from_left.emplace(v);
+        }
+    }
+    for (int prim_id : cur_node->prims) {
+        if (exit_from_left.count(prim_id))
+            continue;
+        right_prims.push_back(prim_id);
+    }
+
+    if constexpr (SSP_DEBUG) {
+        if (left_prims.empty() || right_prims.empty()) {
+            std::cerr << "Spatial split results in empty child nodes: "
+                      << left_prims.size() << ", " << right_prims.size()
+                      << std::endl;
+            throw std::runtime_error("Spatial split failed.");
+        }
+    }
+
+    AABB fwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0),
+        bwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0);
+    fwd_bound.clear();
+    bwd_bound.clear();
+    for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
+        fwd_bound += bounds[i];
+    for (int i = seg_bin_idx + 1; i < N; i++)
+        bwd_bound += bounds[i];
+    return std::make_pair(fwd_bound, bwd_bound);
+}
+
+bool spatial_split_criteria(float root_area, float cur_area, float intrs_area,
+                            int depth) {
+    // SS can only be applied when depth >= the following
+    static constexpr int spatial_split_depth = 1;
+    // SS can be applied if local overlap >= the following
+    static constexpr float local_overlap_factor = 0.5;
+    // SS can be applied if overlap relative to root >= the following. This
+    // factor is in fact mentioned in the original paper.
+    static constexpr float root_overlap_factor = 1e-5f;
+
+    return (depth >= spatial_split_depth) &&
+           ((intrs_area > cur_area * local_overlap_factor) ||
+            (intrs_area > root_overlap_factor * root_area));
 }
 
 // TODO(heqianyue): note that we currently don't support
@@ -83,7 +257,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                        const std::vector<Vec3> &points3,
                        const std::vector<BVHInfo> &bvh_infos,
                        std::vector<int> &flattened_idxs,
-                       SBVHNode *const cur_node, int depth = 0,
+                       SBVHNode *const cur_node, float root_area, int depth = 0,
                        int max_prim_node = 16) {
     auto process_leaf = [&]() {
         // leaf node processing function
@@ -161,8 +335,22 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             }
         }
 
-        if (false /*Some unknown criteria I didn't come up with yet*/) {
-            // if the crieria are met, we calculate the SBVH split cost
+        fwd_bound.clear();
+        bwd_bound.clear();
+        for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
+            fwd_bound += idx_bins[i].bound;
+        for (int i = seg_bin_idx + 1; i < num_bins; i++)
+            bwd_bound += idx_bins[i].bound;
+
+        if (spatial_split_criteria(root_area, cur_node->bound.area(),
+                                   fwd_bound.intersection_area(bwd_bound),
+                                   depth)) {
+
+            // TODO(heqianyue): there are still some optimization that can be
+            // implemented. (1) Reference unsplitting. Since split one primitive
+            // reference into two nodes when the reference introduces little
+            // overlap, we can unsplit the reference.
+
             SpatialSplitter<num_bins> ssp(
                 min_range, min_range + interval * static_cast<float>(num_bins),
                 max_axis);
@@ -176,10 +364,8 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 (sbvh_cost < node_prim_cnt ||
                  prim_num > max_prim_node)) { // Spatial split should be applied
                 min_cost = sbvh_cost;
-                ssp.apply_spatial_split(cur_node, lchild_idxs, rchild_idxs,
-                                        sbvh_seg_idx);
-                fwd_bound = ssp.partial_sum<false>(sbvh_seg_idx);
-                bwd_bound = ssp.partial_sum<true>(sbvh_seg_idx);
+                std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
+                    cur_node, lchild_idxs, rchild_idxs, sbvh_seg_idx);
             }
         }
 
@@ -198,12 +384,6 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                     rchild_idxs.push_back(bvh_id);
                 }
             }
-            fwd_bound.clear();
-            bwd_bound.clear();
-            for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
-                fwd_bound += idx_bins[i].bound;
-            for (int i = seg_bin_idx + 1; i < num_bins; i++)
-                bwd_bound += idx_bins[i].bound;
         }
     } else { // equal primitive number split (two nodes have identical
              // primitives)
@@ -256,49 +436,14 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         int node_num = 1;
         node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
                                        flattened_idxs, cur_node->lchild,
-                                       depth + 1, max_prim_node);
+                                       root_area, depth + 1, max_prim_node);
 
         node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
                                        flattened_idxs, cur_node->rchild,
-                                       depth + 1, max_prim_node);
+                                       root_area, depth + 1, max_prim_node);
         return node_num;
     } else {
         return process_leaf();
-    }
-}
-
-static int recursive_linearize(SBVHNode *cur_node, std::vector<float4> &nodes,
-                               std::vector<CompactNode> &cache_nodes,
-                               const int depth = 0,
-                               const int cache_max_depth = 4) {
-    // see the @ref bvh.cu for more information
-
-    size_t current_size = nodes.size() >> 1,
-           current_cached = cache_nodes.size();
-    float4 node_f, node_b;
-    cur_node->get_float4(node_f, node_b);
-    nodes.push_back(node_f);
-    nodes.push_back(node_b);
-    reinterpret_cast<uint32_t &>(node_f.w) = 1;
-    reinterpret_cast<uint32_t &>(node_b.w) = current_size;
-    if (depth < cache_max_depth) {
-        cache_nodes.emplace_back(node_f, node_b);
-    }
-    if (cur_node->non_leaf()) {
-        // non-leaf node
-        int lnodes = recursive_linearize(cur_node->lchild, nodes, cache_nodes,
-                                         depth + 1, cache_max_depth);
-        lnodes += recursive_linearize(cur_node->rchild, nodes, cache_nodes,
-                                      depth + 1, cache_max_depth);
-        INT_REF_CAST(nodes[2 * current_size + 1].w) = -(lnodes + 1);
-        if (depth < cache_max_depth) {
-            // store the jump offset to the next cached node (for non-leaf node)
-            cache_nodes[current_cached].set_low_8bits(cache_nodes.size() -
-                                                      current_cached);
-        }
-        return lnodes + 1; // include the cur_node
-    } else {
-        return 1;
     }
 }
 
@@ -316,7 +461,8 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
     print_vec3(world_max);
     SBVHNode *root_node = new SBVHNode(AABB(world_min, world_max, 0, 0), {});
     node_num = recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
-                                  flattened_idxs, root_node, max_prim_node);
+                                  flattened_idxs, root_node,
+                                  root_node->bound.area(), 0, max_prim_node);
 
     return root_node;
 }
@@ -341,16 +487,16 @@ void remap_helper_func(const std::vector<int> &flattened_idxs,
     for (int tid = 0; tid < n_threads; tid++) {
         const size_t s_pos = tid * padded_size,
                      e_pos = std::min(s_pos + padded_size, num_new_prims);
-#pragma unroll
         if constexpr (Dim == 1) {
             for (size_t i = s_pos; i < e_pos; i++) {
                 int index = flattened_idxs[i];
                 mapped_vals[i] = source[index];
             }
         } else {
+#pragma unroll
             for (int dim = 0; dim < Dim; dim++) {
                 const auto &old_vec = source[dim];
-                auto &new_vec = source[dim];
+                auto &new_vec = mapped_vals[dim];
                 for (size_t i = s_pos; i < e_pos; i++) {
                     int index = flattened_idxs[i];
                     new_vec[i] = old_vec[index];
