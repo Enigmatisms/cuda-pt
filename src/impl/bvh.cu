@@ -295,6 +295,7 @@ void BVHBuilder::build(const std::vector<int> &obj_med_idxs,
                        int &cache_max_level) {
     const auto &points1 = vertices[0], &points2 = vertices[1],
                &points3 = vertices[2];
+
     std::vector<PrimMappingInfo> idx_prs;
     std::vector<BVHInfo> bvh_infos;
     int node_num = 0, num_prims_all = points1.size();

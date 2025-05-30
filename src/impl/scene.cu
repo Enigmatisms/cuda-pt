@@ -334,7 +334,7 @@ void parseBSDF(const tinyxml2::XMLElement *bsdf_elem,
                 if (it == dielectric_mapping.end()) {
                     std::cout << "BSDF[" << id << "]"
                               << ": Only 8 types of metals are supported: ";
-                    for (const auto [k, v] : dielectric_mapping)
+                    for (const auto &[k, v] : dielectric_mapping)
                         std::cout << k << ", ";
                     std::cout << std::endl;
                     std::cout << "Current type '" << dielec_type

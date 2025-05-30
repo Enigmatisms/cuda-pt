@@ -34,13 +34,14 @@ static constexpr int sah_split_threshold = 8;
 // be discarded
 static constexpr float traverse_cost = 0.2f;
 static constexpr bool SSP_DEBUG = false;
+static constexpr int max_allowed_depth = 96;
 static int max_depth = 0;
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
                                     float &min_r, float &interval) const {
 
     Vec3 min_ctr = Vec3(std::numeric_limits<float>::max()),
-         max_ctr = Vec3(std::numeric_limits<float>::min());
+         max_ctr = Vec3(-std::numeric_limits<float>::max());
 
     for (int bvh_id : prims) {
         Vec3 ctr = bvhs[bvh_id].centroid;
@@ -72,6 +73,12 @@ SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
 template <int N>
 void SpatialSplitter<N>::update_triangle(Vec3 v1, Vec3 v2, Vec3 v3,
                                          int prim_id) {
+    // FIXME: we must confine the triangle inside of the box (even if
+    // the triangle has some part that is outside of the AABB, that
+    // part must not be considered in any way. Note that the current
+    // implementation can be replaced by 3-line intersection algorithm, which is
+    // also cheap to calculate by simple line-drawing.
+
     // 1. sort the points according to the position on the split axis
     // we won't have degenerate triangles here.
     float p1_v = v1[axis], p2_v = v2[axis], p3_v = v3[axis];
@@ -244,10 +251,9 @@ bool spatial_split_criteria(float root_area, float cur_area, float intrs_area,
     // factor is in fact mentioned in the original paper.
     static constexpr float root_overlap_factor = 1e-5f;
 
-    // return (depth >= spatial_split_depth) &&
-    //        ((intrs_area > cur_area * local_overlap_factor) ||
-    //         (intrs_area > root_overlap_factor * root_area));
-    return false;
+    return (depth >= spatial_split_depth) &&
+           ((intrs_area > cur_area * local_overlap_factor) ||
+            (intrs_area > root_overlap_factor * root_area));
 }
 
 // TODO(heqianyue): note that we currently don't support
@@ -269,6 +275,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         for (int prim_id : cur_node->prims) {
             flattened_idxs.push_back(prim_id);
         }
+        // TODO(heqianyue): check whether the leaf node has valid bound
         return 1;
     };
 
@@ -285,11 +292,11 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         cur_node->max_extent_axis(bvh_infos, min_range, interval);
 
     std::vector<int> lchild_idxs, rchild_idxs;
-    lchild_idxs.reserve(prim_num / 2);
-    rchild_idxs.reserve(prim_num / 2);
 
-    if (max_axis != SplitAxis::AXIS_NONE &&
-        prim_num > sah_split_threshold) { // SAH
+    // lchild_idxs.reserve(prim_num / 2);
+    // rchild_idxs.reserve(prim_num / 2);
+
+    if (true) { // SAH
         // Step 2: binning the space
         std::array<AxisBins, num_bins> idx_bins;
         for (int bvh_id : cur_node->prims) {
@@ -352,9 +359,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             // reference into two nodes when the reference introduces little
             // overlap, we can unsplit the reference.
 
-            SpatialSplitter<num_bins> ssp(
-                min_range, min_range + interval * static_cast<float>(num_bins),
-                max_axis);
+            SpatialSplitter<num_bins> ssp(cur_node->bound);
 
             ssp.update_bins(points1, points2, points3, cur_node);
 
@@ -389,7 +394,8 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
     } else { // equal primitive number split (two nodes have identical
              // primitives)
         std::vector<std::pair<float, int>> valued_indices;
-        valued_indices.reserve(cur_node->size());
+        // valued_indices.reserve(cur_node->size());
+        // printf("valued_indices reserve: %d\n", cur_node->size());
         for (int bvh_id : cur_node->prims) {
             valued_indices.emplace_back(bvh_infos[bvh_id].centroid[max_axis],
                                         bvh_id);
@@ -398,9 +404,11 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         // Step 5: reordering the BVH info in the vector to make the segment
         // contiguous (keep around half of the bvh in lchild)
         int half_size = valued_indices.size() / 2;
-        std::nth_element(
-            valued_indices.begin(), valued_indices.begin() + half_size,
-            valued_indices.end(),
+        // printf("curnode: %d, valued index: %lu, node size: %lu, half size:
+        // %lu\n", int(cur_node == nullptr), valued_indices.size(),
+        // cur_node->size(), half_size);
+        std::sort(
+            valued_indices.begin(), valued_indices.end(),
             [](const auto &a, const auto &b) { return a.first < b.first; });
 
         for (int i = 0; i < half_size; i++) {
@@ -435,6 +443,12 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         cur_node->axis = max_axis;
 
         int node_num = 1;
+        printf("recursive left, depth: %d, lchild (%lu): [", depth + 1,
+               cur_node->lchild->prim_num());
+        for (int v : cur_node->lchild->prims) {
+            printf("%d, ", v);
+        }
+        printf("]\n");
         node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
                                        flattened_idxs, cur_node->lchild,
                                        root_area, depth + 1, max_prim_node);
@@ -462,8 +476,8 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
     print_vec3(world_max);
     std::vector<int> all_prims(points1.size());
     std::iota(all_prims.begin(), all_prims.end(), 0);
-    SBVHNode *root_node =
-        new SBVHNode(AABB(world_min, world_max, 0, 0), std::move(all_prims));
+    SBVHNode *root_node = new SBVHNode(
+        AABB(world_min, world_max, 0, points1.size()), std::move(all_prims));
     node_num = recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
                                   flattened_idxs, root_node,
                                   root_node->bound.area(), 0, max_prim_node);

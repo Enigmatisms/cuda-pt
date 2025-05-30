@@ -91,12 +91,15 @@ class SBVHNode {
 
 template <int N> class SpatialSplitter {
   private:
-    const SplitAxis axis;
-    const float s_pos; // starting position
-    const float e_pos; // ending position
-    const float interval;
+    const AABB bound;
+    // split axis and range is not determined by SAH-BVH (not by centroids, but
+    // by the extent of the AABB)
+    SplitAxis axis;
+    float s_pos;
+    float e_pos;
+    float interval;
 
-    std::vector<AABB> bounds;
+    std::array<AABB, N> bounds;
     std::array<int, N> prim_cnts; // cumsum of primitive cnts
   public:
     // ID of the triangles that enters the specified bin
@@ -121,9 +124,29 @@ template <int N> class SpatialSplitter {
     }
 
   public:
-    SpatialSplitter(float _s_pos, float _e_pos, SplitAxis _axis)
-        : axis(_axis), s_pos(_s_pos), e_pos(_e_pos),
-          interval((_e_pos - _s_pos) / static_cast<float>(N)) {}
+    SpatialSplitter(const AABB &_bound) : bound(_bound) {
+        Vec3 diff = _bound.maxi - _bound.mini;
+        axis = SplitAxis::AXIS_X;
+        float max_diff = diff.x();
+        if (max_diff < diff.y()) {
+            axis = SplitAxis::AXIS_Y;
+            max_diff = diff.y();
+        }
+        if (max_diff < diff.z()) {
+            axis = SplitAxis::AXIS_Z;
+            max_diff = diff.z();
+        }
+        s_pos = _bound.mini[axis];
+        e_pos = _bound.maxi[axis];
+        interval = max_diff / static_cast<float>(N);
+
+        for (int i = 0; i < N; i++) {
+            Vec3 mini = _bound.mini, maxi = _bound.maxi;
+            mini[axis] = s_pos + static_cast<float>(i) * interval;
+            maxi[axis] = mini[axis] + interval;
+            bounds[i] = AABB(std::move(mini), std::move(maxi), 0, 0);
+        }
+    }
 
     // given a node and the current BVHInfo vector, try to split the triangles
     // in the given range, the update is exact
