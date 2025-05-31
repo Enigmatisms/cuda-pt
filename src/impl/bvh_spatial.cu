@@ -71,7 +71,7 @@ SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
 }
 
 template <int N>
-void SpatialSplitter<N>::update_triangle(Vec3 v1, Vec3 v2, Vec3 v3,
+void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
                                          int prim_id) {
     // FIXME: we must confine the triangle inside of the box (even if
     // the triangle has some part that is outside of the AABB, that
@@ -79,75 +79,43 @@ void SpatialSplitter<N>::update_triangle(Vec3 v1, Vec3 v2, Vec3 v3,
     // implementation can be replaced by 3-line intersection algorithm, which is
     // also cheap to calculate by simple line-drawing.
 
-    // 1. sort the points according to the position on the split axis
-    // we won't have degenerate triangles here.
-    float p1_v = v1[axis], p2_v = v2[axis], p3_v = v3[axis];
-    Vec3 p1, p2, p3;
-    if (p1_v > p2_v) {
-        std::swap(v1, v2);
-        std::swap(p1_v, p2_v); // make sure p1_v <= p2_v
-    }
-    // now v1[axis] <= v2[axis] always holds,
-    // therefore, p1 can never be v2
-    if (p3_v < p1_v) {
-        p1 = v3;
-        p2 = v1;
-        p3 = v2;
-    } else {
-        p1 = v1;
-        if (p2_v < p3_v) {
-            p2 = v2;
-            p3 = v3;
-        } else {
-            p2 = v3;
-            p3 = v2;
+    int min_axis_v = N, max_axis_v = -1;
+
+    for (int i = 0; i < 3; i++) {
+        Vec3 sp = points[i], ep = points[(i + 1) % 3];
+
+        bool valid = bound.clip_line_segment(sp, ep, sp, ep);
+        if (!valid)
+            continue; // current edge out of range and will not affect bounding
+                      // box
+        if (sp[axis] > ep[axis])
+            std::swap(sp, ep);
+
+        Vec3 dir = ep - sp;
+        float dim_v = dir[axis];
+        int s_idx = get_bin_id(sp), e_idx = get_bin_id(ep);
+        min_axis_v = std::min(min_axis_v, s_idx);
+        max_axis_v = std::max(max_axis_v, e_idx);
+
+        if (std::abs(dim_v) <= 1e-4f) { // parallel, extend directly
+            bounds[s_idx].extend(sp);
+            bounds[s_idx].extend(ep);
+            continue;
+        }
+        dir *= 1.f / dim_v;
+
+        float d2bin_start =
+            s_pos + interval * static_cast<float>(s_idx) - sp[axis];
+        Vec3 pt = sp + d2bin_start * dir;
+        for (int id = s_idx; id <= e_idx; id++) {
+            AABB &aabb = bounds[id];
+            aabb.extend(id == s_idx ? sp : pt);
+            pt += interval * dir;
+            aabb.extend(id == e_idx ? ep : pt);
         }
     }
-    // After sorting, p1, p2, p3 should have increasing split axis coord
-    // convert the abs position to direction and normalize
-    Vec3 dir1 = p2 - p1;
-    Vec3 dir2 = p3 - p1;
-    dir1 *= 1.f / dir1[axis];
-    dir2 *= 1.f / dir2[axis];
-
-    // 2. get bin ID of p1, p2 and p3 and update the ID record
-    int v1_id = get_bin_id(p1);
-    int v2_id = get_bin_id(p2);
-    int v3_id = get_bin_id(p3);
-    enter_tris[v1_id].push_back(prim_id);
-    exit_tris[v3_id].push_back(prim_id);
-
-    float d2bin_start = s_pos + interval * static_cast<float>(v1_id) - p1[axis];
-    Vec3 end_p1 = p1 + d2bin_start * dir1, end_p2 = p1 + d2bin_start * dir2;
-    for (int id = v1_id; id <= v3_id; id++) {
-        AABB &aabb = bounds[id];
-
-        if (id != v1_id) {
-            aabb.extend(end_p1);
-            aabb.extend(end_p2);
-        } else {
-            aabb.extend(p1);
-        }
-
-        if (id == v2_id) {
-            aabb.extend(p2);
-            // reset the direction and normalize
-            dir1 = p3 - p2;
-            dir1 *= 1.f / dir1[axis];
-            // reset end point 1
-            end_p1 = p2 + dir1 * (s_pos + interval * static_cast<float>(v2_id) -
-                                  p2[axis]);
-        }
-
-        if (id != v3_id) {
-            end_p1 += interval * dir1;
-            end_p2 += interval * dir2;
-            aabb.extend(end_p1);
-            aabb.extend(end_p2);
-        } else {
-            aabb.extend(p3);
-        }
-    }
+    enter_tris[min_axis_v].push_back(prim_id);
+    exit_tris[max_axis_v].push_back(prim_id);
 }
 
 template <int N>
@@ -157,7 +125,7 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
                                      /* possibly, add sphere flag later */
                                      const SBVHNode *const cur_node) {
     for (int prim_id : cur_node->prims) {
-        update_triangle(points1[prim_id], points2[prim_id], points3[prim_id],
+        update_triangle({points1[prim_id], points2[prim_id], points3[prim_id]},
                         prim_id);
     }
 }

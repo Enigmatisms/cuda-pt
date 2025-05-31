@@ -96,10 +96,9 @@ template <int N> class SpatialSplitter {
     // by the extent of the AABB)
     SplitAxis axis;
     float s_pos;
-    float e_pos;
     float interval;
 
-    std::array<AABB, N> bounds;
+    std::array<AABB, N> bounds;   // clipped binning results
     std::array<int, N> prim_cnts; // cumsum of primitive cnts
   public:
     // ID of the triangles that enters the specified bin
@@ -111,7 +110,7 @@ template <int N> class SpatialSplitter {
     // given the vertices of a triangle, update the spatial splitter bins,
     // entering and exiting triangle records via one-sweep line-drawing-like
     // fast AABB bins update algorithm (chopped binning in the paper)
-    void update_triangle(Vec3 v1, Vec3 v2, Vec3 v3, int prim_id);
+    void update_triangle(std::vector<Vec3> &&points, int prim_id);
 
     void update_sphere(const Vec3 &center, float radius, int prim_id) {
         throw std::runtime_error(
@@ -137,14 +136,10 @@ template <int N> class SpatialSplitter {
             max_diff = diff.z();
         }
         s_pos = _bound.mini[axis];
-        e_pos = _bound.maxi[axis];
         interval = max_diff / static_cast<float>(N);
 
         for (int i = 0; i < N; i++) {
-            Vec3 mini = _bound.mini, maxi = _bound.maxi;
-            mini[axis] = s_pos + static_cast<float>(i) * interval;
-            maxi[axis] = mini[axis] + interval;
-            bounds[i] = AABB(std::move(mini), std::move(maxi), 0, 0);
+            bounds[i].clear();
         }
     }
 
