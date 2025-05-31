@@ -17,16 +17,15 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug"
   if(MSVC)
     message(STATUS "MSVC: Building project in DEBUG mode.")
     set(CMAKE_CUDA_FLAGS
-        "${CMAKE_CUDA_FLAGS} -maxrregcount=40 -lineinfo -arch=native -g -G")
+        "${CMAKE_CUDA_FLAGS} -maxrregcount=40 -arch=native -g -G")
     set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -G -g -lineinfo")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 /g /Od /Zi /MDd")
   else()
     message(STATUS "GCC & G++: Building project in DEBUG mode.")
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     set(CMAKE_CUDA_FLAGS
-        "${CMAKE_CUDA_FLAGS} -Wall -G -O0 -lineinfo -maxrregcount=40 -arch=native"
-    )
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0")
+        "${CMAKE_CUDA_FLAGS} -Wall -G -O0 -maxrregcount=40 -arch=native")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -O0 -fsanitize=leak")
   endif()
   set(CUDA_CONFIG_FLAGS -G --extended-lambda)
 else()

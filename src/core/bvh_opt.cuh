@@ -27,6 +27,8 @@
  */
 #pragma once
 #include "core/bvh.cuh"
+#include "core/bvh_spatial.cuh"
 
 // Get SAH cost for the BVH tree
-float calculate_cost(const BVHNode *root, float traverse_cost);
+template <typename NodeType>
+float calculate_cost(NodeType *root, float traverse_cost);

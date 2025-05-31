@@ -105,6 +105,17 @@ class AABB {
 #undef IN_RANGE
     }
 
+    CPT_CPU void fix_degenerate() {
+        constexpr float THRESHOLD = 1e-4f;
+#pragma unroll
+        for (int i = 0; i < 3; i++) {
+            if (maxi[i] - mini[i] < THRESHOLD) {
+                maxi[i] += THRESHOLD * 0.5f;
+                mini[i] -= THRESHOLD * 0.5f;
+            }
+        }
+    }
+
     // intersection of two AABB
     CONDITION_TEMPLATE(AABBType, AABB)
     CPT_CPU float intersection_area(AABBType &&_aabb) const noexcept {
@@ -181,7 +192,7 @@ class AABB {
                 }
             } else {
                 // calculate parametric values t_min and t_max for intersections
-                // with min and max planes.
+                // with min and max planes, basic ray-AABB intersection
                 float inv_d = 1.0f / dir[i];
                 float t_min = (mini[i] - p0[i]) * inv_d;
                 float t_max = (maxi[i] - p0[i]) * inv_d;
