@@ -316,7 +316,6 @@ void BVHBuilder::build(const std::vector<int> &obj_med_idxs,
     printf("[BVH] Number of nodes to cache: %lu (%d)\n", cache_nodes.size(),
            cache_max_level);
 
-    // FIXME: MASK ALPHA, change obj_idxs
     obj_idxs.reserve(bvh_infos.size());
     prim_idxs.reserve(bvh_infos.size());
     for (BVHInfo &bvh : bvh_infos) {

@@ -176,9 +176,9 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
     const SBVHNode *const cur_node, std::vector<int> &left_prims,
     std::vector<int> &right_prims, int seg_bin_idx) {
     const int prim_num = cur_node->size();
-    left_prims.reserve(prim_cnts[seg_bin_idx]);
-    right_prims.reserve(prim_num / 2);
     std::unordered_set<int> exit_from_left;
+    left_prims.reserve(prim_cnts[seg_bin_idx]);
+    exit_from_left.reserve(prim_num / 2);
     for (int i = 0; i <= seg_bin_idx; i++) {
         left_prims.insert(left_prims.begin(), enter_tris[i].begin(),
                           enter_tris[i].end());
@@ -186,6 +186,7 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
             exit_from_left.emplace(v);
         }
     }
+    right_prims.reserve(prim_num - exit_from_left.size());
     for (int prim_id : cur_node->prims) {
         if (exit_from_left.count(prim_id))
             continue;
@@ -203,8 +204,6 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
 
     AABB fwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0),
         bwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0);
-    fwd_bound.clear();
-    bwd_bound.clear();
     for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
         fwd_bound += bounds[i];
     for (int i = seg_bin_idx + 1; i < N; i++)
@@ -336,7 +335,8 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 seg_bin_idx = i;
             }
         }
-
+        
+        bool spatial_split_applied = false;
         if (spatial_split_criteria(root_area, cur_node->bound.area(),
                                    fwd_bound.intersection_area(bwd_bound),
                                    split_info.depth)) {
@@ -360,10 +360,11 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 min_cost = sbvh_cost;
                 std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                     cur_node, lchild_idxs, rchild_idxs, sbvh_seg_idx);
+                spatial_split_applied = true;
             }
         }
 
-        if (lchild_idxs.empty() && (min_cost < node_prim_cnt ||
+        if (!spatial_split_applied && (min_cost < node_prim_cnt ||
                                     prim_num > max_prim_node)) { // object split
             fwd_bound.clear();
             bwd_bound.clear();
@@ -418,7 +419,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             (1.f / cur_node->bound.area()) *
                 (fwd_bound.area() * float(half_size) +
                  bwd_bound.area() * float(valued_indices.size() - half_size));
-        if (split_cost >= node_prim_cnt && prim_num < max_prim_node)
+        if (split_cost >= node_prim_cnt && prim_num <= max_prim_node)
             lchild_idxs.clear();
     }
 

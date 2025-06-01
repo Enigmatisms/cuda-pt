@@ -1268,7 +1268,7 @@ void Scene::export_prims(PrecomputedArray &verts, NormalArray &norms,
 
     constexpr size_t block_size = 256;
     int num_blocks =
-        (num_prims + block_size - 1) / block_size; // 计算所需 block 数
+        (num_prims + block_size - 1) / block_size;
     vec2_to_packed_half_kernel<<<num_blocks, block_size>>>(
         &uvs_float.x(0), &uvs_float.y(0), &uvs_float.z(0), uvs.data(),
         num_prims);
@@ -1295,12 +1295,14 @@ void Scene::print() const noexcept {
     std::cout << "\t\tConfig: SPP:\t\t" << config.spp << std::endl;
     std::cout << std::endl;
 
-    std::cout << "\tAccelerator type: BVH" << std::endl;
-    std::cout << "\t\tSAH-BVH Cache Level: \t" << config.cache_level
+    std::cout << "\tAccelerator type: (S)BVH" << std::endl;
+    std::cout << "\t\tSMem Cache Level: \t" << config.cache_level
               << std::endl;
     std::cout << "\t\tBVH Max Leaf Node: \t" << config.max_node_num
               << std::endl;
     std::cout << "\t\tBVH Overlap Weight: \t" << config.bvh_overlap_w
+              << std::endl;
+    std::cout << "\t\tBVH Spatial Split: \t" << config.use_sbvh
               << std::endl;
     std::cout << std::endl;
 
