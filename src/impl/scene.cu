@@ -984,10 +984,14 @@ Scene::Scene(std::string path)
         rdr_type = RendererType::DepthTracing;
     else if (render_type == "vpt")
         rdr_type = RendererType::MegaKernelVPT;
-    else if (render_type == "bvh-cost")
+    else if (render_type == "bvh-cost" || render_type == "bvh_cost")
         rdr_type = RendererType::BVHCostViz;
-    else
+    else {
+        printf(
+            "[Scene] Unknown renderer type: '%s', fall back to megakernel PT\n",
+            render_type);
         rdr_type = RendererType::MegaKernelPT;
+    }
 
     // ------------------------- (1) parse all the textures and BSDF
     // -------------------------
@@ -1146,6 +1150,11 @@ Scene::Scene(std::string path)
         CHRONO_OUTPUT(
             "[SBVH] Vertex data remapping completed within %.3lf ms\n",
             elapsed);
+        int old_num_prims = num_prims;
+        num_prims = verts_list[0].size();
+        printf("[SBVH] Vertices increased from %d to %d, increased by %.2f%%\n",
+               old_num_prims, num_prims,
+               float(num_prims - old_num_prims) / float(old_num_prims) * 100.f);
     } else {
         std::vector<int> prim_idxs; // won't need this if BVH is built
         BVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
@@ -1267,8 +1276,7 @@ void Scene::export_prims(PrecomputedArray &verts, NormalArray &norms,
     uvs_float.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
 
     constexpr size_t block_size = 256;
-    int num_blocks =
-        (num_prims + block_size - 1) / block_size;
+    int num_blocks = (num_prims + block_size - 1) / block_size;
     vec2_to_packed_half_kernel<<<num_blocks, block_size>>>(
         &uvs_float.x(0), &uvs_float.y(0), &uvs_float.z(0), uvs.data(),
         num_prims);
@@ -1296,14 +1304,12 @@ void Scene::print() const noexcept {
     std::cout << std::endl;
 
     std::cout << "\tAccelerator type: (S)BVH" << std::endl;
-    std::cout << "\t\tSMem Cache Level: \t" << config.cache_level
-              << std::endl;
+    std::cout << "\t\tSMem Cache Level: \t" << config.cache_level << std::endl;
     std::cout << "\t\tBVH Max Leaf Node: \t" << config.max_node_num
               << std::endl;
     std::cout << "\t\tBVH Overlap Weight: \t" << config.bvh_overlap_w
               << std::endl;
-    std::cout << "\t\tBVH Spatial Split: \t" << config.use_sbvh
-              << std::endl;
+    std::cout << "\t\tBVH Spatial Split: \t" << config.use_sbvh << std::endl;
     std::cout << std::endl;
 
     std::cout << "\tScene statistics: " << std::endl;

@@ -157,6 +157,10 @@ template <int N> class SpatialSplitter {
                                               std::vector<int> &left_prims,
                                               std::vector<int> &right_prims,
                                               int seg_bin_idx);
+
+    SplitAxis get_axis() const {
+        return static_cast<SplitAxis>(this->axis + AXIS_S_X);
+    }
 };
 
 class SBVHBuilder {

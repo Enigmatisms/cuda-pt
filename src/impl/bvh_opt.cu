@@ -23,30 +23,50 @@
 #include "core/bvh_opt.cuh"
 
 template <typename NodeType>
-static void calculate_cost_recursive(NodeType *node, float &sum_leaf,
-                                     int &non_leaf, int &leaf) {
-    if (node->lchild) { // BVH intermediate node will have both lchild, rchild,
-                        // or neither
-        non_leaf++;
-        calculate_cost_recursive(node->lchild, sum_leaf, non_leaf, leaf);
-        calculate_cost_recursive(node->rchild, sum_leaf, non_leaf, leaf);
-    } else { // BVH leaf node
-        leaf++;
-        sum_leaf +=
-            node->bound.area() * static_cast<float>(node->bound.prim_cnt());
+float calculate_SAH_recursive(NodeType *node, float cost_traverse,
+                              float cost_traverse_spatial = 0.4f,
+                              float cost_intersect = 1.f) {
+    if (node == nullptr) {
+        return 0.0;
+    }
+
+    if (node->lchild == nullptr || node->rchild == nullptr) {
+        return cost_intersect * static_cast<float>(node->prim_num());
+    }
+
+    float node_area = node->bound.area();
+
+    float left_area = node->lchild->bound.area();
+    float right_area = node->rchild->bound.area();
+
+    float left_cost =
+        calculate_SAH_recursive(node->lchild, cost_traverse, cost_intersect);
+    float right_cost =
+        calculate_SAH_recursive(node->rchild, cost_traverse, cost_intersect);
+
+    float inv_area = (node_area > 0) ? 1.0 / node_area : 0.0;
+    float left_ratio = left_area * inv_area;
+    float right_ratio = right_area * inv_area;
+    if constexpr (std::is_same_v<std::decay_t<NodeType>, SBVHNode>) {
+        return (node->axis > SplitAxis::AXIS_NONE ? cost_traverse_spatial
+                                                  : cost_traverse) +
+               left_ratio * left_cost + right_ratio * right_cost;
+    } else {
+        return cost_traverse + left_ratio * left_cost +
+               right_ratio * right_cost;
     }
 }
 
 // Get SAH cost for the BVH tree
 template <typename NodeType>
-float calculate_cost(NodeType *root, float traverse_cost) {
-    float sum_leaf = 0, root_area = root->bound.area();
-    int num_non_leaf = 0, num_leaf = 0;
-    calculate_cost_recursive(root->lchild, sum_leaf, num_non_leaf, num_leaf);
-    calculate_cost_recursive(root->rchild, sum_leaf, num_non_leaf, num_leaf);
-    return traverse_cost * static_cast<float>(num_non_leaf) +
-           sum_leaf / root_area;
+float calculate_cost(NodeType *root, float traverse_cost,
+                     float spatial_traverse_cost, float intersect_cost) {
+    return calculate_SAH_recursive(root, traverse_cost);
 }
 
-template float calculate_cost<BVHNode>(BVHNode *root, float traverse_cost);
-template float calculate_cost<SBVHNode>(SBVHNode *root, float traverse_cost);
+template float calculate_cost<BVHNode>(BVHNode *root, float traverse_cost,
+                                       float spatial_traverse_cost,
+                                       float intersect_cost);
+template float calculate_cost<SBVHNode>(SBVHNode *root, float traverse_cost,
+                                        float spatial_traverse_cost,
+                                        float intersect_cost);

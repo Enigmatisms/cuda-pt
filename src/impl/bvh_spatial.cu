@@ -27,7 +27,7 @@
 #include <unordered_set>
 
 static constexpr int num_bins = 16;
-static constexpr int num_sbins = 12; // spatial bins
+static constexpr int num_sbins = 16; // spatial bins
 static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;
 // A cluster with all the primitive centroid within a small range [less than
@@ -35,6 +35,7 @@ static constexpr int sah_split_threshold = 8;
 // be discarded
 static constexpr bool SSP_DEBUG = false;
 static constexpr float traverse_cost = 0.2f;
+static constexpr float spatial_traverse_cost = 0.4f;
 static constexpr int max_allowed_depth = 96;
 static constexpr int same_size_split = 3;
 static int max_depth = 0;
@@ -131,7 +132,7 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
 template <int N>
 float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
                                              int &seg_bin_idx,
-                                             float traverse_cost) {
+                                             float trav_cost) {
     float min_cost = 5e9f, node_prim_cnt = float(cur_node->size());
 
     std::array<float, N> fwd_areas, bwd_areas;
@@ -155,7 +156,7 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
     float node_inv_area = 1. / cur_node->bound.area();
 
     for (int i = 0; i < N - 1; i++) {
-        float cost = traverse_cost +
+        float cost = trav_cost +
                      node_inv_area *
                          (float(prim_cnts[i]) * fwd_areas[i] +
                           (node_prim_cnt - float(prim_cnts[i])) * bwd_areas[i]);
@@ -331,7 +332,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 seg_bin_idx = i;
             }
         }
-        
+
         bool spatial_split_applied = false;
         if (spatial_split_criteria(root_area, cur_node->bound.area(),
                                    fwd_bound.intersection_area(bwd_bound),
@@ -346,10 +347,10 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             ssp.update_bins(points1, points2, points3, cur_node);
 
             int sbvh_seg_idx = 0;
-            float sbvh_cost =
-                ssp.eval_spatial_split(cur_node, sbvh_seg_idx, traverse_cost);
-            printf("SBVH: spatial split cost: %f, object split cost: %f\n",
-                   sbvh_cost, min_cost);
+            float sbvh_cost = ssp.eval_spatial_split(cur_node, sbvh_seg_idx,
+                                                     spatial_traverse_cost);
+            // printf("SBVH: spatial split cost: %f, object split cost: %f\n",
+            // sbvh_cost, min_cost);
             if (sbvh_cost < min_cost &&
                 (sbvh_cost < node_prim_cnt ||
                  prim_num > max_prim_node)) { // Spatial split should be applied
@@ -357,11 +358,13 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                     cur_node, lchild_idxs, rchild_idxs, sbvh_seg_idx);
                 spatial_split_applied = true;
+                max_axis = ssp.get_axis();
             }
         }
 
-        if (!spatial_split_applied && (min_cost < node_prim_cnt ||
-                                    prim_num > max_prim_node)) { // object split
+        if (!spatial_split_applied &&
+            (min_cost < node_prim_cnt ||
+             prim_num > max_prim_node)) { // object split
             fwd_bound.clear();
             bwd_bound.clear();
             for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
@@ -582,7 +585,8 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
 
     printf("[SBVH] SBVH tree max depth: %d, duplicated primitives: %d (%d)\n",
            max_depth, flattened_idxs.size(), points1.size());
-    float total_cost = calculate_cost(root_node, traverse_cost);
+    float total_cost =
+        calculate_cost(root_node, traverse_cost, spatial_traverse_cost);
     printf("[SBVH] Traversed BVH SAH cost: %.7f, AVG: %.7f\n", total_cost,
            total_cost / static_cast<float>(bvh_infos.size()));
     cache_max_level = std::min(std::max(max_depth - 1, 0), cache_max_level);

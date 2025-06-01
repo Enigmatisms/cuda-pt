@@ -26,7 +26,16 @@
 #include "core/object.cuh"
 #include <algorithm>
 
-enum SplitAxis : int { AXIS_X, AXIS_Y, AXIS_Z, AXIS_NONE };
+// split axis x, y, z, invalid, (spatial split x, y, z)
+enum SplitAxis : int {
+    AXIS_X,
+    AXIS_Y,
+    AXIS_Z,
+    AXIS_NONE,
+    AXIS_S_X,
+    AXIS_S_Y,
+    AXIS_S_Z
+};
 
 struct BVHInfo {
     // BVH is for both triangle meshes and spheres
