@@ -24,7 +24,6 @@
 #include "core/bvh_opt.cuh"
 #include "core/bvh_spatial.cuh"
 #include <numeric>
-#include <unordered_set>
 
 static constexpr int num_bins = 16;
 static constexpr int num_sbins = 16; // spatial bins
@@ -35,7 +34,7 @@ static constexpr int sah_split_threshold = 8;
 // be discarded
 static constexpr bool SSP_DEBUG = false;
 static constexpr float traverse_cost = 0.2f;
-static constexpr float spatial_traverse_cost = 0.4f;
+static constexpr float spatial_traverse_cost = 2.0f;
 static constexpr int max_allowed_depth = 96;
 static constexpr int same_size_split = 3;
 static int max_depth = 0;
@@ -173,21 +172,15 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
     const SBVHNode *const cur_node, std::vector<int> &left_prims,
     std::vector<int> &right_prims, int seg_bin_idx) {
     const int prim_num = cur_node->size();
-    std::unordered_set<int> exit_from_left;
     left_prims.reserve(prim_cnts[seg_bin_idx]);
-    exit_from_left.reserve(prim_num / 2);
     for (int i = 0; i <= seg_bin_idx; i++) {
         left_prims.insert(left_prims.begin(), enter_tris[i].begin(),
                           enter_tris[i].end());
-        for (int v : exit_tris[i]) {
-            exit_from_left.emplace(v);
-        }
     }
-    right_prims.reserve(prim_num - exit_from_left.size());
-    for (int prim_id : cur_node->prims) {
-        if (exit_from_left.count(prim_id))
-            continue;
-        right_prims.push_back(prim_id);
+    right_prims.reserve(prim_num / 2);
+    for (int i = seg_bin_idx + 1; i < N; i++) {
+        right_prims.insert(right_prims.begin(), exit_tris[i].begin(),
+                           exit_tris[i].end());
     }
 
     if constexpr (SSP_DEBUG) {
@@ -208,19 +201,16 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
     return std::make_pair(fwd_bound, bwd_bound);
 }
 
-bool spatial_split_criteria(float root_area, float cur_area, float intrs_area,
-                            int depth) {
-    // SS can only be applied when depth >= the following
-    static constexpr int spatial_split_depth = 0;
-    // SS can be applied if local overlap >= the following
-    static constexpr float local_overlap_factor = 0.5;
+bool spatial_split_criteria(float root_area, float intrs_area, int depth) {
+    // SS can only be applied when depth < the following, since deeper nodes are
+    // usually small, overlap will not have too much negative impact
+    static constexpr int spatial_split_depth = 32;
     // SS can be applied if overlap relative to root >= the following. This
     // factor is in fact mentioned in the original paper.
     static constexpr float root_overlap_factor = 1e-5f;
 
-    return (depth > spatial_split_depth) &&
-           ((intrs_area > cur_area * local_overlap_factor) ||
-            (intrs_area > root_overlap_factor * root_area));
+    return (depth < spatial_split_depth) &&
+           (intrs_area > root_overlap_factor * root_area);
 }
 
 struct SplitInfo {
@@ -334,7 +324,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         }
 
         bool spatial_split_applied = false;
-        if (spatial_split_criteria(root_area, cur_node->bound.area(),
+        if (spatial_split_criteria(root_area,
                                    fwd_bound.intersection_area(bwd_bound),
                                    split_info.depth)) {
             // TODO(heqianyue): there are still some optimization that can be

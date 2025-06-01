@@ -212,7 +212,7 @@ class CompactNode {
         return (data.w >> HIGH_SHIFT) & LOW_24_MASK;
     }
 
-    // unsigned 6 bits (upper bound: 63)
+    // unsigned 8 bits (upper bound: 255)
     CPT_GPU_INLINE uint32_t get_cached_offset() const noexcept {
         return data.w & LOW_8_MASK;
     }

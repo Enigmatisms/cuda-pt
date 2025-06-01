@@ -141,7 +141,7 @@ class AABB {
     // A safe call for area
     CPT_CPU_INLINE float area() const {
         Vec3 diff = maxi - mini;
-        if (fabsf(diff.x()) < AABB_INVALID_DIST)
+        if (fabsf(diff.max_elem()) < AABB_INVALID_DIST)
             return 2.f * (diff.x() * diff.y() + diff.y() * diff.z() +
                           diff.x() * diff.z());
         return 0;

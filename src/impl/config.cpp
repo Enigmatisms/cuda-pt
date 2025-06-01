@@ -91,11 +91,11 @@ RenderingConfig::from_xml(const tinyxml2::XMLElement *acc_node,
             } else if (name == "max_node_num") {
                 int max_node_num = 0;
                 node->QueryIntAttribute("value", &max_node_num);
-                if (max_node_num < 1 || max_node_num > 32) {
-                    std::cout << "Max node clipped to [1, 32], originally: "
+                if (max_node_num < 1 || max_node_num > 255) {
+                    std::cout << "Max node clipped to [1, 255], originally: "
                               << max_node_num << std::endl;
                 }
-                config.max_node_num = std::max(std::min(max_node_num, 32), 1);
+                config.max_node_num = std::clamp(max_node_num, 1, 255);
             }
             node = node->NextSiblingElement("integer");
         }
