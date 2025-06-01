@@ -75,12 +75,8 @@ SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
 template <int N>
 void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
                                          int prim_id) {
-    // FIXME: we must confine the triangle inside of the box (even if
-    // the triangle has some part that is outside of the AABB, that
-    // part must not be considered in any way. Note that the current
-    // implementation can be replaced by 3-line intersection algorithm, which is
-    // also cheap to calculate by simple line-drawing.
-
+    // Note that spatial split triangles can have parts outside of the AABB
+    // so we must not assume that AABB is tight (object-ly, but spatially)
     int min_axis_v = N, max_axis_v = -1;
 
     for (int i = 0; i < 3; i++) {
@@ -146,7 +142,7 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
     AABB fwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0),
         bwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0);
     for (int i = 0; i < N; i++) {
-        bounds[i].fix_degenerate();
+        bounds[i].fix_degenerate(); // in case 0 width axis
         fwd_bound += bounds[i];
         prim_cnts[i] = enter_tris[i].size();
         fwd_areas[i] = fwd_bound.area();
