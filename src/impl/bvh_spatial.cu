@@ -213,8 +213,8 @@ bool spatial_split_criteria(float root_area, float intrs_area, int num_nodes) {
     // SS can only be applied when the number of primitives inside the node
     // exceeds the threshold (adopted from 2016 Ganestam. SAH guided spatial
     // split partitioning for fast BVH construction)
-    static constexpr float nodes_s[2] = {256, 20000};
-    static constexpr float nodes_e[2] = {2048, 1000000};
+    static constexpr float nodes_s[2] = {20000, 256};
+    static constexpr float nodes_e[2] = {1000000, 2048};
 
     float n_nodes = std::clamp((float)num_nodes, nodes_s[0], nodes_e[0]);
     int threshold = (n_nodes - nodes_s[0]) / (nodes_e[0] - nodes_s[0]) *
