@@ -78,6 +78,8 @@ int main(int argc, char **argv) {
         return 0;
     }
     default: {
+        std::cerr << "Unsupported renderer type. Maybe you want to run 'cpt' "
+                     "instead?\n";
         throw std::runtime_error("Unsupported renderer type.");
     }
     }
