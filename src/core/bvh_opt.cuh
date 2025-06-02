@@ -34,3 +34,7 @@ template <typename NodeType>
 float calculate_cost(NodeType *root, float traverse_cost,
                      float spatial_traverse_cost = 0.4f,
                      float intersect_cost = 1.f);
+
+// level-order traverse, for debug purposes
+template <typename NodeType>
+void level_order_traverse(const NodeType *const root, int max_level);

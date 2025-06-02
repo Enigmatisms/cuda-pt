@@ -124,10 +124,16 @@ template <int N> class SpatialSplitter {
                           N - 1);
     }
 
+    // after update_bins, the AABB of each bin might have parts outside of the
+    // node AABB (for non split axis), we need to bound them
+    void bound_all_bins();
+
   public:
-    SpatialSplitter(const AABB &_bound, float _s_pos, float _interval,
-                    SplitAxis _axis)
-        : bound(_bound), s_pos(_s_pos), interval(_interval), axis(_axis) {
+    SpatialSplitter(const AABB &_bound, SplitAxis _axis)
+        : bound(_bound), s_pos(_bound.mini[_axis]),
+          interval((_bound.maxi[_axis] - _bound.mini[_axis]) /
+                   static_cast<float>(N)),
+          axis(_axis) {
         for (int i = 0; i < N; i++) {
             bounds[i].clear();
         }

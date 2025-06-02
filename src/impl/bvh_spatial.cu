@@ -26,15 +26,15 @@
 #include <numeric>
 
 static constexpr int num_bins = 16;
-static constexpr int num_sbins = 24; // spatial bins
+static constexpr int num_sbins = 32; // spatial bins
 static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;
 // A cluster with all the primitive centroid within a small range [less than
 // 1e-3] is ill-posed. If there is more than 64 primitives, the primitives will
 // be discarded
-static constexpr bool SSP_DEBUG = false;
+static constexpr bool SSP_DEBUG = true;
 static constexpr float traverse_cost = 0.2f;
-static constexpr float spatial_traverse_cost = 0.3f;
+static constexpr float spatial_traverse_cost = 0.4f;
 static constexpr int max_allowed_depth = 96;
 static constexpr int same_size_split = 4;
 static int max_depth = 0;
@@ -72,6 +72,13 @@ SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
     return SplitAxis(split_axis);
 }
 
+template <int N> void SpatialSplitter<N>::bound_all_bins() {
+    for (int i = 0; i < N; i++) {
+        bounds[i] ^= bound;
+        bounds[i].fix_degenerate(); // in case 0 width axis
+    }
+}
+
 template <int N>
 void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
                                          int prim_id) {
@@ -81,8 +88,9 @@ void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
 
     for (int i = 0; i < 3; i++) {
         Vec3 sp = points[i], ep = points[(i + 1) % 3];
+        Vec3 old_sp = sp, old_ep = ep;
 
-        bool valid = bound.clip_line_segment(sp, ep, sp, ep);
+        bool valid = bound.line_axis_clip(sp, ep, axis);
         if (!valid)
             continue; // current edge out of range and will not affect bounding
                       // box
@@ -95,21 +103,22 @@ void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
         min_axis_v = std::min(min_axis_v, s_idx);
         max_axis_v = std::max(max_axis_v, e_idx);
 
-        if (std::abs(dim_v) <= 1e-4f) { // parallel, extend directly
+        if (std::abs(dim_v) <= 1e-4f &&
+            s_idx == e_idx) { // parallel, extend directly
             bounds[s_idx].extend(sp);
             bounds[s_idx].extend(ep);
-            continue;
-        }
-        dir *= 1.f / dim_v;
+        } else {
+            dir *= 1.f / dim_v;
 
-        float d2bin_start =
-            s_pos + interval * static_cast<float>(s_idx) - sp[axis];
-        Vec3 pt = sp + d2bin_start * dir;
-        for (int id = s_idx; id <= e_idx; id++) {
-            AABB &aabb = bounds[id];
-            aabb.extend(id == s_idx ? sp : pt);
-            pt += interval * dir;
-            aabb.extend(id == e_idx ? ep : pt);
+            float d2bin_start =
+                s_pos + interval * static_cast<float>(s_idx) - sp[axis];
+            Vec3 pt = sp + d2bin_start * dir;
+            for (int id = s_idx; id <= e_idx; id++) {
+                AABB &aabb = bounds[id];
+                aabb.extend(id == s_idx ? sp : pt);
+                pt = pt.advance(dir, interval);
+                aabb.extend(id == e_idx ? ep : pt);
+            }
         }
     }
     enter_tris[min_axis_v].push_back(prim_id);
@@ -122,10 +131,12 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
                                      const std::vector<Vec3> &points3,
                                      /* possibly, add sphere flag later */
                                      const SBVHNode *const cur_node) {
+    // the following can be made faster by partitioning and multi-threading
     for (int prim_id : cur_node->prims) {
         update_triangle({points1[prim_id], points2[prim_id], points3[prim_id]},
                         prim_id);
     }
+    bound_all_bins();
 }
 
 template <int N>
@@ -143,7 +154,6 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
     AABB fwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0),
         bwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0);
     for (int i = 0; i < N; i++) {
-        bounds[i].fix_degenerate(); // in case 0 width axis
         fwd_bound += bounds[i];
         fwd_areas[i] = fwd_bound.area();
         lprim_cnts[i] = enter_tris[i].size();
@@ -178,12 +188,12 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
     const int prim_num = cur_node->size();
     left_prims.reserve(lprim_cnts[seg_bin_idx]);
     for (int i = 0; i <= seg_bin_idx; i++) {
-        left_prims.insert(left_prims.begin(), enter_tris[i].begin(),
+        left_prims.insert(left_prims.end(), enter_tris[i].begin(),
                           enter_tris[i].end());
     }
     right_prims.reserve(rprim_cnts[seg_bin_idx]);
     for (int i = seg_bin_idx + 1; i < N; i++) {
-        right_prims.insert(right_prims.begin(), exit_tris[i].begin(),
+        right_prims.insert(right_prims.end(), exit_tris[i].begin(),
                            exit_tris[i].end());
     }
 
@@ -208,7 +218,7 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
 bool spatial_split_criteria(float root_area, float intrs_area, int num_nodes) {
     // SS can be applied if overlap relative to root >= the following. This
     // factor is in fact mentioned in the original paper.
-    static constexpr float root_overlap_factor = 1e-5f;
+    static constexpr float root_overlap_factor = 1e-4f;
 
     // SS can only be applied when the number of primitives inside the node
     // exceeds the threshold (adopted from 2016 Ganestam. SAH guided spatial
@@ -262,12 +272,10 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         for (int prim_id : cur_node->prims) {
             flattened_idxs.push_back(prim_id);
         }
-        // TODO(heqianyue): check whether the leaf node has valid bound
         return 1;
     };
 
     if (cur_node->size() <= no_div_threshold ||
-        split_info.counter >= same_size_split ||
         split_info.depth >= max_allowed_depth) {
         // if the node is small, or father nodes and child nodes share the same
         // size (spatial split duplication) for too many times, we'll create a
@@ -343,8 +351,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             // reference into two nodes when the reference introduces little
             // overlap, we can unsplit the reference.
 
-            SpatialSplitter<num_sbins> ssp(cur_node->bound, min_range, interval,
-                                           max_axis);
+            SpatialSplitter<num_sbins> ssp(cur_node->bound, max_axis);
 
             ssp.update_bins(points1, points2, points3, cur_node);
 
@@ -594,9 +601,11 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
     nodes.reserve(node_num << 1);
     cache_nodes.reserve(1 << cache_max_level);
 
-    recursive_linearize(root_node, nodes, cache_nodes, 0);
+    recursive_linearize(root_node, nodes, cache_nodes, 0, cache_max_level);
     printf("[SBVH] Number of nodes to cache: %lu (%d)\n", cache_nodes.size(),
            cache_max_level);
+
+    // only for debug: level_order_traverse(root_node, 8);
 
     obj_idxs.reserve(bvh_infos.size());
     for (BVHInfo &bvh : bvh_infos) {

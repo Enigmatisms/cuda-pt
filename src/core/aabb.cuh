@@ -96,15 +96,6 @@ class AABB {
         maxi.maximized(std::forward<PointType>(pt));
     }
 
-    CONDITION_TEMPLATE(VecType, Vec3)
-    CPT_CPU bool covers(VecType &&pt) const noexcept {
-#define IN_RANGE(x, x_min, x_max) (x > x_min && x < x_max)
-        return IN_RANGE(pt.x(), mini.x(), maxi.x()) &&
-               IN_RANGE(pt.y(), mini.y(), maxi.y()) &&
-               IN_RANGE(pt.z(), mini.z(), maxi.z());
-#undef IN_RANGE
-    }
-
     CPT_CPU void fix_degenerate() {
         constexpr float THRESHOLD = 1e-4f;
 #pragma unroll
@@ -147,6 +138,12 @@ class AABB {
         return 0;
     }
 
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU_INLINE void operator^=(AABBType &&aabb) {
+        mini.maximized(aabb.mini);
+        maxi.minimized(aabb.maxi);
+    }
+
     CPT_CPU_INLINE void clear() {
         mini.fill(AABB_INVALID_DIST);
         maxi.fill(-AABB_INVALID_DIST);
@@ -164,17 +161,16 @@ class AABB {
     CPT_CPU_GPU_INLINE int prim_cnt() const { return __bytes2; }
     CPT_CPU_GPU_INLINE int &prim_cnt() { return __bytes2; }
 
-    CONDITION_TEMPLATE_SEP_2(V1Type, V2Type, Vec3, Vec3)
-    CPT_CPU bool clip_line_segment(V1Type &&p0, V2Type &&p1, Vec3 &out0,
-                                   Vec3 &out1) const {
-        // early check: if both endpoints are inside the AABB, no clipping
+    // clip the line segment along the given axis (dim)
+    CPT_CPU bool line_axis_clip(Vec3 &p0, Vec3 &p1, int dim) const {
+        // early check: if both endpoints are inside the range, no clipping
         // needed.
-        if (covers(p0) && covers(p1)) {
-            out0 = p0;
-            out1 = p1;
+#define IN_RANGE(x, x_min, x_max) (x > x_min && x < x_max)
+        if (IN_RANGE(p0[dim], mini[dim], maxi[dim]) &&
+            IN_RANGE(p1[dim], mini[dim], maxi[dim])) {
             return true;
         }
-
+#undef IN_RANGE
         // direction vector and initialization of parametric parameters t0
         // (enter) and t1 (exit).
         Vec3 dir = p1 - p0;
@@ -182,41 +178,41 @@ class AABB {
         float t1 = 1.0f; // end of line segment (p1)
 
         // process each dimension (x, y, z)
-        for (int i = 0; i < 3; ++i) {
-            if (dir[i] == 0.0f) {
-                // line segment is parallel to this dimension's planes.
-                // if the current point is outside, the entire segment is
-                // outside.
-                if (p0[i] < mini[i] || p0[i] > maxi[i]) {
-                    return false;
-                }
-            } else {
-                // calculate parametric values t_min and t_max for intersections
-                // with min and max planes, basic ray-AABB intersection
-                float inv_d = 1.0f / dir[i];
-                float t_min = (mini[i] - p0[i]) * inv_d;
-                float t_max = (maxi[i] - p0[i]) * inv_d;
+        if (dir[dim] == 0.0f) {
+            // line segment is parallel to this dimension's planes.
+            // if the current point is outside, the entire segment is
+            // outside.
+            if (p0[dim] < mini[dim] || p0[dim] > maxi[dim]) {
+                return false;
+            }
+        } else {
+            // calculate parametric values t_min and t_max for intersections
+            // with min and max planes, like ray-AABB intersection
+            float inv_d = 1.0f / dir[dim];
+            float t_min = (mini[dim] - p0[dim]) * inv_d;
+            float t_max = (maxi[dim] - p0[dim]) * inv_d;
 
-                // swap t_min and t_max if direction is negative (entering from
-                // opposite side).
-                if (inv_d < 0.0f) {
-                    std::swap(t_min, t_max);
-                }
+            // swap t_min and t_max if direction is negative (entering from
+            // opposite side).
+            if (inv_d < 0.0f) {
+                std::swap(t_min, t_max);
+            }
 
-                // update global t0 (enter) and t1 (exit) based on current
-                // dimension.
-                t0 = std::max(t0, t_min);
-                t1 = std::min(t1, t_max);
+            // update global t0 (enter) and t1 (exit) based on current
+            // dimension.
+            t0 = std::max(t0, t_min);
+            t1 = std::min(t1, t_max);
 
-                // early exit if the segment is completely outside the AABB.
-                if (t0 > t1) {
-                    return false;
-                }
+            // early exit if the segment is completely outside the range.
+            if (t0 > t1) {
+                return false;
             }
         }
 
-        out0 = p0 + dir * t0;
-        out1 = p0 + dir * t1;
+        Vec3 out0 = p0.advance(dir, t0);
+        Vec3 out1 = p0.advance(dir, t1);
+        p0 = std::move(out0);
+        p1 = std::move(out1);
         return true;
     }
 };

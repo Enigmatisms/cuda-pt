@@ -64,9 +64,39 @@ float calculate_cost(NodeType *root, float traverse_cost,
     return calculate_SAH_recursive(root, traverse_cost);
 }
 
+template <typename NodeType>
+void level_order_traverse(const NodeType *const root, int max_level) {
+    std::vector<std::pair<int, const NodeType *>> queue = {{0, root}};
+    int level = 1;
+    int node_cnt = 1;
+    while (!queue.empty() && level <= max_level) {
+        printf("Level: %d (node num: %lu)\n", level, queue.size());
+        std::vector<std::pair<int, const NodeType *>> new_queue = {};
+        new_queue.reserve(queue.size() * 2);
+
+        for (auto [father, node] : queue) {
+            printf("(%d)(sz: %d, lf: %d, fa: %d), ", node_cnt, node->prim_num(),
+                   int(node->lchild == nullptr), father);
+            if (node->lchild)
+                new_queue.emplace_back(node_cnt, node->lchild);
+            if (node->rchild)
+                new_queue.emplace_back(node_cnt, node->rchild);
+            node_cnt++;
+        }
+        printf("\n");
+        queue = std::move(new_queue);
+        level += 1;
+    }
+}
+
 template float calculate_cost<BVHNode>(BVHNode *root, float traverse_cost,
                                        float spatial_traverse_cost,
                                        float intersect_cost);
 template float calculate_cost<SBVHNode>(SBVHNode *root, float traverse_cost,
                                         float spatial_traverse_cost,
                                         float intersect_cost);
+
+template void level_order_traverse<BVHNode>(const BVHNode *const root,
+                                            int max_level);
+template void level_order_traverse<SBVHNode>(const SBVHNode *const root,
+                                             int max_level);

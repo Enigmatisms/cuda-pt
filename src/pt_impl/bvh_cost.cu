@@ -93,7 +93,7 @@ CPT_GPU int ray_intersect_cost(const Ray &ray,
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;
             min_index = valid ? idx : min_index;
-            intersect_query++;
+            // intersect_query++;
         }
     }
     return intersect_query;
