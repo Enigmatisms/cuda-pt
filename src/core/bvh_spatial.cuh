@@ -94,12 +94,14 @@ template <int N> class SpatialSplitter {
     const AABB bound;
     // split axis and range is not determined by SAH-BVH (not by centroids, but
     // by the extent of the AABB)
-    SplitAxis axis;
-    float s_pos;
-    float interval;
+    const SplitAxis axis;
+    const float s_pos;
+    const float interval;
 
-    std::array<AABB, N> bounds;   // clipped binning results
-    std::array<int, N> prim_cnts; // cumsum of primitive cnts
+    std::array<AABB, N> bounds; // clipped binning results
+    std::array<int, N> lprim_cnts;
+    std::array<int, N> rprim_cnts;
+
   public:
     // ID of the triangles that enters the specified bin
     std::array<std::vector<int>, N> enter_tris;
@@ -123,21 +125,9 @@ template <int N> class SpatialSplitter {
     }
 
   public:
-    SpatialSplitter(const AABB &_bound) : bound(_bound) {
-        Vec3 diff = _bound.maxi - _bound.mini;
-        axis = SplitAxis::AXIS_X;
-        float max_diff = diff.x();
-        if (max_diff < diff.y()) {
-            axis = SplitAxis::AXIS_Y;
-            max_diff = diff.y();
-        }
-        if (max_diff < diff.z()) {
-            axis = SplitAxis::AXIS_Z;
-            max_diff = diff.z();
-        }
-        s_pos = _bound.mini[axis];
-        interval = max_diff / static_cast<float>(N);
-
+    SpatialSplitter(const AABB &_bound, float _s_pos, float _interval,
+                    SplitAxis _axis)
+        : bound(_bound), s_pos(_s_pos), interval(_interval), axis(_axis) {
         for (int i = 0; i < N; i++) {
             bounds[i].clear();
         }

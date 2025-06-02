@@ -26,7 +26,7 @@
 #include <numeric>
 
 static constexpr int num_bins = 16;
-static constexpr int num_sbins = 16; // spatial bins
+static constexpr int num_sbins = 24; // spatial bins
 static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;
 // A cluster with all the primitive centroid within a small range [less than
@@ -34,9 +34,9 @@ static constexpr int sah_split_threshold = 8;
 // be discarded
 static constexpr bool SSP_DEBUG = false;
 static constexpr float traverse_cost = 0.2f;
-static constexpr float spatial_traverse_cost = 2.0f;
+static constexpr float spatial_traverse_cost = 0.3f;
 static constexpr int max_allowed_depth = 96;
-static constexpr int same_size_split = 3;
+static constexpr int same_size_split = 4;
 static int max_depth = 0;
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
@@ -135,7 +135,8 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
     float min_cost = 5e9f, node_prim_cnt = float(cur_node->size());
 
     std::array<float, N> fwd_areas, bwd_areas;
-    prim_cnts.fill(0);
+    lprim_cnts.fill(0);
+    rprim_cnts.fill(0);
     fwd_areas.fill(0);
     bwd_areas.fill(0);
 
@@ -144,21 +145,24 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
     for (int i = 0; i < N; i++) {
         bounds[i].fix_degenerate(); // in case 0 width axis
         fwd_bound += bounds[i];
-        prim_cnts[i] = enter_tris[i].size();
         fwd_areas[i] = fwd_bound.area();
+        lprim_cnts[i] = enter_tris[i].size();
         if (i > 0) {
-            prim_cnts[i] += prim_cnts[i - 1];
+            lprim_cnts[i] += lprim_cnts[i - 1];
             bwd_bound += bounds[N - i];
             bwd_areas[N - 1 - i] = bwd_bound.area();
+            // the same as BVH, the [N-1] will be 0, since seg_idx can never be
+            // N - 1, also, exit_tris[0] will not be accessed (since
+            // unnecessary)
+            rprim_cnts[N - 1 - i] = exit_tris[N - i].size() + rprim_cnts[N - i];
         }
     }
     float node_inv_area = 1. / cur_node->bound.area();
 
     for (int i = 0; i < N - 1; i++) {
-        float cost = trav_cost +
-                     node_inv_area *
-                         (float(prim_cnts[i]) * fwd_areas[i] +
-                          (node_prim_cnt - float(prim_cnts[i])) * bwd_areas[i]);
+        float cost =
+            trav_cost + node_inv_area * (float(lprim_cnts[i]) * fwd_areas[i] +
+                                         float(rprim_cnts[i]) * bwd_areas[i]);
         if (cost < min_cost) {
             min_cost = cost;
             seg_bin_idx = i;
@@ -172,12 +176,12 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
     const SBVHNode *const cur_node, std::vector<int> &left_prims,
     std::vector<int> &right_prims, int seg_bin_idx) {
     const int prim_num = cur_node->size();
-    left_prims.reserve(prim_cnts[seg_bin_idx]);
+    left_prims.reserve(lprim_cnts[seg_bin_idx]);
     for (int i = 0; i <= seg_bin_idx; i++) {
         left_prims.insert(left_prims.begin(), enter_tris[i].begin(),
                           enter_tris[i].end());
     }
-    right_prims.reserve(prim_num / 2);
+    right_prims.reserve(rprim_cnts[seg_bin_idx]);
     for (int i = seg_bin_idx + 1; i < N; i++) {
         right_prims.insert(right_prims.begin(), exit_tris[i].begin(),
                            exit_tris[i].end());
@@ -201,16 +205,24 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
     return std::make_pair(fwd_bound, bwd_bound);
 }
 
-bool spatial_split_criteria(float root_area, float intrs_area, int depth) {
-    // SS can only be applied when depth < the following, since deeper nodes are
-    // usually small, overlap will not have too much negative impact
-    static constexpr int spatial_split_depth = 32;
+bool spatial_split_criteria(float root_area, float intrs_area, int num_nodes) {
     // SS can be applied if overlap relative to root >= the following. This
     // factor is in fact mentioned in the original paper.
     static constexpr float root_overlap_factor = 1e-5f;
 
-    return (depth < spatial_split_depth) &&
-           (intrs_area > root_overlap_factor * root_area);
+    // SS can only be applied when the number of primitives inside the node
+    // exceeds the threshold (adopted from 2016 Ganestam. SAH guided spatial
+    // split partitioning for fast BVH construction)
+    static constexpr float nodes_s[2] = {256, 20000};
+    static constexpr float nodes_e[2] = {2048, 1000000};
+
+    float n_nodes = std::clamp((float)num_nodes, nodes_s[0], nodes_e[0]);
+    int threshold = (n_nodes - nodes_s[0]) / (nodes_e[0] - nodes_s[0]) *
+                        (nodes_e[1] - nodes_s[1]) +
+                    nodes_s[1];
+
+    return (intrs_area > root_overlap_factor * root_area) &&
+           (num_nodes >= threshold);
 }
 
 struct SplitInfo {
@@ -324,15 +336,15 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         }
 
         bool spatial_split_applied = false;
-        if (spatial_split_criteria(root_area,
-                                   fwd_bound.intersection_area(bwd_bound),
-                                   split_info.depth)) {
+        if (spatial_split_criteria(
+                root_area, fwd_bound.intersection_area(bwd_bound), prim_num)) {
             // TODO(heqianyue): there are still some optimization that can be
             // implemented. (1) Reference unsplitting. Since split one primitive
             // reference into two nodes when the reference introduces little
             // overlap, we can unsplit the reference.
 
-            SpatialSplitter<num_sbins> ssp(cur_node->bound);
+            SpatialSplitter<num_sbins> ssp(cur_node->bound, min_range, interval,
+                                           max_axis);
 
             ssp.update_bins(points1, points2, points3, cur_node);
 
@@ -348,7 +360,6 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                     cur_node, lchild_idxs, rchild_idxs, sbvh_seg_idx);
                 spatial_split_applied = true;
-                max_axis = ssp.get_axis();
             }
         }
 
