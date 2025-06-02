@@ -39,10 +39,10 @@ float calculate_SAH_recursive(NodeType *node, float cost_traverse,
     float left_area = node->lchild->bound.area();
     float right_area = node->rchild->bound.area();
 
-    float left_cost =
-        calculate_SAH_recursive(node->lchild, cost_traverse, cost_intersect);
-    float right_cost =
-        calculate_SAH_recursive(node->rchild, cost_traverse, cost_intersect);
+    float left_cost = calculate_SAH_recursive(
+        node->lchild, cost_traverse, cost_traverse_spatial, cost_intersect);
+    float right_cost = calculate_SAH_recursive(
+        node->rchild, cost_traverse, cost_traverse_spatial, cost_intersect);
 
     float inv_area = (node_area > 0) ? 1.0 / node_area : 0.0;
     float left_ratio = left_area * inv_area;
@@ -61,7 +61,8 @@ float calculate_SAH_recursive(NodeType *node, float cost_traverse,
 template <typename NodeType>
 float calculate_cost(NodeType *root, float traverse_cost,
                      float spatial_traverse_cost, float intersect_cost) {
-    return calculate_SAH_recursive(root, traverse_cost);
+    return calculate_SAH_recursive(root, traverse_cost, spatial_traverse_cost,
+                                   intersect_cost);
 }
 
 template <typename NodeType>

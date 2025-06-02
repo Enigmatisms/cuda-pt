@@ -209,10 +209,8 @@ class AABB {
             }
         }
 
-        Vec3 out0 = p0.advance(dir, t0);
-        Vec3 out1 = p0.advance(dir, t1);
-        p0 = std::move(out0);
-        p1 = std::move(out1);
+        p1 = p0.advance(dir, t1);
+        p0 = p0.advance(dir, t0);
         return true;
     }
 };

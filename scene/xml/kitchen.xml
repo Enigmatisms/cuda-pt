@@ -5,7 +5,7 @@
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.2">
 	<renderer type="pt">
-		<integer name="sample_count" value="512"/>
+		<integer name="sample_count" value="1024"/>
         <integer name="max_bounce"   value="16"/>
         <integer name="max_diffuse"  value="7"/>
         <integer name="max_specular" value="12"/>

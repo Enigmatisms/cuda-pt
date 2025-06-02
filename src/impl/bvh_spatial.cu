@@ -34,9 +34,8 @@ static constexpr int sah_split_threshold = 8;
 // be discarded
 static constexpr bool SSP_DEBUG = true;
 static constexpr float traverse_cost = 0.2f;
-static constexpr float spatial_traverse_cost = 0.4f;
+static constexpr float spatial_traverse_cost = 0.1f;
 static constexpr int max_allowed_depth = 96;
-static constexpr int same_size_split = 4;
 static int max_depth = 0;
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
@@ -84,13 +83,14 @@ void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
                                          int prim_id) {
     // Note that spatial split triangles can have parts outside of the AABB
     // so we must not assume that AABB is tight (object-ly, but spatially)
+
+    // TODO(heqianyue): still buggy! Solution found.
     int min_axis_v = N, max_axis_v = -1;
 
     for (int i = 0; i < 3; i++) {
         Vec3 sp = points[i], ep = points[(i + 1) % 3];
-        Vec3 old_sp = sp, old_ep = ep;
 
-        bool valid = bound.line_axis_clip(sp, ep, axis);
+        bool valid = bound.line_axisbv _clip(sp, ep, axis);
         if (!valid)
             continue; // current edge out of range and will not affect bounding
                       // box
@@ -112,7 +112,7 @@ void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
 
             float d2bin_start =
                 s_pos + interval * static_cast<float>(s_idx) - sp[axis];
-            Vec3 pt = sp + d2bin_start * dir;
+            Vec3 pt = sp.advance(dir, d2bin_start);
             for (int id = s_idx; id <= e_idx; id++) {
                 AABB &aabb = bounds[id];
                 aabb.extend(id == s_idx ? sp : pt);
@@ -215,40 +215,25 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
     return std::make_pair(fwd_bound, bwd_bound);
 }
 
-bool spatial_split_criteria(float root_area, float intrs_area, int num_nodes) {
+bool spatial_split_criteria(float root_area, float intrs_area, int num_prims) {
     // SS can be applied if overlap relative to root >= the following. This
     // factor is in fact mentioned in the original paper.
-    static constexpr float root_overlap_factor = 1e-4f;
+    static constexpr float root_overlap_factor = 4e-4f;
 
     // SS can only be applied when the number of primitives inside the node
     // exceeds the threshold (adopted from 2016 Ganestam. SAH guided spatial
     // split partitioning for fast BVH construction)
-    static constexpr float nodes_s[2] = {20000, 256};
-    static constexpr float nodes_e[2] = {1000000, 2048};
+    static constexpr float prims_s[2] = {20000, 512};
+    static constexpr float prims_e[2] = {1000000, 2048};
 
-    float n_nodes = std::clamp((float)num_nodes, nodes_s[0], nodes_e[0]);
-    int threshold = (n_nodes - nodes_s[0]) / (nodes_e[0] - nodes_s[0]) *
-                        (nodes_e[1] - nodes_s[1]) +
-                    nodes_s[1];
+    float n_prims = std::clamp((float)num_prims, prims_s[0], prims_e[0]);
+    int threshold = (n_prims - prims_s[0]) / (prims_e[0] - prims_s[0]) *
+                        (prims_e[1] - prims_s[1]) +
+                    prims_s[1];
 
     return (intrs_area > root_overlap_factor * root_area) &&
-           (num_nodes >= threshold);
+           (num_prims >= threshold);
 }
-
-struct SplitInfo {
-    int last_size;
-    int counter;
-    int depth;
-
-    SplitInfo() : last_size(0), counter(0), depth(0) {}
-
-    void update(int size) {
-        if (size == last_size)
-            return;
-        last_size = size;
-        counter = 0;
-    }
-};
 
 // TODO(heqianyue): note that we currently don't support
 // sphere primitive. Support it would be straightforward:
@@ -258,25 +243,21 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                        const std::vector<Vec3> &points3,
                        const std::vector<BVHInfo> &bvh_infos,
                        std::vector<int> &flattened_idxs,
-                       SBVHNode *const cur_node, SplitInfo &&split_info,
-                       float root_area, int max_prim_node = 16) {
-    split_info.counter++;
-    split_info.depth++;
-
+                       SBVHNode *const cur_node, int depth, float root_area,
+                       int max_prim_node = 16) {
     auto process_leaf = [&]() {
         // leaf node processing function
         cur_node->axis = AXIS_NONE;
         cur_node->base() = static_cast<int>(flattened_idxs.size());
         cur_node->prim_num() = static_cast<int>(cur_node->size());
-        max_depth = std::max(max_depth, split_info.depth);
+        max_depth = std::max(max_depth, depth);
         for (int prim_id : cur_node->prims) {
             flattened_idxs.push_back(prim_id);
         }
         return 1;
     };
 
-    if (cur_node->size() <= no_div_threshold ||
-        split_info.depth >= max_allowed_depth) {
+    if (cur_node->size() <= no_div_threshold || depth >= max_allowed_depth) {
         // if the node is small, or father nodes and child nodes share the same
         // size (spatial split duplication) for too many times, we'll create a
         // leaf node
@@ -361,12 +342,14 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             // printf("SBVH: spatial split cost: %f, object split cost: %f\n",
             // sbvh_cost, min_cost);
             if (sbvh_cost < min_cost &&
-                (sbvh_cost < node_prim_cnt ||
-                 prim_num > max_prim_node)) { // Spatial split should be applied
+                sbvh_cost < node_prim_cnt) { // Spatial split, actually node num
+                                             // is not capped here
                 min_cost = sbvh_cost;
                 std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                     cur_node, lchild_idxs, rchild_idxs, sbvh_seg_idx);
                 spatial_split_applied = true;
+                max_axis =
+                    static_cast<SplitAxis>(max_axis + SplitAxis::AXIS_S_X);
             }
         }
 
@@ -434,9 +417,6 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         !rchild_idxs.empty()) { // cost of splitting is less than making this
                                 // node a leaf node
         cur_node->release();    // release mem for non-leaf nodes
-        SplitInfo lchild_info = split_info, rchild_info = std::move(split_info);
-        lchild_info.update(lchild_idxs.size());
-        rchild_info.update(rchild_idxs.size());
         cur_node->lchild =
             new SBVHNode(std::move(fwd_bound), std::move(lchild_idxs));
         cur_node->rchild =
@@ -444,13 +424,13 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         cur_node->axis = max_axis;
 
         int node_num = 1;
-        node_num += recursive_sbvh_SAH(
-            points1, points2, points3, bvh_infos, flattened_idxs,
-            cur_node->lchild, std::move(lchild_info), root_area, max_prim_node);
+        node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
+                                       flattened_idxs, cur_node->lchild,
+                                       depth + 1, root_area, max_prim_node);
 
-        node_num += recursive_sbvh_SAH(
-            points1, points2, points3, bvh_infos, flattened_idxs,
-            cur_node->rchild, std::move(rchild_info), root_area, max_prim_node);
+        node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
+                                       flattened_idxs, cur_node->rchild,
+                                       depth + 1, root_area, max_prim_node);
         return node_num;
     } else {
         return process_leaf();
@@ -474,7 +454,7 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
     SBVHNode *root_node = new SBVHNode(
         AABB(world_min, world_max, 0, points1.size()), std::move(all_prims));
     node_num = recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
-                                  flattened_idxs, root_node, SplitInfo(),
+                                  flattened_idxs, root_node, 0,
                                   root_node->bound.area(), max_prim_node);
 
     return root_node;
@@ -591,7 +571,7 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
         sbvh_root_start(points1, points2, points3, world_min, world_max,
                         flattened_idxs, bvh_infos, node_num, max_prim_node);
 
-    printf("[SBVH] SBVH tree max depth: %d, duplicated primitives: %d (%d)\n",
+    printf("[SBVH] SBVH tree max depth: %d, duplicated primitives: %lu (%lu)\n",
            max_depth, flattened_idxs.size(), points1.size());
     float total_cost =
         calculate_cost(root_node, traverse_cost, spatial_traverse_cost);

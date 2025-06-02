@@ -989,7 +989,7 @@ Scene::Scene(std::string path)
     else {
         printf(
             "[Scene] Unknown renderer type: '%s', fall back to megakernel PT\n",
-            render_type);
+            render_type.c_str());
         rdr_type = RendererType::MegaKernelPT;
     }
 
