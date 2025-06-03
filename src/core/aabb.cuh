@@ -107,17 +107,6 @@ class AABB {
         maxi.maximized(std::forward<PointType>(pt));
     }
 
-    // extend AABB except the given axis
-    CONDITION_TEMPLATE(PointType, Vec3)
-    CPT_CPU void extend_except(PointType &&pt, int axis) noexcept {
-        for (int i = 0; i < 3; i++) {
-            if (i == axis)
-                continue;
-            mini[i] = std::min(mini[i], pt[i]);
-            maxi[i] = std::max(maxi[i], pt[i]);
-        }
-    }
-
     // intersection of two AABB
     CONDITION_TEMPLATE(AABBType, AABB)
     CPT_CPU float intersection_area(AABBType &&_aabb) const noexcept {
@@ -149,19 +138,17 @@ class AABB {
         return 0;
     }
 
-    // update the AABB to the overlap of `this` and `aabb`, check whether the
-    // result is valid, if not, return false and clear the AABB
+    // update the AABB to the overlap of `this` and `aabb`
     CONDITION_TEMPLATE(AABBType, AABB)
-    CPT_CPU_INLINE bool overlap_inplace(AABBType &&aabb) {
+    CPT_CPU_INLINE AABB &operator^=(AABBType &&aabb) {
         mini.maximized(aabb.mini);
         maxi.minimized(aabb.maxi);
         for (int i = 0; i < 3; i++) {
             if (maxi[i] < mini[i]) {
                 this->clear();
-                return false;
             }
         }
-        return true;
+        return *this;
     }
 
     CPT_CPU_INLINE void clear() {
@@ -187,66 +174,7 @@ class AABB {
         return IN_RANGE(pt.x(), mini.x(), maxi.x(), eps) &&
                IN_RANGE(pt.y(), mini.y(), maxi.y(), eps) &&
                IN_RANGE(pt.z(), mini.z(), maxi.z(), eps);
-    }
-
-    //
-    /**
-     * @brief clip the line segment along the given axis
-     *
-     * @param p0 in_out, endpoint of line segment to clip
-     * @param p1 in_out, endpoint of line segment to clip
-     * @param axis the axis to clip against
-     * @return whether the clipping is valid (not out of axis range)
-     */
-    CPT_CPU bool line_axis_clip(Vec3 &p0, Vec3 &p1, int axis) const {
-        // early check: if both endpoints are inside the range, no clipping
-        // needed.
-        if (IN_RANGE(p0[axis], mini[axis], maxi[axis], 1e-5f) &&
-            IN_RANGE(p1[axis], mini[axis], maxi[axis], 1e-5f)) {
-            return true;
-        }
 #undef IN_RANGE
-        // direction vector and initialization of parametric parameters t0
-        // (enter) and t1 (exit).
-        Vec3 dir = p1 - p0;
-        float t0 = 0.0f; // start of line segment (p0)
-        float t1 = 1.0f; // end of line segment (p1)
-
-        // process each dimension (x, y, z)
-        if (dir[axis] == 0.0f) {
-            // line segment is parallel to this dimension's planes.
-            // if the current point is outside, the entire segment is
-            // outside.
-            if (p0[axis] < mini[axis] || p0[axis] > maxi[axis]) {
-                return false;
-            }
-        } else {
-            // calculate parametric values t_min and t_max for intersections
-            // with min and max planes, like ray-AABB intersection
-            float inv_d = 1.0f / dir[axis];
-            float t_min = (mini[axis] - p0[axis]) * inv_d;
-            float t_max = (maxi[axis] - p0[axis]) * inv_d;
-
-            // swap t_min and t_max if direction is negative (entering from
-            // opposite side).
-            if (inv_d < 0.0f) {
-                std::swap(t_min, t_max);
-            }
-
-            // update global t0 (enter) and t1 (exit) based on current
-            // dimension.
-            t0 = std::max(t0, t_min);
-            t1 = std::min(t1, t_max);
-
-            // early exit if the segment is completely outside the range.
-            if (t0 > t1) {
-                return false;
-            }
-        }
-
-        p1 = p0.advance(dir, t1);
-        p0 = p0.advance(dir, t0);
-        return true;
     }
 };
 
