@@ -23,6 +23,7 @@
 
 #include "core/bvh_opt.cuh"
 #include "core/bvh_spatial.cuh"
+#include <cassert>
 #include <numeric>
 
 static constexpr int num_bins = 16;
@@ -71,10 +72,50 @@ SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
     return SplitAxis(split_axis);
 }
 
+static bool aabb_clip_line_except_axis(const AABB &bound, Vec3 &p0, Vec3 &p1,
+                                       int axis) {
+    Vec3 dir = p1 - p0;
+    float t0 = 0.0f;
+    float t1 = 1.0f;
+
+    for (int i = 0; i < 3; i++) {
+        if (i == axis)
+            continue;
+        if (dir[i] == 0.0f) {
+            if (p0[i] < bound.mini[i] || p0[i] > bound.maxi[i]) {
+                // out of range (being parallel)
+                return false;
+            }
+        } else {
+            float inv_d = 1.0f / dir[i];
+            float t_min = (bound.mini[i] - p0[i]) * inv_d;
+            float t_max = (bound.maxi[i] - p0[i]) * inv_d;
+
+            if (inv_d < 0.0f) {
+                std::swap(t_min, t_max);
+            }
+
+            t0 = std::max(t0, t_min);
+            t1 = std::min(t1, t_max);
+
+            if (t0 > t1) { // out of range
+                return false;
+            }
+        }
+    }
+    p1 = p0.advance(dir, t1);
+    p0 = p0.advance(dir, t0);
+    return true;
+}
+
 template <int N> void SpatialSplitter<N>::bound_all_bins() {
     for (int i = 0; i < N; i++) {
-        bounds[i] ^= bound;
-        bounds[i].fix_degenerate(); // in case 0 width axis
+        if (bounds[i].overlap_inplace(bound)) {
+            bounds[i].fix_degenerate(); // in case 0 width axis
+        } else if (SSP_DEBUG) {
+            assert(enter_tris[i].empty());
+            assert(exit_tris[i].empty());
+        }
     }
 }
 
@@ -84,29 +125,47 @@ void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
     // Note that spatial split triangles can have parts outside of the AABB
     // so we must not assume that AABB is tight (object-ly, but spatially)
 
-    // TODO(heqianyue): still buggy! Solution found.
     int min_axis_v = N, max_axis_v = -1;
 
     for (int i = 0; i < 3; i++) {
         Vec3 sp = points[i], ep = points[(i + 1) % 3];
 
-        bool valid = bound.line_axisbv _clip(sp, ep, axis);
+        // step 1: clip the edge along the split axis
+        bool valid = bound.line_axis_clip(sp, ep, axis);
         if (!valid)
-            continue; // current edge out of range and will not affect bounding
-                      // box
+            continue; // current edge out of range
+        Vec3 clip_sp = sp, clip_ep = ep;
+        // step 2: find potential intersection for non-split-axis bounds
+        bool has_check_free_range =
+            aabb_clip_line_except_axis(bound, clip_sp, clip_ep, axis);
         if (sp[axis] > ep[axis])
             std::swap(sp, ep);
+        if (clip_sp[axis] > clip_ep[axis])
+            std::swap(clip_sp, clip_ep);
 
         Vec3 dir = ep - sp;
         float dim_v = dir[axis];
-        int s_idx = get_bin_id(sp), e_idx = get_bin_id(ep);
-        min_axis_v = std::min(min_axis_v, s_idx);
-        max_axis_v = std::max(max_axis_v, e_idx);
+        // step 3: get calculation range and valid range
+        int s_idx = get_bin_id(sp), e_idx = get_bin_id(ep),
+            enter_id = get_bin_id(clip_sp), exit_id = get_bin_id(clip_ep);
 
-        if (std::abs(dim_v) <= 1e-4f &&
-            s_idx == e_idx) { // parallel, extend directly
-            bounds[s_idx].extend(sp);
-            bounds[s_idx].extend(ep);
+        if constexpr (SSP_DEBUG) {
+            assert(s_idx <= enter_id);
+            assert(exit_id <= e_idx);
+        }
+
+        if (has_check_free_range) {
+            // means that clip_sp and clip_ep is guaranteed to lie within the
+            // bound. we can not directly use sp and ep (index).
+            min_axis_v = std::min(min_axis_v, enter_id);
+            max_axis_v = std::max(max_axis_v, exit_id);
+            bounds[enter_id].extend(clip_sp);
+            bounds[exit_id].extend(clip_ep);
+        }
+
+        if (std::abs(dim_v) <= 1e-4f && s_idx == e_idx) {
+            continue; // parallel, no need to extend for this edge (let other
+                      // edge do the dirty work)
         } else {
             dir *= 1.f / dim_v;
 
@@ -115,11 +174,34 @@ void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
             Vec3 pt = sp.advance(dir, d2bin_start);
             for (int id = s_idx; id <= e_idx; id++) {
                 AABB &aabb = bounds[id];
-                aabb.extend(id == s_idx ? sp : pt);
-                pt = pt.advance(dir, interval);
-                aabb.extend(id == e_idx ? ep : pt);
+                if (id > enter_id && id < exit_id) {
+                    // no boundary check, also, since enter_id >= s_idx and
+                    // exit_id <= e_idx, we don't need to use sp and ep here
+                    aabb.extend(pt);
+                    pt = pt.advance(dir, interval);
+                    aabb.extend(pt);
+                } else {
+                    Vec3 target = id == s_idx ? sp : pt;
+#define REAL_NULL_EXTEND(p)                                                    \
+    if (aabb.covers(p))                                                        \
+        aabb.extend(p);                                                        \
+    else                                                                       \
+        aabb.extend_except(p, axis);
+
+                    REAL_NULL_EXTEND(target)
+                    pt = pt.advance(dir, interval);
+                    target = id == e_idx ? ep : pt;
+                    REAL_NULL_EXTEND(target)
+#undef REAL_NULL_EXTEND
+                }
             }
         }
+    }
+
+    if constexpr (SSP_DEBUG) {
+        // FIXME: this can be removed
+        assert(min_axis_v < N && min_axis_v >= 0);
+        assert(max_axis_v < N && max_axis_v >= 0);
     }
     enter_tris[min_axis_v].push_back(prim_id);
     exit_tris[max_axis_v].push_back(prim_id);

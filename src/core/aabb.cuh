@@ -90,12 +90,6 @@ class AABB {
         return *this;
     }
 
-    CONDITION_TEMPLATE(PointType, Vec3)
-    CPT_CPU void extend(PointType &&pt) noexcept {
-        mini.minimized(pt);
-        maxi.maximized(std::forward<PointType>(pt));
-    }
-
     CPT_CPU void fix_degenerate() {
         constexpr float THRESHOLD = 1e-4f;
 #pragma unroll
@@ -104,6 +98,23 @@ class AABB {
                 maxi[i] += THRESHOLD * 0.5f;
                 mini[i] -= THRESHOLD * 0.5f;
             }
+        }
+    }
+
+    CONDITION_TEMPLATE(PointType, Vec3)
+    CPT_CPU void extend(PointType &&pt) noexcept {
+        mini.minimized(pt);
+        maxi.maximized(std::forward<PointType>(pt));
+    }
+
+    // extend AABB except the given axis
+    CONDITION_TEMPLATE(PointType, Vec3)
+    CPT_CPU void extend_except(PointType &&pt, int axis) noexcept {
+        for (int i = 0; i < 3; i++) {
+            if (i == axis)
+                continue;
+            mini[i] = std::min(mini[i], pt[i]);
+            maxi[i] = std::max(maxi[i], pt[i]);
         }
     }
 
@@ -138,10 +149,19 @@ class AABB {
         return 0;
     }
 
+    // update the AABB to the overlap of `this` and `aabb`, check whether the
+    // result is valid, if not, return false and clear the AABB
     CONDITION_TEMPLATE(AABBType, AABB)
-    CPT_CPU_INLINE void operator^=(AABBType &&aabb) {
+    CPT_CPU_INLINE bool overlap_inplace(AABBType &&aabb) {
         mini.maximized(aabb.mini);
         maxi.minimized(aabb.maxi);
+        for (int i = 0; i < 3; i++) {
+            if (maxi[i] < mini[i]) {
+                this->clear();
+                return false;
+            }
+        }
+        return true;
     }
 
     CPT_CPU_INLINE void clear() {
@@ -161,13 +181,28 @@ class AABB {
     CPT_CPU_GPU_INLINE int prim_cnt() const { return __bytes2; }
     CPT_CPU_GPU_INLINE int &prim_cnt() { return __bytes2; }
 
-    // clip the line segment along the given axis (dim)
-    CPT_CPU bool line_axis_clip(Vec3 &p0, Vec3 &p1, int dim) const {
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU bool covers(VecType &&pt, float eps = THP_EPS) const noexcept {
+#define IN_RANGE(x, x_min, x_max, _eps) (x > x_min - _eps && x < x_max + _eps)
+        return IN_RANGE(pt.x(), mini.x(), maxi.x(), eps) &&
+               IN_RANGE(pt.y(), mini.y(), maxi.y(), eps) &&
+               IN_RANGE(pt.z(), mini.z(), maxi.z(), eps);
+    }
+
+    //
+    /**
+     * @brief clip the line segment along the given axis
+     *
+     * @param p0 in_out, endpoint of line segment to clip
+     * @param p1 in_out, endpoint of line segment to clip
+     * @param axis the axis to clip against
+     * @return whether the clipping is valid (not out of axis range)
+     */
+    CPT_CPU bool line_axis_clip(Vec3 &p0, Vec3 &p1, int axis) const {
         // early check: if both endpoints are inside the range, no clipping
         // needed.
-#define IN_RANGE(x, x_min, x_max) (x > x_min && x < x_max)
-        if (IN_RANGE(p0[dim], mini[dim], maxi[dim]) &&
-            IN_RANGE(p1[dim], mini[dim], maxi[dim])) {
+        if (IN_RANGE(p0[axis], mini[axis], maxi[axis], 1e-5f) &&
+            IN_RANGE(p1[axis], mini[axis], maxi[axis], 1e-5f)) {
             return true;
         }
 #undef IN_RANGE
@@ -178,19 +213,19 @@ class AABB {
         float t1 = 1.0f; // end of line segment (p1)
 
         // process each dimension (x, y, z)
-        if (dir[dim] == 0.0f) {
+        if (dir[axis] == 0.0f) {
             // line segment is parallel to this dimension's planes.
             // if the current point is outside, the entire segment is
             // outside.
-            if (p0[dim] < mini[dim] || p0[dim] > maxi[dim]) {
+            if (p0[axis] < mini[axis] || p0[axis] > maxi[axis]) {
                 return false;
             }
         } else {
             // calculate parametric values t_min and t_max for intersections
             // with min and max planes, like ray-AABB intersection
-            float inv_d = 1.0f / dir[dim];
-            float t_min = (mini[dim] - p0[dim]) * inv_d;
-            float t_max = (maxi[dim] - p0[dim]) * inv_d;
+            float inv_d = 1.0f / dir[axis];
+            float t_min = (mini[axis] - p0[axis]) * inv_d;
+            float t_max = (maxi[axis] - p0[axis]) * inv_d;
 
             // swap t_min and t_max if direction is negative (entering from
             // opposite side).
