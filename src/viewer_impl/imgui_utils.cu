@@ -42,6 +42,9 @@ static constexpr const char *RENDERER_NAMES[] = {
 static constexpr std::array<const char *, 4> COLOR_MAP_NAMES = {
     "Jet", "Plasma", "Viridis", "GrayScale"};
 
+static constexpr std::array<const char *, 3> COST_MAP_NAMES = {
+    "Traversal Cost", "Intersection Cost", "Total Cost"};
+
 static void setup_imgui_style(bool dark_style, float alpha_) {
     ImGuiStyle &style = ImGui::GetStyle();
 
@@ -687,18 +690,29 @@ void render_settings_interface(
                         params.serialized_update = true;
                     }
                     if (rdr_type == RendererType::BVHCostViz) {
+                        // cost map selection menu
+                        update_v =
+                            Serializer::get<int>(params.serialized_data, 1) &
+                            0x7f;
+                        if (draw_selection_menu<3>(COST_MAP_NAMES, "##cost-map",
+                                                   "Cost Map", update_v)) {
+                            Serializer::set<int>(params.serialized_data, 1,
+                                                 int(update_v));
+                            params.serialized_update = true;
+                        }
+                        // max value visualization
                         int max_query = ceilf(
-                            Serializer::get<float>(params.serialized_data, 2));
+                            Serializer::get<float>(params.serialized_data, 3));
                         ImGui::Text("%s",
                                     ("Max value: " + std::to_string(max_query))
                                         .c_str());
 
                         int max_value =
-                            Serializer::get<int>(params.serialized_data, 1);
+                            Serializer::get<int>(params.serialized_data, 2);
                         max_value = max_value > 0 ? max_value : max_query;
                         if (draw_integer_input("bvh-max-cost", "(Viz) Max Cost",
                                                max_value)) {
-                            Serializer::set<int>(params.serialized_data, 1,
+                            Serializer::set<int>(params.serialized_data, 2,
                                                  max_value);
                             params.serialized_update = true;
                         }

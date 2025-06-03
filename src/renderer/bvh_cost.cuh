@@ -28,6 +28,7 @@
 class BVHCostVisualizer : public DepthTracer {
   private:
     int *reduced_max;
+    int cost_map_id;
     float max_v;
 
   public:

@@ -35,15 +35,15 @@ static constexpr int SHFL_THREAD_Y =
     2; // blockDim.y: 1 << SHFL_THREAD_Y, by default, SHFL_THREAD_Y is 4: 16
        // threads
 
-CPT_GPU int ray_intersect_cost(const Ray &ray,
-                               const cudaTextureObject_t bvh_leaves,
-                               const cudaTextureObject_t nodes,
-                               const PrecomputedArray &verts,
-                               ConstF4Ptr cached_nodes, int &min_index,
-                               const int node_num, const int cache_num) {
+CPT_GPU Vec4 ray_intersect_cost(const Ray &ray,
+                                const cudaTextureObject_t bvh_leaves,
+                                const cudaTextureObject_t nodes,
+                                const PrecomputedArray &verts,
+                                ConstF4Ptr cached_nodes, int &min_index,
+                                const int node_num, const int cache_num) {
     int node_idx = 0;
     float aabb_tmin = 0, min_dist = MAX_DIST;
-    int intersect_query = 0;
+    Vec4 render_cost(0, 0, 0);
     // There can be much control flow divergence, not good
     Vec3 inv_d = ray.d.rcp(), o_div = ray.o * inv_d;
     for (int i = 0; i < cache_num;) {
@@ -58,7 +58,7 @@ CPT_GPU int ray_intersect_cost(const Ray &ray,
         intersect_node = intersect_node && all_offset == 1;
         i = intersect_node ? cache_num : (i + increment);
         node_idx = intersect_node ? gmem_index : node_idx;
-        intersect_query++;
+        render_cost.x() += 1.f;
     }
     // There can be much control flow divergence, not good
     while (node_idx < node_num) {
@@ -77,7 +77,7 @@ CPT_GPU int ray_intersect_cost(const Ray &ray,
         node_idx += (!intersect_node) * (end_idx < 0 ? -end_idx : 1) +
                     int(intersect_node);
         end_idx = intersect_node ? end_idx + beg_idx : 0;
-        intersect_query++;
+        render_cost.x() += 1.f;
         for (int idx = beg_idx; idx < end_idx; idx++) {
             // if current ray intersects primitive at [idx], tasks will store it
             int obj_info = tex1Dfetch<int>(bvh_leaves, idx);
@@ -93,10 +93,11 @@ CPT_GPU int ray_intersect_cost(const Ray &ray,
             bool valid = dist > EPSILON && dist < min_dist;
             min_dist = valid ? dist : min_dist;
             min_index = valid ? idx : min_index;
-            // intersect_query++;
+            render_cost.y() += 1.f;
         }
     }
-    return intersect_query;
+    render_cost.z() = render_cost.x() + render_cost.y();
+    return render_cost;
 }
 
 CPT_KERNEL static void
@@ -124,33 +125,52 @@ render_cost_kernel(const DeviceCamera &dev_cam, const PrecomputedArray verts,
     __syncthreads();
 
     // ============= step 1: ray intersection =================
-    int intrsct_num =
+    Vec4 render_cost =
         ray_intersect_cost(ray, bvh_leaves, nodes, verts, s_cached, min_index,
                            node_num, cache_num);
 
     // ============= step 2: local shading for indirect bounces ================
     // image will be the output buffer, there will be double buffering
     if (min_index >= 0) {
-        auto local_v = image(px, py) + float(intrsct_num);
+        auto local_v = image(px, py) + render_cost;
         image(px, py) = local_v;
     }
 }
 
-CPT_KERNEL void false_color_manual_range(DeviceImage image,
-                                         float *__restrict__ output_buffer,
-                                         int *__restrict__ reduced_max,
-                                         int color_map_id, const int accum_cnt,
-                                         const float min_dist,
-                                         const float max_dist) {
-    __shared__ int max_val;
+template <int WARP_SIZE = 32> CPT_GPU int warp_reduce_max(int val) {
+#pragma unroll
+    for (int lane_mask = WARP_SIZE >> 1; lane_mask >= 1; lane_mask >>= 1) {
+        val = max(__shfl_xor_sync(0xffffffff, val, lane_mask), val);
+    }
+    return val;
+}
+
+CPT_KERNEL void
+false_color_manual_range(DeviceImage image, float *__restrict__ output_buffer,
+                         int *__restrict__ reduced_max, int color_map_id,
+                         int cost_map_id, const int accum_cnt,
+                         const float min_dist, const float max_dist) {
+    __shared__ int max_val[8];
     int px = threadIdx.x + blockIdx.x * blockDim.x,
         py = threadIdx.y + blockIdx.y * blockDim.y;
-    if (threadIdx.x == 0 && threadIdx.y == 0) {
-        max_val = 0;
+    if (threadIdx.x == 0) {
+        max_val[threadIdx.y] = 0;
+    }
+    float tex_coord = image(px, py)[cost_map_id] / float(accum_cnt);
+    __syncthreads();
+    int max_v = warp_reduce_max(float_to_ordered_int(tex_coord));
+    if (threadIdx.x == 0) {
+        max_val[threadIdx.y] = max_v;
     }
     __syncthreads();
-    float tex_coord = image(px, py).x() / float(accum_cnt);
-    atomicMax(&max_val, float_to_ordered_int(tex_coord));
+    if (threadIdx.y == 0) {
+        int to_max = 0;
+        if (threadIdx.x < 8)
+            to_max = max_val[threadIdx.x];
+        to_max = warp_reduce_max(to_max);
+        if (threadIdx.x == 0)
+            max_val[0] = to_max;
+    }
 
     Vec4 color(0, 1);
     if (tex_coord > 0) {
@@ -166,13 +186,14 @@ CPT_KERNEL void false_color_manual_range(DeviceImage image,
     }
     FLOAT4(output_buffer[(px + py * image.w()) << 2]) = float4(color);
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        atomicMax(reduced_max, max_val);
+        atomicMax(reduced_max, max_val[0]);
     }
 }
 
 BVHCostVisualizer::BVHCostVisualizer(const Scene &scene)
-    : DepthTracer(scene), max_v(0) {
+    : DepthTracer(scene), cost_map_id(0), max_v(0) {
     // We need two extra floats to display the minimum and maximum
+    Serializer::push<int>(serialized_data, 0);
     Serializer::push<int>(serialized_data, 0);
     Serializer::push<float>(serialized_data, 1);
     CUDA_CHECK_RETURN(cudaMallocManaged(&reduced_max, sizeof(int)));
@@ -181,12 +202,14 @@ BVHCostVisualizer::BVHCostVisualizer(const Scene &scene)
 BVHCostVisualizer::~BVHCostVisualizer() {
     CUDA_CHECK_RETURN(cudaFree(reduced_max));
     color_map_id = -1;
+    cost_map_id = 0;
     printf("[Renderer] BVH Cost Visualizer Object destroyed.\n");
 }
 
 CPT_CPU void BVHCostVisualizer::param_setter(const std::vector<char> &bytes) {
     color_map_id = Serializer::get<int>(bytes, 0);
-    max_v = Serializer::get<int>(serialized_data, 1);
+    cost_map_id = Serializer::get<int>(bytes, 1);
+    max_v = Serializer::get<int>(serialized_data, 2);
 }
 
 CPT_CPU void BVHCostVisualizer::render_online(const MaxDepthParams &md,
@@ -210,16 +233,17 @@ CPT_CPU void BVHCostVisualizer::render_online(const MaxDepthParams &md,
         accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     false_color_manual_range<<<dim3(w >> 5, h >> 3), dim3(32, 8)>>>(
-        image, output_buffer, reduced_max, color_map_id, accum_cnt, 1.f, max_v);
+        image, output_buffer, reduced_max, color_map_id, cost_map_id, accum_cnt,
+        1.f, max_v);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     int ordered_int =
         (*reduced_max >= 0) ? *reduced_max : *reduced_max ^ 0x7FFFFFFF;
     float max_query = *reinterpret_cast<float *>(&ordered_int);
     if (max_v == 0) {
         max_v = ceilf(max_query);
-        Serializer::set<int>(serialized_data, 1, max_v);
+        Serializer::set<int>(serialized_data, 2, max_v);
     }
-    Serializer::set<float>(serialized_data, 2, max_query);
+    Serializer::set<float>(serialized_data, 3, max_query);
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
 
@@ -239,15 +263,16 @@ CPT_CPU const float *BVHCostVisualizer::render_raw(const MaxDepthParams &md,
         accum_cnt * SEED_SCALER, num_nodes, accum_cnt, num_cache);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     false_color_manual_range<<<dim3(w >> 5, h >> 3), dim3(32, 8)>>>(
-        image, output_buffer, reduced_max, color_map_id, accum_cnt, 1.f, max_v);
+        image, output_buffer, reduced_max, color_map_id, cost_map_id, accum_cnt,
+        1.f, max_v);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     int ordered_int =
         (*reduced_max >= 0) ? *reduced_max : *reduced_max ^ 0x7FFFFFFF;
     float max_query = *reinterpret_cast<float *>(&ordered_int);
     if (max_v == 0) {
         max_v = ceilf(max_query);
-        Serializer::set<int>(serialized_data, 1, max_v);
+        Serializer::set<int>(serialized_data, 2, max_v);
     }
-    Serializer::set<float>(serialized_data, 2, max_query);
+    Serializer::set<float>(serialized_data, 3, max_query);
     return output_buffer;
 }
