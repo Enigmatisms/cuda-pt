@@ -90,6 +90,11 @@ class AABB {
         return *this;
     }
 
+    CPT_CPU void grow(float v = THP_EPS) noexcept {
+        mini -= v;
+        maxi += v;
+    }
+
     CPT_CPU void fix_degenerate() {
         constexpr float THRESHOLD = 1e-4f;
 #pragma unroll

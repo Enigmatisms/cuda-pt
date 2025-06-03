@@ -92,8 +92,8 @@ CPT_CPU std::vector<Vec3> aabb_triangle_clipping(const AABB &aabb,
         return polygon;
     // clipping sequence
     constexpr int clip_seqs[6][2] = {
-        {0, 0}, // x-min (axis=0, isMin=true)
-        {0, 1}, // x-max (axis=0, isMin=false)
+        {0, 0}, // x-min (axis=0, is_min=true)
+        {0, 1}, // x-max (axis=0, is_min=false)
         {1, 0}, // y-min
         {1, 1}, // y-max
         {2, 0}, // z-min
@@ -109,7 +109,7 @@ CPT_CPU std::vector<Vec3> aabb_triangle_clipping(const AABB &aabb,
         polygon = clip_polygon(std::move(polygon), axis, boundary_val,
                                is_min_boundary);
         if (polygon.size() < 3) {
-            return {};
+            return {}; // degenerate
         }
     }
 

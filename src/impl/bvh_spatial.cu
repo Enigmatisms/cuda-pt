@@ -27,7 +27,7 @@
 #include <numeric>
 
 static constexpr int num_bins = 16;
-static constexpr int num_sbins = 32; // spatial bins
+static constexpr int num_sbins = 40; // spatial bins
 static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;
 // A cluster with all the primitive centroid within a small range [less than
@@ -35,7 +35,7 @@ static constexpr int sah_split_threshold = 8;
 // be discarded
 static constexpr bool SSP_DEBUG = true;
 static constexpr float traverse_cost = 0.2f;
-static constexpr float spatial_traverse_cost = 0.1f;
+static constexpr float spatial_traverse_cost = 0.2f;
 static constexpr int max_allowed_depth = 96;
 static int max_depth = 0;
 
@@ -75,12 +75,12 @@ SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
 template <int N> void SpatialSplitter<N>::bound_all_bins() {
     for (int i = 0; i < N; i++) {
         bounds[i] ^= bound;
-        bounds[i].fix_degenerate(); // in case 0-width axis
+        bounds[i].grow(); // in case 0-width axis
     }
 }
 
 template <int N>
-void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
+bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
                                          int prim_id) {
     // Note that spatial split triangles can have parts outside of the AABB
     // so we must not assume that AABB is tight (object-ly, but spatially)
@@ -90,37 +90,50 @@ void SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
     std::vector<Vec3> clipped_poly =
         aabb_triangle_clipping(bound, std::move(points));
 
+    if (clipped_poly.empty()) {
+        if constexpr (SSP_DEBUG) {
+            printf(
+                "[SBVH Warn] Primitive %d discarded due to being degenerated "
+                "after triangle clipping. This should not happen.\n",
+                prim_id);
+        }
+        return false;
+    }
+
     Vec3 sp = clipped_poly.back();
     for (size_t i = 0; i < clipped_poly.size(); i++) {
-        Vec3 ep = points[i];
+        Vec3 ep = clipped_poly[i], old_ep = ep;
 
         if (sp[axis] > ep[axis])
             std::swap(sp, ep);
 
         Vec3 dir = ep - sp;
         float dim_v = dir[axis];
+        int s_idx = get_bin_id(sp), e_idx = get_bin_id(ep);
+        min_axis_v = std::min(min_axis_v, s_idx);
+        max_axis_v = std::max(max_axis_v, e_idx);
 
-        if (std::abs(dim_v) >= 1e-5f) {
-            int s_idx = get_bin_id(sp), e_idx = get_bin_id(ep);
-            min_axis_v = std::min(min_axis_v, s_idx);
-            max_axis_v = std::max(max_axis_v, e_idx);
-
+        if (std::abs(dim_v) < 1e-5f) {
+            bounds[s_idx].extend(sp);
+            bounds[e_idx].extend(ep);
+        } else {
             dir *= 1.f / dim_v;
             float d2bin_start =
                 s_pos + interval * static_cast<float>(s_idx) - sp[axis];
             Vec3 pt = sp.advance(dir, d2bin_start);
             for (int id = s_idx; id <= e_idx; id++) {
                 AABB &aabb = bounds[id];
-                aabb.extend(s_idx ? sp : pt);
+                aabb.extend(s_idx == id ? sp : pt);
                 pt = pt.advance(dir, interval);
-                aabb.extend(e_idx ? ep : pt);
+                aabb.extend(e_idx == id ? ep : pt);
             }
         }
-        sp = std::move(ep);
+        sp = std::move(old_ep);
     }
 
     enter_tris[min_axis_v].push_back(prim_id);
     exit_tris[max_axis_v].push_back(prim_id);
+    return true;
 }
 
 template <int N>
@@ -144,8 +157,6 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
     float min_cost = 5e9f, node_prim_cnt = float(cur_node->size());
 
     std::array<float, N> fwd_areas, bwd_areas;
-    lprim_cnts.fill(0);
-    rprim_cnts.fill(0);
     fwd_areas.fill(0);
     bwd_areas.fill(0);
 
@@ -322,6 +333,13 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             }
         }
 
+        fwd_bound.clear();
+        bwd_bound.clear();
+        for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
+            fwd_bound += idx_bins[i].bound;
+        for (int i = seg_bin_idx + 1; i < num_bins; i++)
+            bwd_bound += idx_bins[i].bound;
+
         bool spatial_split_applied = false;
         if (spatial_split_criteria(
                 root_area, fwd_bound.intersection_area(bwd_bound), prim_num)) {
@@ -354,12 +372,6 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         if (!spatial_split_applied &&
             (min_cost < node_prim_cnt ||
              prim_num > max_prim_node)) { // object split
-            fwd_bound.clear();
-            bwd_bound.clear();
-            for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
-                fwd_bound += idx_bins[i].bound;
-            for (int i = seg_bin_idx + 1; i < num_bins; i++)
-                bwd_bound += idx_bins[i].bound;
             // 1. SBVH is not applied ; 2. when the cost of splitting is lower
             // or 3. when there are more primitives than allowed We cannot
             // partition here, since partition will change the index of the BVH

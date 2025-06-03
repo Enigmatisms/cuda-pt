@@ -112,7 +112,7 @@ template <int N> class SpatialSplitter {
     // given the vertices of a triangle, update the spatial splitter bins,
     // entering and exiting triangle records via one-sweep line-drawing-like
     // fast AABB bins update algorithm (chopped binning in the paper)
-    void update_triangle(std::vector<Vec3> &&points, int prim_id);
+    bool update_triangle(std::vector<Vec3> &&points, int prim_id);
 
     void update_sphere(const Vec3 &center, float radius, int prim_id) {
         throw std::runtime_error(
@@ -137,6 +137,8 @@ template <int N> class SpatialSplitter {
         for (int i = 0; i < N; i++) {
             bounds[i].clear();
         }
+        lprim_cnts.fill(0);
+        rprim_cnts.fill(0);
     }
 
     // given a node and the current BVHInfo vector, try to split the triangles
