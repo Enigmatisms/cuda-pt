@@ -26,9 +26,9 @@
 #include <cassert>
 #include <numeric>
 
-static constexpr int num_bins = 16;
-static constexpr int num_sbins = 40; // spatial bins
-static constexpr int no_div_threshold = 2;
+static constexpr int num_bins = 64;
+static constexpr int num_sbins = 128; // spatial bins
+static constexpr int no_div_threshold = 4;
 static constexpr int sah_split_threshold = 8;
 // A cluster with all the primitive centroid within a small range [less than
 // 1e-3] is ill-posed. If there is more than 64 primitives, the primitives will
@@ -232,7 +232,7 @@ bool spatial_split_criteria(float root_area, float intrs_area, int num_prims) {
     // SS can only be applied when the number of primitives inside the node
     // exceeds the threshold (adopted from 2016 Ganestam. SAH guided spatial
     // split partitioning for fast BVH construction)
-    static constexpr float prims_s[2] = {20000, 512};
+    static constexpr float prims_s[2] = {20000, 256};
     static constexpr float prims_e[2] = {1000000, 2048};
 
     float n_prims = std::clamp((float)num_prims, prims_s[0], prims_e[0]);
