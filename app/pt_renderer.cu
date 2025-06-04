@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     }
     case RendererType::MegaKernelVPT: {
         renderer = std::make_unique<VolumePathTracer>(scene);
-        std::cerr << "\tVolumetric Path Tracer\n";
+        std::cout << "\tVolumetric Path Tracer\n";
         break;
     }
     case RendererType::VoxelSDFPT: {
@@ -77,11 +77,18 @@ int main(int argc, char **argv) {
                "exits.\n";
         return 0;
     }
-    default: {
-        std::cerr << "Unsupported renderer type. Maybe you want to run 'cpt' "
-                     "instead?\n";
-        throw std::runtime_error("Unsupported renderer type.");
+    case RendererType::AcceleratorOnly: {
+        std::cout << "\tOnly building (S)BVH accelerator.\n";
+        break;
     }
+    default: {
+        std::cerr << "Renderer type: '" << RENDER_TYPE_STR[scene.rdr_type]
+                  << "' unsupported for offline renderer.\n";
+    }
+    }
+    if (renderer == nullptr) {
+        scene.print();
+        return 0;
     }
     renderer->update_camera(scene.cam);
 

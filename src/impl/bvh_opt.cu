@@ -23,7 +23,7 @@
 #include "core/bvh_opt.cuh"
 
 template <typename NodeType>
-float calculate_SAH_recursive(NodeType *node, float cost_traverse,
+float calculate_SAH_recursive(const NodeType *const node, float cost_traverse,
                               float cost_traverse_spatial = 0.4f,
                               float cost_intersect = 1.f) {
     if (node == nullptr) {
@@ -59,7 +59,7 @@ float calculate_SAH_recursive(NodeType *node, float cost_traverse,
 
 // Get SAH cost for the BVH tree
 template <typename NodeType>
-float calculate_cost(NodeType *root, float traverse_cost,
+float calculate_cost(const NodeType *const root, float traverse_cost,
                      float spatial_traverse_cost, float intersect_cost) {
     return calculate_SAH_recursive(root, traverse_cost, spatial_traverse_cost,
                                    intersect_cost);
@@ -90,10 +90,120 @@ void level_order_traverse(const NodeType *const root, int max_level) {
     }
 }
 
-template float calculate_cost<BVHNode>(BVHNode *root, float traverse_cost,
+struct SubtreeStats {
+    int height;
+    int prim_count;
+};
+
+struct TreeMetrics {
+    float avg_tree_hdiff = 0.0;      // average tree height difference (abs)
+    float avg_prim_imbalance = 0.0;  // imbalance of primitives
+    float avg_leaf_primitives = 0.0; // average primitives in a leaf
+    float avg_overlap_factor = 0.0;
+    float avg_node_intersect_factor = 0.0;
+    int min_leaf_primitives = INT_MAX; // minimum primitives in a leaf
+    int max_leaf_primitives = 0;       // maximum primitives in a leaf
+    int internal_nodes = 0;            // number of internal nodes
+    int leaf_nodes = 0;                // number of leaf nodes
+};
+
+template <typename NodeType>
+SubtreeStats compute_tree_metrics(const NodeType *const node,
+                                  TreeMetrics &metrics) {
+    if (!node)
+        return {-1, 0};
+
+    // process leaf
+    if (!node->lchild && !node->rchild) {
+        metrics.leaf_nodes++;
+        metrics.avg_leaf_primitives += node->prim_num();
+        if (node->prim_num() < metrics.min_leaf_primitives)
+            metrics.min_leaf_primitives = node->prim_num();
+        if (node->prim_num() > metrics.max_leaf_primitives)
+            metrics.max_leaf_primitives = node->prim_num();
+        return {0, node->prim_num()};
+    }
+
+    // process non-leaf
+    metrics.internal_nodes++;
+    auto left_stats = compute_tree_metrics(node->lchild, metrics);
+    auto right_stats = compute_tree_metrics(node->rchild, metrics);
+    float intr_area =
+        node->lchild->bound.intersection_area(node->rchild->bound);
+    float curr_area = node->bound.area(),
+          lchild_area = node->lchild->bound.area(),
+          rchild_area = node->rchild->bound.area();
+    metrics.avg_overlap_factor += intr_area / curr_area;
+    metrics.avg_node_intersect_factor +=
+        (lchild_area + rchild_area) / curr_area;
+
+    // update the metric of the current node
+    int height = std::max(left_stats.height, right_stats.height) + 1;
+    int prim_count = left_stats.prim_count + right_stats.prim_count;
+
+    metrics.avg_tree_hdiff += std::abs(left_stats.height - right_stats.height);
+
+    // calculate imbalance factor
+    float total_prims = left_stats.prim_count + right_stats.prim_count;
+    if (total_prims > 0) {
+        double imbalance =
+            std::abs(left_stats.prim_count - right_stats.prim_count) /
+            total_prims;
+        metrics.avg_prim_imbalance += imbalance;
+    }
+
+    return {height, prim_count};
+}
+
+template <typename NodeType>
+void calculate_tree_metrics(const NodeType *const root) {
+    TreeMetrics metrics;
+    if (!root) {
+        std::cout << "\n[Accelerator] Empty Tree. Exiting... \n";
+        return;
+    }
+
+    compute_tree_metrics(root, metrics);
+
+    if (metrics.internal_nodes > 0) {
+        metrics.avg_tree_hdiff /= metrics.internal_nodes;
+        metrics.avg_prim_imbalance /= metrics.internal_nodes;
+        metrics.avg_overlap_factor /= metrics.internal_nodes;
+        metrics.avg_node_intersect_factor /= metrics.internal_nodes;
+    }
+
+    if (metrics.leaf_nodes > 0) {
+        metrics.avg_leaf_primitives /= metrics.leaf_nodes;
+    }
+
+    std::cout << "\n[Accelerator] Tree Statistics: \n";
+    std::cout << "\t Avg Tree Height difference(↓):\t" << metrics.avg_tree_hdiff
+              << "\n";
+    std::cout << "\t Avg Primitive Imbalance(↓):\t"
+              << metrics.avg_prim_imbalance << "\n";
+    std::cout << "\t Avg Leaf Primitive Cnt(↓):\t"
+              << metrics.avg_leaf_primitives << "\n";
+    std::cout << "\t Avg AABB Overlap Factor(↓):\t"
+              << metrics.avg_overlap_factor << "\n";
+    std::cout << "\t Avg Intersection Factor(↓):\t"
+              << metrics.avg_node_intersect_factor << "\n";
+    std::cout << "\t Min Leaf Primitive Cnt:\t" << metrics.min_leaf_primitives
+              << "\n";
+    std::cout << "\t Max Leaf Primitive Cnt:\t" << metrics.max_leaf_primitives
+              << "\n";
+    std::cout << "\t Internal Node Count:\t\t" << metrics.internal_nodes
+              << "\n";
+    std::cout << "\t Leaf Node Count:\t\t" << metrics.leaf_nodes << "\n\n";
+    std::cout << "\t Total Node Count:\t\t"
+              << metrics.leaf_nodes + metrics.internal_nodes << "\n\n";
+}
+
+template float calculate_cost<BVHNode>(const BVHNode *const root,
+                                       float traverse_cost,
                                        float spatial_traverse_cost,
                                        float intersect_cost);
-template float calculate_cost<SBVHNode>(SBVHNode *root, float traverse_cost,
+template float calculate_cost<SBVHNode>(const SBVHNode *const root,
+                                        float traverse_cost,
                                         float spatial_traverse_cost,
                                         float intersect_cost);
 
@@ -101,3 +211,6 @@ template void level_order_traverse<BVHNode>(const BVHNode *const root,
                                             int max_level);
 template void level_order_traverse<SBVHNode>(const SBVHNode *const root,
                                              int max_level);
+
+template void calculate_tree_metrics<BVHNode>(const BVHNode *const root);
+template void calculate_tree_metrics<SBVHNode>(const SBVHNode *const root);

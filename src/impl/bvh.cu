@@ -309,6 +309,7 @@ void BVHBuilder::build(const std::vector<int> &obj_med_idxs,
     printf("[BVH] BVH tree max depth: %d\n", max_depth);
     printf("[BVH] Traversed BVH SAH cost: %.7f, AVG: %.7f\n", total_cost,
            total_cost / static_cast<float>(bvh_infos.size()));
+    calculate_tree_metrics(root_node);
     cache_max_level = std::min(std::max(max_depth - 1, 0), cache_max_level);
     nodes.reserve(node_num << 1);
     cache_nodes.reserve(1 << cache_max_level);

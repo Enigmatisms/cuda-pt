@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     }
     case RendererType::MegaKernelVPT: {
         renderer = std::make_unique<VolumePathTracer>(scene);
-        std::cerr << "\tVolumetric Path Tracer\n";
+        std::cout << "\tVolumetric Path Tracer\n";
         break;
     }
     case RendererType::VoxelSDFPT: {
@@ -111,15 +111,17 @@ int main(int argc, char **argv) {
     }
     case RendererType::DepthTracing: {
         renderer = std::make_unique<DepthTracer>(scene);
-        std::cerr << "\tDepth Tracing\n";
+        std::cout << "\tDepth Tracing\n";
         break;
     }
     case RendererType::BVHCostViz: {
         renderer = std::make_unique<BVHCostVisualizer>(scene);
-        std::cerr << "\tBVH Cost Visualizer\n";
+        std::cout << "\tBVH Cost Visualizer\n";
         break;
     }
     default: {
+        std::cerr << "Renderer type: '" << RENDER_TYPE_STR[scene.rdr_type]
+                  << "' unsupported for interactive viewer.\n";
         throw std::runtime_error("Unsupported renderer type.");
     }
     }

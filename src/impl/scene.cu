@@ -929,8 +929,9 @@ void parseObjectMediumRef(const tinyxml2::XMLElement *node,
 }
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
-    "MegaKernel-PT", "Wavefront-PT",        "Megakernel-LT", "Voxel-SDF-PT",
-    "Depth Tracer",  "BVH Cost Visualizer", "MegaKernel-VPT"};
+    "MegaKernel-PT",  "Wavefront-PT",    "Megakernel-LT",
+    "Voxel-SDF-PT",   "Depth Tracer",    "BVH Cost Visualizer",
+    "MegaKernel-VPT", "Accelerator-Only"};
 
 Scene::Scene(std::string path)
     : num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0),
@@ -986,6 +987,8 @@ Scene::Scene(std::string path)
         rdr_type = RendererType::MegaKernelVPT;
     else if (render_type == "bvh-cost" || render_type == "bvh_cost")
         rdr_type = RendererType::BVHCostViz;
+    else if (render_type == "accel-only" || render_type == "accel_only")
+        rdr_type = RendererType::AcceleratorOnly;
     else {
         printf(
             "[Scene] Unknown renderer type: '%s', fall back to megakernel PT\n",
@@ -1136,7 +1139,7 @@ Scene::Scene(std::string path)
     }
 
     if (config.use_sbvh) {
-        printf("[SBVH] Using spatial split during BVH.\n");
+        printf("[SBVH] Using spatial split during BVH building.\n");
         SBVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
                             objects, num_emitters, config.max_node_num);
         tp = std::chrono::system_clock::now();
@@ -1152,9 +1155,10 @@ Scene::Scene(std::string path)
             elapsed);
         int old_num_prims = num_prims;
         num_prims = verts_list[0].size();
-        printf("[SBVH] Vertices increased from %d to %d, increased by %.2f%%\n",
-               old_num_prims, num_prims,
-               float(num_prims - old_num_prims) / float(old_num_prims) * 100.f);
+        printf(
+            "[SBVH] Primitives increased from %d to %d, increased by %.2f%%\n",
+            old_num_prims, num_prims,
+            float(num_prims - old_num_prims) / float(old_num_prims) * 100.f);
     } else {
         std::vector<int> prim_idxs; // won't need this if BVH is built
         BVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
@@ -1173,8 +1177,6 @@ Scene::Scene(std::string path)
     // The nodes.size is actually twice the number of nodes
     // since Each BVH node will be separated to two float4, nodes will store two
     // float4 for each node
-    printf("[BVH] Total nodes: %lu, leaves: %lu\n", nodes.size(),
-           obj_idxs.size());
 }
 
 Scene::~Scene() {

@@ -24,13 +24,14 @@
 #include <stdint.h>
 
 enum RendererType : uint8_t {
-    MegaKernelPT = 0,  // megakernel path tracing
-    WavefrontPT = 1,   // wavefront  path tracing
-    MegaKernelLT = 2,  // megakernel light tracing
-    VoxelSDFPT = 3,    // not supported currently
-    DepthTracing = 4,  // rendering depth map
-    BVHCostViz = 5,    // displaying BVH traversal cost
-    MegaKernelVPT = 6, // megakernel volumetric path tracer
+    MegaKernelPT = 0,    // megakernel path tracing
+    WavefrontPT = 1,     // wavefront  path tracing
+    MegaKernelLT = 2,    // megakernel light tracing
+    VoxelSDFPT = 3,      // not supported currently
+    DepthTracing = 4,    // rendering depth map
+    BVHCostViz = 5,      // displaying BVH traversal cost
+    MegaKernelVPT = 6,   // megakernel volumetric path tracer
+    AcceleratorOnly = 7, // Only run accelerator building
     NumRendererType
 };
 
