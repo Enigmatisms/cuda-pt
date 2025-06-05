@@ -41,41 +41,46 @@ static int max_depth = 0;
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
                                     float &min_r, float &interval) const {
+    Vec3 min_ctr = Vec3(AABB_INVALID_DIST), max_ctr = Vec3(-AABB_INVALID_DIST);
 
-    Vec3 min_ctr = Vec3(std::numeric_limits<float>::max()),
-         max_ctr = Vec3(-std::numeric_limits<float>::max());
-
+    // Note: SBVH requires that the AABB of the child node to be <= to the
+    // father's AABB. Therefore, if there is a spatial split followed by an
+    // object split, some parts of the primitives might be outside of the AABB
+    // of the father node. As a result, the centroids, and even the bins might
+    // be outside of the AABB of the father node. So, for max extent and object
+    // spatial binning, we need to clip the range inside the AABB of the father
+    // node . This is different from BVH nodes (since the AABBs of their child
+    // nodes must reside within the AABBs of the father nodes)
     for (int bvh_id : prims) {
-        Vec3 ctr = bvhs[bvh_id].centroid;
+        Vec3 ctr = bound.clamp(bvhs[bvh_id].centroid);
         min_ctr.minimized(ctr);
         max_ctr.maximized(ctr);
     }
 
     Vec3 diff = max_ctr - min_ctr;
     float max_diff = diff.x();
-    min_r = min_ctr[0] - 1e-5;
+    min_r = min_ctr[0] - AABB_EPS;
     int split_axis = 0;
     if (diff.y() > max_diff) {
         max_diff = diff.y();
         split_axis = 1;
-        min_r = min_ctr[1] - 1e-5;
+        min_r = min_ctr[1] - AABB_EPS;
     }
     if (diff.z() > max_diff) {
         max_diff = diff.z();
         split_axis = 2;
-        min_r = min_ctr[2] - 1e-5;
+        min_r = min_ctr[2] - AABB_EPS;
     }
     if (diff.max_elem() < 1e-3) {
         return SplitAxis::AXIS_NONE;
     }
-    interval = (max_diff + 2e-5f) / float(num_bins);
+    interval = (max_diff + AABB_EPS * 2.f) / float(num_bins);
     return SplitAxis(split_axis);
 }
 
 template <int N> void SpatialSplitter<N>::bound_all_bins() {
     for (int i = 0; i < N; i++) {
         bounds[i] ^= bound;
-        bounds[i].grow(); // in case 0-width axis
     }
 }
 
@@ -123,9 +128,9 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
             Vec3 pt = sp.advance(dir, d2bin_start);
             for (int id = s_idx; id <= e_idx; id++) {
                 AABB &aabb = bounds[id];
-                aabb.extend(s_idx == id ? sp : pt);
+                aabb.extend(bound.clamp(s_idx == id ? sp : pt));
                 pt = pt.advance(dir, interval);
-                aabb.extend(e_idx == id ? ep : pt);
+                aabb.extend(bound.clamp(e_idx == id ? ep : pt));
             }
         }
         sp = std::move(old_ep);
@@ -147,14 +152,13 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
         update_triangle({points1[prim_id], points2[prim_id], points3[prim_id]},
                         prim_id);
     }
-    bound_all_bins();
 }
 
 template <int N>
-float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
-                                             int &seg_bin_idx,
+float SpatialSplitter<N>::eval_spatial_split(int &seg_bin_idx,
+                                             int node_prim_cnt,
                                              float trav_cost) {
-    float min_cost = 5e9f, node_prim_cnt = float(cur_node->size());
+    float min_cost = 5e9f;
 
     std::array<float, N> fwd_areas, bwd_areas;
     fwd_areas.fill(0);
@@ -176,7 +180,7 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
             rprim_cnts[N - 1 - i] = exit_tris[N - i].size() + rprim_cnts[N - i];
         }
     }
-    float node_inv_area = 1. / cur_node->bound.area();
+    float node_inv_area = 1.f / bound.area();
 
     for (int i = 0; i < N - 1; i++) {
         float cost =
@@ -191,10 +195,10 @@ float SpatialSplitter<N>::eval_spatial_split(const SBVHNode *const cur_node,
 }
 
 template <int N>
-std::pair<AABB, AABB> SpatialSplitter<N>::apply_spatial_split(
-    const SBVHNode *const cur_node, std::vector<int> &left_prims,
-    std::vector<int> &right_prims, int seg_bin_idx) {
-    const int prim_num = cur_node->size();
+std::pair<AABB, AABB>
+SpatialSplitter<N>::apply_spatial_split(std::vector<int> &left_prims,
+                                        std::vector<int> &right_prims,
+                                        int seg_bin_idx) {
     left_prims.reserve(lprim_cnts[seg_bin_idx]);
     for (int i = 0; i <= seg_bin_idx; i++) {
         left_prims.insert(left_prims.end(), enter_tris[i].begin(),
@@ -265,8 +269,13 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         }
         return 1;
     };
+    float min_range = 0, interval = 0;
+    // Step 1: decide the axis that expands the maximum extent of space
+    SplitAxis max_axis =
+        cur_node->max_extent_axis(bvh_infos, min_range, interval);
 
-    if (cur_node->size() <= no_div_threshold || depth >= max_allowed_depth) {
+    if (cur_node->size() <= no_div_threshold || depth >= max_allowed_depth ||
+        max_axis == SplitAxis::AXIS_NONE) {
         // if the node is small, or father nodes and child nodes share the same
         // size (spatial split duplication) for too many times, we'll create a
         // leaf node
@@ -276,26 +285,23 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
     const int prim_num = cur_node->size();
     float min_cost = 5e9f, node_prim_cnt = float(prim_num);
 
-    // Step 1: decide the axis that expands the maximum extent of space
-    float min_range = 0, interval = 0;
-    SplitAxis max_axis =
-        cur_node->max_extent_axis(bvh_infos, min_range, interval);
-
     std::vector<int> lchild_idxs, rchild_idxs;
-
-    lchild_idxs.reserve(prim_num / 2);
-    rchild_idxs.reserve(prim_num / 2);
-
-    if (max_axis != SplitAxis::AXIS_NONE &&
-        prim_num > sah_split_threshold) { // SAH
+    if (prim_num > sah_split_threshold) { // SAH
         // Step 2: binning the space
         std::array<AxisBins, num_bins> idx_bins;
         for (int bvh_id : cur_node->prims) {
-            int index = std::min(
-                (int)floorf((bvh_infos[bvh_id].centroid[max_axis] - min_range) /
-                            interval),
-                num_bins - 1);
+            // some of the primitives might just have their centroids outside of
+            // all the bins (as a result from spatial split followed by an
+            // object split)
+            int index = std::clamp(
+                static_cast<int>(
+                    (bvh_infos[bvh_id].centroid[max_axis] - min_range) /
+                    interval),
+                0, num_bins - 1);
             idx_bins[index].push(bvh_infos[bvh_id]);
+        }
+        for (int i = 0; i < num_bins; i++) {
+            idx_bins[i].bound ^= cur_node->bound;
         }
 
         // Step 3: forward-backward linear sweep for heuristic calculation
@@ -353,19 +359,19 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             ssp.update_bins(points1, points2, points3, cur_node);
 
             int sbvh_seg_idx = 0;
-            float sbvh_cost = ssp.eval_spatial_split(cur_node, sbvh_seg_idx,
-                                                     spatial_traverse_cost);
+            float sbvh_cost = ssp.eval_spatial_split(
+                sbvh_seg_idx, cur_node->size(), spatial_traverse_cost);
             // printf("SBVH: spatial split cost: %f, object split cost: %f\n",
             // sbvh_cost, min_cost);
             if (sbvh_cost < min_cost &&
                 sbvh_cost < node_prim_cnt) { // Spatial split, actually node num
                                              // is not capped here
-                min_cost = sbvh_cost;
                 std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
-                    cur_node, lchild_idxs, rchild_idxs, sbvh_seg_idx);
+                    lchild_idxs, rchild_idxs, sbvh_seg_idx);
+                fwd_bound.grow(1e-6f);
+                bwd_bound.grow(1e-6f);
                 spatial_split_applied = true;
-                max_axis =
-                    static_cast<SplitAxis>(max_axis + SplitAxis::AXIS_S_X);
+                max_axis = ssp.get_axis();
             }
         }
 
@@ -375,6 +381,8 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             // 1. SBVH is not applied ; 2. when the cost of splitting is lower
             // or 3. when there are more primitives than allowed We cannot
             // partition here, since partition will change the index of the BVH
+            lchild_idxs.reserve(prim_num / 2);
+            rchild_idxs.reserve(prim_num / 2);
             float pivot = min_range + interval * float(seg_bin_idx + 1);
             for (int bvh_id : cur_node->prims) {
                 const BVHInfo &bvh = bvh_infos[bvh_id];
@@ -412,21 +420,21 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             rchild_idxs.push_back(bvh_id);
             bwd_bound += bvh_infos[bvh_id].bound;
         }
-        cur_node->bound += fwd_bound;
-        cur_node->bound += bwd_bound;
+        fwd_bound ^= cur_node->bound;
+        bwd_bound ^= cur_node->bound;
         float split_cost =
             traverse_cost +
             (1.f / cur_node->bound.area()) *
                 (fwd_bound.area() * float(half_size) +
                  bwd_bound.area() * float(valued_indices.size() - half_size));
         if (split_cost >= node_prim_cnt && prim_num <= max_prim_node)
-            lchild_idxs.clear();
+            fwd_bound.clear();
     }
 
-    if (!lchild_idxs.empty() &&
-        !rchild_idxs.empty()) { // cost of splitting is less than making this
-                                // node a leaf node
-        cur_node->release();    // release mem for non-leaf nodes
+    if (!lchild_idxs.empty() && !rchild_idxs.empty() && fwd_bound.is_valid() &&
+        bwd_bound.is_valid()) {
+        // in no case should the child node bound exceeds the father bound
+        cur_node->release(); // release mem for non-leaf nodes
         cur_node->lchild =
             new SBVHNode(std::move(fwd_bound), std::move(lchild_idxs));
         cur_node->rchild =

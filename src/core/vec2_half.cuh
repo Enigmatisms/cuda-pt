@@ -186,7 +186,8 @@ class PackedHalf2 {
     }
 };
 
-CPT_GPU_INLINE void print_vec2_half(const Vec2Half &obj) {
+CONDITION_TEMPLATE(VecType, Vec2Half)
+CPT_GPU_INLINE void print_vec2_half(VecType &&obj) {
     auto temp = obj.xy_float();
     printf("[%f, %f]\n", temp.x, temp.y);
 }

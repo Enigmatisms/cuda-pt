@@ -83,7 +83,7 @@ CPT_CPU std::vector<Vec3> aabb_triangle_clipping(const AABB &aabb,
                                                  std::vector<Vec3> &&polygon) {
     bool skip_clip = true;
     for (const Vec3 &vertex : polygon) {
-        if (!aabb.covers(vertex, 1e-6f)) {
+        if (!aabb.covers(vertex, 0)) {
             skip_clip = false;
             break;
         }

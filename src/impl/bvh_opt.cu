@@ -101,12 +101,20 @@ struct TreeMetrics {
     float avg_leaf_primitives = 0.0; // average primitives in a leaf
     float avg_overlap_factor = 0.0;
     float avg_node_intersect_factor = 0.0;
+    float avg_spatial_split_overlap = 0.0;
+    float min_spatial_split_overlap = 114514.1919810f;
+    float max_spatial_split_overlap = 0.0;
     int min_leaf_primitives = INT_MAX; // minimum primitives in a leaf
     int max_leaf_primitives = 0;       // maximum primitives in a leaf
     int internal_nodes = 0;            // number of internal nodes
     int leaf_nodes = 0;                // number of leaf nodes
+    int spatial_split_nodes = 0;       // number of nodes that use spatial split
+    int bad_nodes =
+        0; // number of nodes whose child nodes have greater surface area
 };
 
+#define IS_SBVH_NODE(_NodeType)                                                \
+    std::is_same_v<std::decay_t<_NodeType>, SBVHNode>
 template <typename NodeType>
 SubtreeStats compute_tree_metrics(const NodeType *const node,
                                   TreeMetrics &metrics) {
@@ -133,9 +141,29 @@ SubtreeStats compute_tree_metrics(const NodeType *const node,
     float curr_area = node->bound.area(),
           lchild_area = node->lchild->bound.area(),
           rchild_area = node->rchild->bound.area();
+    AABB lbound = node->lchild->bound;
+    lbound ^= node->rchild->bound;
+    int axis = node->axis > SplitAxis::AXIS_NONE
+                   ? node->axis - SplitAxis::AXIS_S_X
+                   : node->axis;
+    if (lbound.range()[axis] < 5e-5f)
+        intr_area = 0;
     metrics.avg_overlap_factor += intr_area / curr_area;
     metrics.avg_node_intersect_factor +=
         (lchild_area + rchild_area) / curr_area;
+    metrics.bad_nodes += (lchild_area > curr_area) | (rchild_area > curr_area);
+
+    if constexpr (IS_SBVH_NODE(NodeType)) {
+        if (node->axis > SplitAxis::AXIS_NONE) {
+            float local_overlap = intr_area / curr_area;
+            metrics.max_spatial_split_overlap =
+                std::max(local_overlap, metrics.max_spatial_split_overlap);
+            metrics.min_spatial_split_overlap =
+                std::min(local_overlap, metrics.min_spatial_split_overlap);
+            metrics.avg_spatial_split_overlap += local_overlap;
+            metrics.spatial_split_nodes++;
+        }
+    }
 
     // update the metric of the current node
     int height = std::max(left_stats.height, right_stats.height) + 1;
@@ -187,16 +215,30 @@ void calculate_tree_metrics(const NodeType *const root) {
               << metrics.avg_overlap_factor << "\n";
     std::cout << "\t Avg Intersection Factor(↓):\t"
               << metrics.avg_node_intersect_factor << "\n";
+    if constexpr (IS_SBVH_NODE(NodeType)) {
+        std::cout << "\t Avg Spatial Split Overlap(↓):\t"
+                  << metrics.avg_spatial_split_overlap /
+                         metrics.spatial_split_nodes
+                  << "\n";
+        std::cout << "\t Min Spatial Split Overlap(↓):\t"
+                  << metrics.min_spatial_split_overlap << "\n";
+        std::cout << "\t Max Spatial Split Overlap(↓):\t"
+                  << metrics.max_spatial_split_overlap << "\n";
+        std::cout << "\t Spatial Split Node Cnt:\t"
+                  << metrics.spatial_split_nodes << "\n";
+    }
     std::cout << "\t Min Leaf Primitive Cnt:\t" << metrics.min_leaf_primitives
               << "\n";
     std::cout << "\t Max Leaf Primitive Cnt:\t" << metrics.max_leaf_primitives
               << "\n";
     std::cout << "\t Internal Node Count:\t\t" << metrics.internal_nodes
               << "\n";
+    std::cout << "\t Bad Node Cnt:\t" << metrics.spatial_split_nodes << "\n";
     std::cout << "\t Leaf Node Count:\t\t" << metrics.leaf_nodes << "\n\n";
     std::cout << "\t Total Node Count:\t\t"
               << metrics.leaf_nodes + metrics.internal_nodes << "\n\n";
 }
+#undef IS_SBVH_NODE
 
 template float calculate_cost<BVHNode>(const BVHNode *const root,
                                        float traverse_cost,

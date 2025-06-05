@@ -148,11 +148,10 @@ template <int N> class SpatialSplitter {
                      const std::vector<Vec3> &points3,
                      const SBVHNode *const cur_node);
 
-    float eval_spatial_split(const SBVHNode *const cur_node, int &seg_bin_idx,
+    float eval_spatial_split(int &seg_bin_idx, int node_prim_cnt,
                              float traverse_cost);
 
-    std::pair<AABB, AABB> apply_spatial_split(const SBVHNode *const cur_node,
-                                              std::vector<int> &left_prims,
+    std::pair<AABB, AABB> apply_spatial_split(std::vector<int> &left_prims,
                                               std::vector<int> &right_prims,
                                               int seg_bin_idx);
 

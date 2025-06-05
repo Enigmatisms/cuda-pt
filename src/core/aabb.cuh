@@ -44,12 +44,12 @@ class AABB {
           maxi(std::forward<V2Type>(_maxi)), __bytes2(_prim_idx) {}
 
     CPT_CPU_GPU AABB(const Vec3 &p1, const Vec3 &p2, const Vec3 &p3,
-                     int _obj_idx, int _prim_idx)
+                     int _obj_idx, int _prim_idx, float eps = AABB_EPS)
         : __bytes1(_obj_idx), __bytes2(_prim_idx) {
         mini = p1.minimize(p2).minimize(p3);
-        mini -= AABB_EPS;
+        mini -= eps;
         maxi = p1.maximize(p2).maximize(p3);
-        maxi += AABB_EPS;
+        maxi += eps;
     }
 
     CPT_CPU Vec3 centroid() const noexcept { return (maxi + mini) * 0.5f; }
@@ -90,20 +90,24 @@ class AABB {
         return *this;
     }
 
-    CPT_CPU void grow(float v = THP_EPS) noexcept {
+    CPT_CPU_INLINE void grow(float v = THP_EPS) noexcept {
         mini -= v;
         maxi += v;
     }
 
-    CPT_CPU void fix_degenerate() {
-        constexpr float THRESHOLD = 1e-4f;
-#pragma unroll
+    CPT_CPU_INLINE bool is_valid() const noexcept {
         for (int i = 0; i < 3; i++) {
-            if (maxi[i] - mini[i] < THRESHOLD) {
-                maxi[i] += THRESHOLD * 0.5f;
-                mini[i] -= THRESHOLD * 0.5f;
+            if (maxi[i] < mini[i]) {
+                return false;
             }
         }
+        return true;
+    }
+
+    CONDITION_TEMPLATE(PointType, Vec3)
+    CPT_CPU_INLINE Vec3 clamp(PointType &&pt) const {
+        auto res = mini.maximize(std::forward<PointType>(pt));
+        return maxi.minimize(std::move(res));
     }
 
     CONDITION_TEMPLATE(PointType, Vec3)
@@ -148,11 +152,6 @@ class AABB {
     CPT_CPU_INLINE AABB &operator^=(AABBType &&aabb) {
         mini.maximized(aabb.mini);
         maxi.minimized(aabb.maxi);
-        for (int i = 0; i < 3; i++) {
-            if (maxi[i] < mini[i]) {
-                this->clear();
-            }
-        }
         return *this;
     }
 
