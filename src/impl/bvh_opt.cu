@@ -233,7 +233,7 @@ void calculate_tree_metrics(const NodeType *const root) {
               << "\n";
     std::cout << "\t Internal Node Count:\t\t" << metrics.internal_nodes
               << "\n";
-    std::cout << "\t Bad Node Cnt:\t" << metrics.spatial_split_nodes << "\n";
+    std::cout << "\t Bad Node Cnt:\t\t\t" << metrics.bad_nodes << "\n";
     std::cout << "\t Leaf Node Count:\t\t" << metrics.leaf_nodes << "\n\n";
     std::cout << "\t Total Node Count:\t\t"
               << metrics.leaf_nodes + metrics.internal_nodes << "\n\n";
