@@ -29,14 +29,14 @@
 
 static constexpr int num_bins = 64;
 static constexpr int num_sbins = 128; // spatial bins
-static constexpr int no_div_threshold = 4;
+static constexpr int no_div_threshold = 2;
 static constexpr int sah_split_threshold = 8;
 // A cluster with all the primitive centroid within a small range [less than
 // 1e-3] is ill-posed. If there is more than 64 primitives, the primitives will
 // be discarded
 static constexpr bool SSP_DEBUG = true;
 static constexpr float traverse_cost = 0.2f;
-static constexpr float spatial_traverse_cost = 0.2f;
+static constexpr float spatial_traverse_cost = 0.21f;
 static constexpr int max_allowed_depth = 96;
 static int max_depth = 0;
 
@@ -303,21 +303,9 @@ SpatialSplitter<N>::apply_spatial_split(std::vector<int> &left_prims,
 bool spatial_split_criteria(float root_area, float intrs_area, int num_prims) {
     // SS can be applied if overlap relative to root >= the following. This
     // factor is in fact mentioned in the original paper.
-    static constexpr float root_overlap_factor = 4e-4f;
+    static constexpr float root_overlap_factor = 1e-5f;
 
-    // SS can only be applied when the number of primitives inside the node
-    // exceeds the threshold (adopted from 2016 Ganestam. SAH guided spatial
-    // split partitioning for fast BVH construction)
-    static constexpr float prims_s[2] = {20000, 256};
-    static constexpr float prims_e[2] = {1000000, 2048};
-
-    float n_prims = std::clamp((float)num_prims, prims_s[0], prims_e[0]);
-    int threshold = (n_prims - prims_s[0]) / (prims_e[0] - prims_s[0]) *
-                        (prims_e[1] - prims_s[1]) +
-                    prims_s[1];
-
-    return (intrs_area > root_overlap_factor * root_area) &&
-           (num_prims >= threshold);
+    return intrs_area > root_overlap_factor * root_area;
 }
 
 // TODO(heqianyue): note that we currently don't support
