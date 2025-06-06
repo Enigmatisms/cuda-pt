@@ -41,11 +41,9 @@ static constexpr float spatial_traverse_cost = 0.21f;
 static constexpr int max_allowed_depth = 96;
 // when number of triangles to process is greater than the following,
 // `update_bin` will employ thread pool to accelerate binning
-static constexpr int workload_threshold = 256;
-static constexpr int max_worker = 8;
+static constexpr int workload_threshold = 128;
+static constexpr int number_of_workers = 8;
 static int max_depth = 0;
-static float timings[4] = {0, 0, 0, 0};
-static int timing_cnt[4] = {0, 0, 0, 0};
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
                                     float &min_r, float &interval) const {
@@ -161,6 +159,20 @@ bool SpatialSplitter<N>::update_triangle(
     return true;
 }
 
+// declared for parallel processing
+struct ChoppedBinningData {
+    std::array<AABB, num_sbins> bounds;
+    std::array<std::vector<int>, num_sbins> enter_tris;
+    std::array<std::vector<int>, num_sbins> exit_tris;
+    std::vector<AABB> clip_poly_aabbs;
+
+    ChoppedBinningData() {
+        for (int i = 0; i < num_sbins; i++) {
+            bounds[i].clear();
+        }
+    }
+};
+
 template <int N>
 void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
                                      const std::vector<Vec3> &points2,
@@ -169,8 +181,51 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
                                      const SBVHNode *const cur_node) {
     // the following can be made faster by partitioning and multi-threading
     if (cur_node->size() > workload_threshold) {
-        // thread pool implementation
+        // multi-thread implementation
+        std::array<ChoppedBinningData, number_of_workers> all_data;
 
+#pragma omp parallel for num_threads(number_of_workers)
+        for (size_t i = 0; i < cur_node->size(); i++) {
+            int prim_id = cur_node->prims[i];
+            int thread_id = omp_get_thread_num();
+            ChoppedBinningData &local_data = all_data[thread_id];
+            update_triangle(
+                {points1[prim_id], points2[prim_id], points3[prim_id]},
+                local_data.bounds, local_data.enter_tris, local_data.exit_tris,
+                local_data.clip_poly_aabbs, prim_id);
+        }
+
+        ChoppedBinningData result;
+        size_t clip_aabb_size = 0;
+        for (ChoppedBinningData &local_data : all_data) {
+            for (int bin_id = 0; bin_id < N; bin_id++) {
+                result.bounds[bin_id] += local_data.bounds[bin_id];
+                result.enter_tris[bin_id].insert(
+                    result.enter_tris[bin_id].end(),
+                    local_data.enter_tris[bin_id].begin(),
+                    local_data.enter_tris[bin_id].end());
+                result.exit_tris[bin_id].insert(
+                    result.exit_tris[bin_id].end(),
+                    local_data.exit_tris[bin_id].begin(),
+                    local_data.exit_tris[bin_id].end());
+            }
+            if (employ_unsplit) {
+                clip_aabb_size += local_data.clip_poly_aabbs.size();
+            }
+        }
+        if (clip_aabb_size > 0) {
+            result.clip_poly_aabbs.reserve(clip_aabb_size);
+            for (ChoppedBinningData &local_data : all_data) {
+                result.clip_poly_aabbs.insert(
+                    result.clip_poly_aabbs.end(),
+                    local_data.clip_poly_aabbs.begin(),
+                    local_data.clip_poly_aabbs.end());
+            }
+        }
+        bounds = std::move(result.bounds);
+        enter_tris = std::move(result.enter_tris);
+        exit_tris = std::move(result.exit_tris);
+        clip_poly_aabbs = std::move(result.clip_poly_aabbs);
     } else {
         // single-threaded implement
         for (int prim_id : cur_node->prims) {
@@ -429,18 +484,11 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 root_area, fwd_bound.intersection_area(bwd_bound), prim_num)) {
             SpatialSplitter<num_sbins> ssp(cur_node->bound, max_axis,
                                            ref_unsplit);
-            TicTocLocal timer;
-            timer.tic();
             ssp.update_bins(points1, points2, points3, cur_node);
-            timings[0] += timer.toc();
-            timing_cnt[0]++;
 
             int sbvh_seg_idx = 0;
-            timer.tic();
             float sbvh_cost = ssp.eval_spatial_split(
                 sbvh_seg_idx, cur_node->size(), spatial_traverse_cost);
-            timings[1] += timer.toc();
-            timing_cnt[1]++;
             // printf("SBVH: spatial split cost: %f, object split cost: %f\n",
             // sbvh_cost, min_cost);
             if (sbvh_cost < min_cost &&
@@ -451,22 +499,16 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                     sbvh_cost = (sbvh_cost - spatial_traverse_cost) *
                                 cur_node->bound.area();
                     float old_sbvh_cost = sbvh_cost;
-                    timer.tic();
                     std::tie(fwd_bound, bwd_bound) =
                         ssp.apply_unsplit_reference(lchild_idxs, rchild_idxs,
                                                     sbvh_cost, sbvh_seg_idx);
-                    timings[2] += timer.toc();
-                    timing_cnt[2]++;
                     if (old_sbvh_cost > sbvh_cost + THP_EPS) {
                         reinterpret_cast<int &>(max_axis) |=
                             SplitAxis::REF_UNSPLIT;
                     }
                 } else {
-                    timer.tic();
                     std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                         lchild_idxs, rchild_idxs, sbvh_seg_idx);
-                    timings[2] += timer.toc();
-                    timing_cnt[2]++;
                 }
                 fwd_bound.grow(1e-5f);
                 bwd_bound.grow(1e-5f);
@@ -701,23 +743,10 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
     nodes.reserve(node_num << 1);
     cache_nodes.reserve(1 << cache_max_level);
 
-    TicTocLocal timer;
-    timer.tic();
     recursive_linearize(root_node, nodes, cache_nodes, 0, cache_max_level);
-    timings[3] += timer.toc();
+
     printf("[SBVH] Number of nodes to cache: %lu (%d)\n", cache_nodes.size(),
            cache_max_level);
-    printf("[SBVH Profile] Profiling result: \n");
-    printf("[SBVH Profile] update total time: %f ms, avg time: %f ms, counter: "
-           "%d\n",
-           timings[0], timings[0] / timing_cnt[0], timing_cnt[0]);
-    printf(
-        "[SBVH Profile] eval total time: %f ms, avg time: %f ms, counter: %d\n",
-        timings[1], timings[1] / timing_cnt[1], timing_cnt[1]);
-    printf("[SBVH Profile] apply and ref split total time: %f ms, avg time: %f "
-           "ms, counter: %d\n",
-           timings[2], timings[2] / timing_cnt[2], timing_cnt[2]);
-    printf("[SBVH Profile] recursive_linearize time: %f ms\n", timings[3]);
     // only for debug: level_order_traverse(root_node, 8);
 
     obj_idxs.reserve(bvh_infos.size());

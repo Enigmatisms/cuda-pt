@@ -107,6 +107,7 @@ template <int N> class SpatialSplitter {
     std::vector<AABB> clip_poly_aabbs;
     std::unordered_set<int> unsplit_left;  // no adding to lchild set
     std::unordered_set<int> unsplit_right; // no adding to rchild set
+
   public:
     // ID of the triangles that enters the specified bin
     std::array<std::vector<int>, N> enter_tris;
