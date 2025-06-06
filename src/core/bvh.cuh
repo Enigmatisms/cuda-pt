@@ -26,7 +26,25 @@
 #include "core/object.cuh"
 #include <algorithm>
 
-enum SplitAxis : int { AXIS_X, AXIS_Y, AXIS_Z, AXIS_NONE };
+// split axis x, y, z, invalid, (spatial split x, y, z)
+enum SplitAxis : int {
+    AXIS_X = 0,
+    AXIS_Y = 1,
+    AXIS_Z = 2,
+    AXIS_NONE = 3,
+
+    SPATIAL_SPLIT = 0x10,
+    REF_UNSPLIT = 0x20,
+
+    AXIS_S_X = AXIS_X | SPATIAL_SPLIT,
+    AXIS_S_Y = AXIS_Y | SPATIAL_SPLIT,
+    AXIS_S_Z = AXIS_Z | SPATIAL_SPLIT,
+
+    AXIS_SU_X = AXIS_S_X | REF_UNSPLIT,
+    AXIS_SU_Y = AXIS_S_Y | REF_UNSPLIT,
+    AXIS_SU_Z = AXIS_S_Z | REF_UNSPLIT
+
+};
 
 struct BVHInfo {
     // BVH is for both triangle meshes and spheres
@@ -76,7 +94,7 @@ class BVHNode {
             delete rchild;
     }
 
-    bool is_leaf() const { return lchild == nullptr; }
+    bool non_leaf() const { return lchild != nullptr; }
 
     int base() const { return bound.base(); }
     int &base() { return bound.base(); }
@@ -203,7 +221,7 @@ class CompactNode {
         return (data.w >> HIGH_SHIFT) & LOW_24_MASK;
     }
 
-    // unsigned 6 bits (upper bound: 63)
+    // unsigned 8 bits (upper bound: 255)
     CPT_GPU_INLINE uint32_t get_cached_offset() const noexcept {
         return data.w & LOW_8_MASK;
     }
@@ -232,13 +250,128 @@ class CompactNode {
     }
 };
 
-void bvh_build(const std::vector<Vec3> &points1,
-               const std::vector<Vec3> &points2,
-               const std::vector<Vec3> &points3,
-               const std::vector<ObjInfo> &objects,
-               const std::vector<int> &obj_med_idxs,
-               const std::vector<bool> &sphere_flags, const Vec3 &world_min,
+struct PrimMappingInfo {
+    int obj_id;
+    int prim_id;
+    bool is_sphere;
+    PrimMappingInfo() : obj_id(0), prim_id(0), is_sphere(false) {}
+    PrimMappingInfo(int _obj_id, int _prim_id, bool _is_sphere)
+        : obj_id(_obj_id), prim_id(_prim_id), is_sphere(_is_sphere) {}
+};
+
+struct AxisBins {
+    AABB bound;
+    int prim_cnt;
+
+    AxisBins() : bound(1e5f, -1e5f, 0, 0), prim_cnt(0) {}
+
+    void push(const BVHInfo &bvh) {
+        bound += bvh.bound;
+        prim_cnt++;
+    }
+};
+
+class BVHBuilder {
+  public:
+    BVHBuilder(std::array<std::vector<Vec3>, 3> &_vertices,
+               std::array<std::vector<Vec3>, 3> &_normals,
+               std::array<std::vector<Vec2>, 3> &_uvs,
+               std::vector<bool> &_sphere_flags, std::vector<ObjInfo> &_objects,
+               int _num_emitters, int _max_prim_node, float _overlap_w)
+        : vertices(_vertices), normals(_normals), uvs(_uvs),
+          sphere_flags(_sphere_flags), objects(_objects),
+          num_emitters(_num_emitters), max_prim_node(_max_prim_node),
+          overlap_w(_overlap_w) {}
+
+    void build(const std::vector<int> &obj_med_idxs, const Vec3 &world_min,
                const Vec3 &world_max, std::vector<int> &obj_idxs,
                std::vector<int> &prim_idxs, std::vector<float4> &nodes,
-               std::vector<CompactNode> &cache_nodes, int &max_cache_level,
-               const int max_node_num, const float overlap_w);
+               std::vector<CompactNode> &cache_nodes, int &cache_max_level);
+
+    void post_process(const std::vector<int> &prim_idxs,
+                      const std::vector<int> &obj_idxs,
+                      std::vector<int> &emitter_prims);
+
+    static void index_input(const std::vector<ObjInfo> &objs,
+                            const std::vector<bool> &sphere_flags,
+                            std::vector<PrimMappingInfo> &idxs,
+                            size_t num_primitives);
+
+    static int object_index_packing(int obj_med_idx, int obj_id,
+                                    bool is_sphere);
+
+    static void create_bvh_info(const std::vector<Vec3> &points1,
+                                const std::vector<Vec3> &points2,
+                                const std::vector<Vec3> &points3,
+                                const std::vector<PrimMappingInfo> &idxs,
+                                const std::vector<int> &obj_med_idxs,
+                                std::vector<BVHInfo> &bvh_infos);
+
+  private:
+    std::array<std::vector<Vec3>, 3> &vertices;
+    std::array<std::vector<Vec3>, 3> &normals;
+    std::array<std::vector<Vec2>, 3> &uvs;
+    std::vector<bool> &sphere_flags;
+    std::vector<ObjInfo> &objects;
+    const int num_emitters;
+    const int max_prim_node;
+    const float overlap_w;
+};
+
+// This is the final function call for `bvh_build`
+template <typename NodeType>
+int recursive_linearize(NodeType *cur_node, std::vector<float4> &nodes,
+                        std::vector<CompactNode> &cache_nodes,
+                        const int depth = 0, const int cache_max_depth = 4) {
+    // BVH tree should be linearized to better traverse and fit in the system
+    // memory The linearized BVH tree should contain: bound, base, prim_cnt,
+    // rchild_offset, total_offset (to skip the entire node) Note that if
+    // rchild_offset is -1, then the node is leaf. Leaf node points to primitive
+    // array which is already sorted during BVH construction, containing
+    // primitive_id and obj_id for true intersection Note that lin_nodes has
+    // been reserved
+    size_t current_size = nodes.size() >> 1,
+           current_cached = cache_nodes.size();
+    float4 node_f, node_b;
+    cur_node->get_float4(node_f, node_b);
+    nodes.push_back(node_f);
+    nodes.push_back(node_b);
+    reinterpret_cast<uint32_t &>(node_f.w) =
+        1; // always assume leaf node (offset = 1)
+    reinterpret_cast<uint32_t &>(node_b.w) = current_size;
+    if (depth < cache_max_depth) {
+        // LinearNode (cached):
+        // (float3) aabb.min
+        // (int)    jump offset to next cached node
+        // (float3) aabb.max
+        // (int)    index to the global memory node (if -1, means it it not a
+        // leaf node, we should continue)
+        cache_nodes.emplace_back(node_f, node_b);
+    }
+    /**
+     * @note
+     * Clarify on how do we store BVH range and node offsets:
+     * - for non-leaf nodes, since beg_idx and end_idx will not be used, we only
+     * need node_offset SO node_offset is stored as the `NEGATIVE` value, so if
+     * we encounter a negative float4.w, we know that the current node is
+     * non-leaf
+     * - for leaf nodes, we don't modify the float4.w
+     */
+    if (cur_node->non_leaf()) {
+        // non-leaf node
+        int lnodes = recursive_linearize(cur_node->lchild, nodes, cache_nodes,
+                                         depth + 1, cache_max_depth);
+        lnodes += recursive_linearize(cur_node->rchild, nodes, cache_nodes,
+                                      depth + 1, cache_max_depth);
+        INT_REF_CAST(nodes[2 * current_size + 1].w) = -(lnodes + 1);
+        if (depth < cache_max_depth) {
+            // store the jump offset to the next cached node (for non-leaf node)
+            cache_nodes[current_cached].set_low_8bits(cache_nodes.size() -
+                                                      current_cached);
+        }
+        return lnodes + 1; // include the cur_node
+    } else {
+        // leaf node has negative offset
+        return 1;
+    }
+}

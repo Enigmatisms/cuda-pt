@@ -22,7 +22,7 @@
  */
 #pragma once
 #include "bsdf/bsdf.cuh"
-#include "core/bvh.cuh"
+#include "core/bvh_spatial.cuh"
 #include "core/camera_model.cuh"
 #include "core/config.h"
 #include "core/dynamic_bsdf.cuh"

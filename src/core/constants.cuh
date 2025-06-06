@@ -25,7 +25,7 @@
 
 constexpr float EPSILON = 1e-3f;
 constexpr float THP_EPS = 1e-4f;
-constexpr float AABB_EPS = 1e-3f;
+constexpr float AABB_EPS = 1e-5f;
 constexpr float MAX_DIST = 1e7;
 constexpr float ENVMAP_DIST = 5e3;
 constexpr float AABB_INVALID_DIST = 1e5;

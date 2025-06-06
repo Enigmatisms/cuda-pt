@@ -42,6 +42,9 @@ static constexpr const char *RENDERER_NAMES[] = {
 static constexpr std::array<const char *, 4> COLOR_MAP_NAMES = {
     "Jet", "Plasma", "Viridis", "GrayScale"};
 
+static constexpr std::array<const char *, 3> COST_MAP_NAMES = {
+    "Traversal Cost", "Intersection Cost", "Total Cost"};
+
 static void setup_imgui_style(bool dark_style, float alpha_) {
     ImGuiStyle &style = ImGui::GetStyle();
 
@@ -312,7 +315,7 @@ bool mouse_camera_update(DeviceCamera &cam, float sensitivity) {
 static bool draw_color_picker(std::string label, std::string name,
                               float *color_start) {
     // squared box
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
     ImGuiColorEditFlags color_edit_flags =
         ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoAlpha |
@@ -326,7 +329,7 @@ static bool draw_coupled_slider_input(std::string id, std::string name,
                                       float &val, float min_val = 0.0,
                                       float max_val = 1.f) {
     bool updated = false;
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
 
     ImGui::PushItemWidth(120.0f);
@@ -342,7 +345,7 @@ static bool draw_coupled_slider_input(std::string id, std::string name,
 
 static bool draw_customized_check_box(std::string id, std::string name,
                                       bool &val) {
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
     std::string label = "##select-" + id;
     return ImGui::Checkbox(label.c_str(), &val);
@@ -352,7 +355,7 @@ static bool draw_integer_input(std::string id, std::string name, int &val,
                                int min_val = 1, int max_val = 64,
                                float width = 100.f) {
     bool updated = false;
-    ImGui::Text(name.c_str());
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
     ImGui::PushItemWidth(width);
     updated |= ImGui::InputInt(("##" + id).c_str(), &val, min_val, max_val);
@@ -365,7 +368,7 @@ template <int N>
 static bool draw_selection_menu(const std::array<const char *, N> &picks,
                                 std::string id, std::string name,
                                 uint8_t &current_value) {
-    ImGui::Text("%s", name);
+    ImGui::Text("%s", name.c_str());
     ImGui::SameLine();
 
     const char *current_name = picks[current_value];
@@ -647,7 +650,7 @@ void render_settings_interface(
 
             if (ImGui::CollapsingHeader("Renderer Settings",
                                         ImGuiWindowFlags_AlwaysAutoResize)) {
-                ImGui::Text(RENDERER_NAMES[rdr_type]);
+                ImGui::Text("%s", RENDERER_NAMES[rdr_type]);
                 ImGui::Separator();
                 params.renderer_update |= draw_integer_input(
                     "max_depth", "Max Depth", md_params.max_depth);
@@ -687,17 +690,29 @@ void render_settings_interface(
                         params.serialized_update = true;
                     }
                     if (rdr_type == RendererType::BVHCostViz) {
+                        // cost map selection menu
+                        update_v =
+                            Serializer::get<int>(params.serialized_data, 1) &
+                            0x7f;
+                        if (draw_selection_menu<3>(COST_MAP_NAMES, "##cost-map",
+                                                   "Cost Map", update_v)) {
+                            Serializer::set<int>(params.serialized_data, 1,
+                                                 int(update_v));
+                            params.serialized_update = true;
+                        }
+                        // max value visualization
                         int max_query = ceilf(
-                            Serializer::get<float>(params.serialized_data, 2));
-                        ImGui::Text(("Max value: " + std::to_string(max_query))
+                            Serializer::get<float>(params.serialized_data, 3));
+                        ImGui::Text("%s",
+                                    ("Max value: " + std::to_string(max_query))
                                         .c_str());
 
                         int max_value =
-                            Serializer::get<int>(params.serialized_data, 1);
+                            Serializer::get<int>(params.serialized_data, 2);
                         max_value = max_value > 0 ? max_value : max_query;
                         if (draw_integer_input("bvh-max-cost", "(Viz) Max Cost",
                                                max_value)) {
-                            Serializer::set<int>(params.serialized_data, 1,
+                            Serializer::set<int>(params.serialized_data, 2,
                                                  max_value);
                             params.serialized_update = true;
                         }

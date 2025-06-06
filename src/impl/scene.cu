@@ -334,7 +334,7 @@ void parseBSDF(const tinyxml2::XMLElement *bsdf_elem,
                 if (it == dielectric_mapping.end()) {
                     std::cout << "BSDF[" << id << "]"
                               << ": Only 8 types of metals are supported: ";
-                    for (const auto [k, v] : dielectric_mapping)
+                    for (const auto &[k, v] : dielectric_mapping)
                         std::cout << k << ", ";
                     std::cout << std::endl;
                     std::cout << "Current type '" << dielec_type
@@ -929,8 +929,9 @@ void parseObjectMediumRef(const tinyxml2::XMLElement *node,
 }
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
-    "MegaKernel-PT", "Wavefront-PT",        "Megakernel-LT", "Voxel-SDF-PT",
-    "Depth Tracer",  "BVH Cost Visualizer", "MegaKernel-VPT"};
+    "MegaKernel-PT",  "Wavefront-PT",    "Megakernel-LT",
+    "Voxel-SDF-PT",   "Depth Tracer",    "BVH Cost Visualizer",
+    "MegaKernel-VPT", "Accelerator-Only"};
 
 Scene::Scene(std::string path)
     : num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0),
@@ -984,10 +985,16 @@ Scene::Scene(std::string path)
         rdr_type = RendererType::DepthTracing;
     else if (render_type == "vpt")
         rdr_type = RendererType::MegaKernelVPT;
-    else if (render_type == "bvh-cost")
+    else if (render_type == "bvh-cost" || render_type == "bvh_cost")
         rdr_type = RendererType::BVHCostViz;
-    else
+    else if (render_type == "accel-only" || render_type == "accel_only")
+        rdr_type = RendererType::AcceleratorOnly;
+    else {
+        printf(
+            "[Scene] Unknown renderer type: '%s', fall back to megakernel PT\n",
+            render_type.c_str());
         rdr_type = RendererType::MegaKernelPT;
+    }
 
     // ------------------------- (1) parse all the textures and BSDF
     // -------------------------
@@ -1120,92 +1127,57 @@ Scene::Scene(std::string path)
         obj.export_bound(world_min, world_max);
     }
     auto tp = std::chrono::system_clock::now();
-    std::vector<int> prim_idxs; // won't need this if BVH is built
-    bvh_build(verts_list[0], verts_list[1], verts_list[2], objects,
-              obj_medium_idxs, sphere_objs, world_min, world_max, obj_idxs,
-              prim_idxs, nodes, cache_nodes, config.cache_level,
-              config.max_node_num, config.bvh_overlap_w);
-    auto dur = std::chrono::system_clock::now() - tp;
-    auto count =
-        std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
-    auto elapsed = static_cast<double>(count) / 1e3;
-    printf("[BVH] BVH completed within %.3lf ms\n", elapsed);
+
+#define CHRONO_OUTPUT(fmt_str, ...)                                            \
+    {                                                                          \
+        auto dur = std::chrono::system_clock::now() - tp;                      \
+        auto count =                                                           \
+            std::chrono::duration_cast<std::chrono::microseconds>(dur)         \
+                .count();                                                      \
+        auto elapsed = static_cast<double>(count) / 1e3;                       \
+        printf(fmt_str, __VA_ARGS__);                                          \
+    }
+
+    if (config.bvh.use_sbvh) {
+        printf("[SBVH] Using spatial split during BVH building.\n");
+        SBVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
+                            objects, num_emitters, config.bvh.max_node_num);
+        tp = std::chrono::system_clock::now();
+        builder.build(obj_medium_idxs, world_min, world_max, obj_idxs, nodes,
+                      cache_nodes, config.bvh.cache_level,
+                      config.bvh.use_ref_unsplit);
+        CHRONO_OUTPUT("[SBVH] BVH completed within %.3lf ms\n", elapsed);
+
+        tp = std::chrono::system_clock::now();
+        builder.post_process(obj_idxs, emitter_prims);
+
+        CHRONO_OUTPUT(
+            "[SBVH] Vertex data remapping completed within %.3lf ms\n",
+            elapsed);
+        int old_num_prims = num_prims;
+        num_prims = verts_list[0].size();
+        printf(
+            "[SBVH] Primitives increased from %d to %d, increased by %.2f%%\n",
+            old_num_prims, num_prims,
+            float(num_prims - old_num_prims) / float(old_num_prims) * 100.f);
+    } else {
+        std::vector<int> prim_idxs; // won't need this if BVH is built
+        BVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
+                           objects, num_emitters, config.bvh.max_node_num,
+                           config.bvh.bvh_overlap_w);
+        tp = std::chrono::system_clock::now();
+        builder.build(obj_medium_idxs, world_min, world_max, obj_idxs,
+                      prim_idxs, nodes, cache_nodes, config.bvh.cache_level);
+        CHRONO_OUTPUT("[BVH] BVH completed within %.3lf ms\n", elapsed);
+        tp = std::chrono::system_clock::now();
+        builder.post_process(prim_idxs, obj_idxs, emitter_prims);
+        CHRONO_OUTPUT(
+            "[BVH] Vertex data reordering completed within %.3lf ms\n",
+            elapsed);
+    }
     // The nodes.size is actually twice the number of nodes
     // since Each BVH node will be separated to two float4, nodes will store two
     // float4 for each node
-    printf("[BVH] Total nodes: %lu, leaves: %lu\n", nodes.size(),
-           prim_idxs.size());
-
-    tp = std::chrono::system_clock::now();
-    std::array<Vec3Arr, 3> reorder_verts, reorder_norms;
-    std::array<Vec2Arr, 3> reorder_uvs;
-    std::vector<bool> reorder_sph_flags(num_prims);
-
-    for (int i = 0; i < 3; i++) {
-        Vec3Arr &reorder_vs = reorder_verts[i], &reorder_ns = reorder_norms[i];
-        Vec2Arr &reorder_uv = reorder_uvs[i];
-        const Vec3Arr &origin_vs = verts_list[i], &origin_ns = norms_list[i];
-        const Vec2Arr &origin_uv = uvs_list[i];
-        reorder_vs.resize(num_prims);
-        reorder_ns.resize(num_prims);
-        reorder_uv.resize(num_prims);
-
-        for (int j = 0; j < num_prims; j++) {
-            int index = prim_idxs[j];
-            reorder_vs[j] = origin_vs[index];
-            reorder_ns[j] = origin_ns[index];
-            reorder_uv[j] = origin_uv[index];
-        }
-    }
-
-    // build an emitter primitive index map for emitter sampling
-    // before the reordering logic, the emitter primitives are guaranteed
-    // to be stored continuously, so we don't need an extra index map
-
-    // if we don't reorder the primitives, then we need to store the primitive
-    // index for the leaf node, and the access for the leaf node primitives
-    // won't be continuous
-    std::vector<std::vector<int>> eprim_idxs(num_emitters);
-    for (int i = 0; i < num_prims; i++) {
-        int index = prim_idxs[i], obj_idx = obj_idxs[i] & 0x000fffff;
-        const auto &object = objects[obj_idx];
-        reorder_sph_flags[i] = sphere_flags[index];
-        if (object.is_emitter()) {
-            int emitter_idx = object.emitter_id - 1;
-            eprim_idxs[emitter_idx].push_back(i);
-        }
-    }
-
-    // The following code does the following job:
-    // BVH op will 'shuffle' the primitive order (sort of)
-    // So, the emitter object might not have continuous
-    // primitives stored in the memory. In order to uniformly sample
-    // all the primitives on a given emitter, we should store the linearized
-    // indices to the primitives, so the following code (1) linearize
-    // the indices and (2) recalculate the object.prim_offset, while
-    // the object.prim_cnt stays unchanged
-    std::vector<int> e_prim_offsets;
-    e_prim_offsets.push_back(0);
-    for (const auto &eprim_idx : eprim_idxs) {
-        e_prim_offsets.push_back(eprim_idx.size());
-        for (int index : eprim_idx)
-            emitter_prims.push_back(index);
-    }
-    std::partial_sum(e_prim_offsets.begin(), e_prim_offsets.end(),
-                     e_prim_offsets.begin());
-    for (ObjInfo &obj : objects) {
-        if (!obj.is_emitter())
-            continue;
-        obj.prim_offset = e_prim_offsets[obj.emitter_id - 1];
-    }
-    uvs_list = std::move(reorder_uvs);
-    verts_list = std::move(reorder_verts);
-    norms_list = std::move(reorder_norms);
-    sphere_flags = std::move(reorder_sph_flags);
-    dur = std::chrono::system_clock::now() - tp;
-    count = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
-    elapsed = static_cast<double>(count) / 1e3;
-    printf("[BVH] Vertex data reordering completed within %.3lf ms\n", elapsed);
 }
 
 Scene::~Scene() {
@@ -1307,8 +1279,7 @@ void Scene::export_prims(PrecomputedArray &verts, NormalArray &norms,
     uvs_float.from_vectors(uvs_list[0], uvs_list[1], uvs_list[2]);
 
     constexpr size_t block_size = 256;
-    int num_blocks =
-        (num_prims + block_size - 1) / block_size; // 计算所需 block 数
+    int num_blocks = (num_prims + block_size - 1) / block_size;
     vec2_to_packed_half_kernel<<<num_blocks, block_size>>>(
         &uvs_float.x(0), &uvs_float.y(0), &uvs_float.z(0), uvs.data(),
         num_prims);
@@ -1335,13 +1306,20 @@ void Scene::print() const noexcept {
     std::cout << "\t\tConfig: SPP:\t\t" << config.spp << std::endl;
     std::cout << std::endl;
 
-    std::cout << "\tAccelerator type: BVH" << std::endl;
-    std::cout << "\t\tSAH-BVH Cache Level: \t" << config.cache_level
+    std::cout << "\tAccelerator type: (S)BVH" << std::endl;
+    std::cout << "\t\tSMem Cache Level: \t" << config.bvh.cache_level
               << std::endl;
-    std::cout << "\t\tBVH Max Leaf Node: \t" << config.max_node_num
+    std::cout << "\t\tBVH Max Leaf Node: \t" << config.bvh.max_node_num
               << std::endl;
-    std::cout << "\t\tBVH Overlap Weight: \t" << config.bvh_overlap_w
+    std::cout << "\t\tBVH Overlap Weight: \t" << config.bvh.bvh_overlap_w
               << std::endl;
+    std::cout << "\t\tBVH Spatial Split: \t" << config.bvh.use_sbvh
+              << std::endl;
+    std::cout << "\t\tReference Unsplit: \t";
+    if (config.bvh.use_sbvh)
+        std::cout << config.bvh.use_ref_unsplit << std::endl;
+    else
+        std::cout << "Not Applicable for non-SBVH" << std::endl;
     std::cout << std::endl;
 
     std::cout << "\tScene statistics: " << std::endl;

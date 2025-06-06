@@ -147,6 +147,7 @@ class Vec2 {
     CPT_CPU_GPU_INLINE operator float2() const { return _data; }
 };
 
-CPT_CPU_GPU_INLINE void print_vec2(const Vec2 &obj) {
+CONDITION_TEMPLATE(VecType, Vec2)
+CPT_CPU_GPU_INLINE void print_vec2(VecType &&obj) {
     printf("[%f, %f]\n", obj.x(), obj.y());
 }

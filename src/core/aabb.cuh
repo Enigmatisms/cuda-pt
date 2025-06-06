@@ -44,12 +44,12 @@ class AABB {
           maxi(std::forward<V2Type>(_maxi)), __bytes2(_prim_idx) {}
 
     CPT_CPU_GPU AABB(const Vec3 &p1, const Vec3 &p2, const Vec3 &p3,
-                     int _obj_idx, int _prim_idx)
+                     int _obj_idx, int _prim_idx, float eps = AABB_EPS)
         : __bytes1(_obj_idx), __bytes2(_prim_idx) {
         mini = p1.minimize(p2).minimize(p3);
-        mini -= AABB_EPS;
+        mini -= eps;
         maxi = p1.maximize(p2).maximize(p3);
-        maxi += AABB_EPS;
+        maxi += eps;
     }
 
     CPT_CPU Vec3 centroid() const noexcept { return (maxi + mini) * 0.5f; }
@@ -90,6 +90,37 @@ class AABB {
         return *this;
     }
 
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU_INLINE AABB operator+(AABBType &&_aabb) const noexcept {
+        return AABB(mini.minimize(_aabb.mini), maxi.maximize(_aabb.maxi), 0, 0);
+    }
+
+    CPT_CPU_INLINE void grow(float v = THP_EPS) noexcept {
+        mini -= v;
+        maxi += v;
+    }
+
+    CPT_CPU_INLINE bool is_valid() const noexcept {
+        for (int i = 0; i < 3; i++) {
+            if (maxi[i] < mini[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    CONDITION_TEMPLATE(PointType, Vec3)
+    CPT_CPU_INLINE Vec3 clamp(PointType &&pt) const {
+        auto res = mini.maximize(std::forward<PointType>(pt));
+        return maxi.minimize(std::move(res));
+    }
+
+    CONDITION_TEMPLATE(PointType, Vec3)
+    CPT_CPU void extend(PointType &&pt) noexcept {
+        mini.minimized(pt);
+        maxi.maximized(std::forward<PointType>(pt));
+    }
+
     // intersection of two AABB
     CONDITION_TEMPLATE(AABBType, AABB)
     CPT_CPU float intersection_area(AABBType &&_aabb) const noexcept {
@@ -115,10 +146,18 @@ class AABB {
     // A safe call for area
     CPT_CPU_INLINE float area() const {
         Vec3 diff = maxi - mini;
-        if (fabsf(diff.x()) < AABB_INVALID_DIST)
+        if (fabsf(diff.max_elem()) < AABB_INVALID_DIST)
             return 2.f * (diff.x() * diff.y() + diff.y() * diff.z() +
                           diff.x() * diff.z());
         return 0;
+    }
+
+    // update the AABB to the overlap of `this` and `aabb`
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU_INLINE AABB &operator^=(AABBType &&aabb) {
+        mini.maximized(aabb.mini);
+        maxi.minimized(aabb.maxi);
+        return *this;
     }
 
     CPT_CPU_INLINE void clear() {
@@ -137,6 +176,15 @@ class AABB {
 
     CPT_CPU_GPU_INLINE int prim_cnt() const { return __bytes2; }
     CPT_CPU_GPU_INLINE int &prim_cnt() { return __bytes2; }
+
+    CONDITION_TEMPLATE(VecType, Vec3)
+    CPT_CPU bool covers(VecType &&pt, float eps = THP_EPS) const noexcept {
+#define IN_RANGE(x, x_min, x_max, _eps) (x > x_min - _eps && x < x_max + _eps)
+        return IN_RANGE(pt.x(), mini.x(), maxi.x(), eps) &&
+               IN_RANGE(pt.y(), mini.y(), maxi.y(), eps) &&
+               IN_RANGE(pt.z(), mini.z(), maxi.z(), eps);
+#undef IN_RANGE
+    }
 };
 
 struct AABBWrapper {
