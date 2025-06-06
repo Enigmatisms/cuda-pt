@@ -28,13 +28,22 @@
 
 // split axis x, y, z, invalid, (spatial split x, y, z)
 enum SplitAxis : int {
-    AXIS_X,
-    AXIS_Y,
-    AXIS_Z,
-    AXIS_NONE,
-    AXIS_S_X,
-    AXIS_S_Y,
-    AXIS_S_Z
+    AXIS_X = 0,
+    AXIS_Y = 1,
+    AXIS_Z = 2,
+    AXIS_NONE = 3,
+
+    SPATIAL_SPLIT = 0x10,
+    REF_UNSPLIT = 0x20,
+
+    AXIS_S_X = AXIS_X | SPATIAL_SPLIT,
+    AXIS_S_Y = AXIS_Y | SPATIAL_SPLIT,
+    AXIS_S_Z = AXIS_Z | SPATIAL_SPLIT,
+
+    AXIS_SU_X = AXIS_S_X | REF_UNSPLIT,
+    AXIS_SU_Y = AXIS_S_Y | REF_UNSPLIT,
+    AXIS_SU_Z = AXIS_S_Z | REF_UNSPLIT
+
 };
 
 struct BVHInfo {

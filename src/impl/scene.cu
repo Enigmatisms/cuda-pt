@@ -1144,7 +1144,8 @@ Scene::Scene(std::string path)
                             objects, num_emitters, config.bvh.max_node_num);
         tp = std::chrono::system_clock::now();
         builder.build(obj_medium_idxs, world_min, world_max, obj_idxs, nodes,
-                      cache_nodes, config.bvh.cache_level);
+                      cache_nodes, config.bvh.cache_level,
+                      config.bvh.use_ref_unsplit);
         CHRONO_OUTPUT("[SBVH] BVH completed within %.3lf ms\n", elapsed);
 
         tp = std::chrono::system_clock::now();
@@ -1314,7 +1315,7 @@ void Scene::print() const noexcept {
               << std::endl;
     std::cout << "\t\tBVH Spatial Split: \t" << config.bvh.use_sbvh
               << std::endl;
-    std::cout << "\t\tSBVH Spatial Split: \t";
+    std::cout << "\t\tReference Unsplit: \t";
     if (config.bvh.use_sbvh)
         std::cout << config.bvh.use_ref_unsplit << std::endl;
     else

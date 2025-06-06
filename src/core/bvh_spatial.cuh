@@ -91,7 +91,7 @@ class SBVHNode {
 
 template <int N> class SpatialSplitter {
   private:
-    const bool employ_unsplit;
+    bool employ_unsplit;
     const AABB bound;
     // split axis and range is not determined by SAH-BVH (not by centroids, but
     // by the extent of the AABB)
@@ -168,7 +168,7 @@ template <int N> class SpatialSplitter {
                                               int seg_bin_idx);
 
     SplitAxis get_axis() const {
-        return static_cast<SplitAxis>(this->axis + AXIS_S_X);
+        return static_cast<SplitAxis>(this->axis | SplitAxis::SPATIAL_SPLIT);
     }
 };
 

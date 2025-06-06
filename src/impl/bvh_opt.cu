@@ -48,8 +48,8 @@ float calculate_SAH_recursive(const NodeType *const node, float cost_traverse,
     float left_ratio = left_area * inv_area;
     float right_ratio = right_area * inv_area;
     if constexpr (std::is_same_v<std::decay_t<NodeType>, SBVHNode>) {
-        return (node->axis > SplitAxis::AXIS_NONE ? cost_traverse_spatial
-                                                  : cost_traverse) +
+        return ((node->axis & SplitAxis::SPATIAL_SPLIT) ? cost_traverse_spatial
+                                                        : cost_traverse) +
                left_ratio * left_cost + right_ratio * right_cost;
     } else {
         return cost_traverse + left_ratio * left_cost +
@@ -111,6 +111,7 @@ struct TreeMetrics {
     int spatial_split_nodes = 0;       // number of nodes that use spatial split
     int bad_nodes =
         0; // number of nodes whose child nodes have greater surface area
+    int ref_unsplitted_nodes = 0;
 };
 
 #define IS_SBVH_NODE(_NodeType)                                                \
@@ -144,7 +145,7 @@ SubtreeStats compute_tree_metrics(const NodeType *const node,
     AABB lbound = node->lchild->bound;
     lbound ^= node->rchild->bound;
     int axis = node->axis > SplitAxis::AXIS_NONE
-                   ? node->axis - SplitAxis::AXIS_S_X
+                   ? (node->axis & SplitAxis::AXIS_NONE)
                    : node->axis;
     if (lbound.range()[axis] < 5e-5f)
         intr_area = 0;
@@ -154,7 +155,7 @@ SubtreeStats compute_tree_metrics(const NodeType *const node,
     metrics.bad_nodes += (lchild_area > curr_area) | (rchild_area > curr_area);
 
     if constexpr (IS_SBVH_NODE(NodeType)) {
-        if (node->axis > SplitAxis::AXIS_NONE) {
+        if (node->axis & SplitAxis::SPATIAL_SPLIT) {
             float local_overlap = intr_area / curr_area;
             metrics.max_spatial_split_overlap =
                 std::max(local_overlap, metrics.max_spatial_split_overlap);
@@ -162,6 +163,9 @@ SubtreeStats compute_tree_metrics(const NodeType *const node,
                 std::min(local_overlap, metrics.min_spatial_split_overlap);
             metrics.avg_spatial_split_overlap += local_overlap;
             metrics.spatial_split_nodes++;
+            if (node->axis & SplitAxis::REF_UNSPLIT) {
+                metrics.ref_unsplitted_nodes++;
+            }
         }
     }
 
@@ -226,6 +230,8 @@ void calculate_tree_metrics(const NodeType *const root) {
                   << metrics.max_spatial_split_overlap << "\n";
         std::cout << "\t Spatial Split Node Cnt:\t"
                   << metrics.spatial_split_nodes << "\n";
+        std::cout << "\t Reference Unsplit Node Cnt:\t"
+                  << metrics.ref_unsplitted_nodes << "\n";
     }
     std::cout << "\t Min Leaf Primitive Cnt:\t" << metrics.min_leaf_primitives
               << "\n";

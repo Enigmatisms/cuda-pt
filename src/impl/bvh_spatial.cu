@@ -101,8 +101,7 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
             std::cerr << "[SBVH Warn] Primitive " << prim_id
                       << " discarded due to being degenerated after triangle "
                          "clipping. This should not happen.\n";
-            throw std::runtime_error(
-                "Primitive discarded for being degenerated.");
+            employ_unsplit = false;
         }
         return false;
     }
@@ -144,6 +143,7 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
     if (employ_unsplit) {
         clip_aabb.__bytes1 = min_axis_v;
         clip_aabb.__bytes2 = max_axis_v;
+        clip_poly_aabbs.emplace_back(std::move(clip_aabb));
     }
     enter_tris[min_axis_v].push_back(prim_id);
     exit_tris[max_axis_v].push_back(prim_id);
@@ -209,7 +209,7 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_unsplit_reference(
     std::vector<int> &right_prims, float &min_cost, int seg_bin_idx) {
     // the min_cost is not a standard SAH cost. min_cost(here) = (min_cost -
     // traverse_cost) / node_inv_area;
-    assert(!employ_unsplit || cur_node->size() == clip_poly_aabbs.size());
+    assert(cur_node->size() == clip_poly_aabbs.size());
     int lchild_cnt = lprim_cnts[seg_bin_idx],
         rchild_cnt = rprim_cnts[seg_bin_idx];
     // for child node with only one primitive, no need for unsplitting
@@ -220,13 +220,12 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_unsplit_reference(
         fwd_bound += bounds[i];
     for (int i = seg_bin_idx + 1; i < N; i++)
         bwd_bound += bounds[i];
-
     for (size_t i = 0; i < clip_poly_aabbs.size(); i++) {
         if (lchild_cnt <= 1 || rchild_cnt <= 1)
             break;
         const AABB &aabb = clip_poly_aabbs[i];
         // if not a straddled reference, skip
-        if (aabb.__bytes1 > seg_bin_idx && aabb.__bytes2 <= seg_bin_idx)
+        if (aabb.__bytes1 > seg_bin_idx || aabb.__bytes2 <= seg_bin_idx)
             continue;
         float to_left_cost = (fwd_bound + aabb).area() * lchild_cnt +
                              bwd_bound.area() * (rchild_cnt - 1),
@@ -409,12 +408,8 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         bool spatial_split_applied = false;
         if (spatial_split_criteria(
                 root_area, fwd_bound.intersection_area(bwd_bound), prim_num)) {
-            // TODO(heqianyue): there are still some optimization that can be
-            // implemented. (1) Reference unsplitting. Since split one primitive
-            // reference into two nodes when the reference introduces little
-            // overlap, we can unsplit the reference.
-
-            SpatialSplitter<num_sbins> ssp(cur_node->bound, max_axis);
+            SpatialSplitter<num_sbins> ssp(cur_node->bound, max_axis,
+                                           ref_unsplit);
 
             ssp.update_bins(points1, points2, points3, cur_node);
 
@@ -426,28 +421,26 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             if (sbvh_cost < min_cost &&
                 sbvh_cost < node_prim_cnt) { // Spatial split, actually node num
                                              // is not capped here
+                max_axis = ssp.get_axis();
                 if (ssp.employ_ref_unsplit()) {
-                    sbvh_cost =
-                        (sbvh_cost - traverse_cost) * cur_node->bound.area();
+                    sbvh_cost = (sbvh_cost - spatial_traverse_cost) *
+                                cur_node->bound.area();
                     float old_sbvh_cost = sbvh_cost;
                     std::tie(fwd_bound, bwd_bound) =
                         ssp.apply_unsplit_reference(cur_node, lchild_idxs,
                                                     rchild_idxs, sbvh_cost,
                                                     sbvh_seg_idx);
-                    if (old_sbvh_cost > sbvh_cost) {
-                        printf(
-                            "[SBVH] Reference unsplitting employed. Previous "
-                            "cost: %f, current cost: %f\n",
-                            old_sbvh_cost, sbvh_cost);
+                    if (old_sbvh_cost > sbvh_cost + THP_EPS) {
+                        reinterpret_cast<int &>(max_axis) |=
+                            SplitAxis::REF_UNSPLIT;
                     }
                 } else {
                     std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                         lchild_idxs, rchild_idxs, sbvh_seg_idx);
                 }
-                fwd_bound.grow(1e-6f);
-                bwd_bound.grow(1e-6f);
+                fwd_bound.grow(1e-5f);
+                bwd_bound.grow(1e-5f);
                 spatial_split_applied = true;
-                max_axis = ssp.get_axis();
             }
         }
 
