@@ -91,7 +91,7 @@ class SBVHNode {
 
 template <int N> class SpatialSplitter {
   private:
-    bool employ_unsplit;
+    const bool employ_unsplit;
     const AABB bound;
     // split axis and range is not determined by SAH-BVH (not by centroids, but
     // by the extent of the AABB)
@@ -117,7 +117,11 @@ template <int N> class SpatialSplitter {
     // given the vertices of a triangle, update the spatial splitter bins,
     // entering and exiting triangle records via one-sweep line-drawing-like
     // fast AABB bins update algorithm (chopped binning in the paper)
-    bool update_triangle(std::vector<Vec3> &&points, int prim_id);
+    bool update_triangle(std::vector<Vec3> &&points,
+                         std::array<AABB, N> &bounds,
+                         std::array<std::vector<int>, N> &enter_tris,
+                         std::array<std::vector<int>, N> &exit_tris,
+                         std::vector<AABB> &clip_poly_aabbs, int prim_id) const;
 
     void update_sphere(const Vec3 &center, float radius, int prim_id) {
         throw std::runtime_error(
@@ -159,9 +163,10 @@ template <int N> class SpatialSplitter {
                              float traverse_cost);
 
     // optimize SAH cost by removing some of the duplicated references
-    std::pair<AABB, AABB> apply_unsplit_reference(
-        const SBVHNode *const cur_node, std::vector<int> &left_prims,
-        std::vector<int> &right_prims, float &min_cost, int seg_bin_idx);
+    std::pair<AABB, AABB> apply_unsplit_reference(std::vector<int> &left_prims,
+                                                  std::vector<int> &right_prims,
+                                                  float &min_cost,
+                                                  int seg_bin_idx);
 
     std::pair<AABB, AABB> apply_spatial_split(std::vector<int> &left_prims,
                                               std::vector<int> &right_prims,

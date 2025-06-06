@@ -23,6 +23,7 @@
 
 #include "core/bvh_opt.cuh"
 #include "core/proc_geometry.cuh"
+#include "core/stats.h"
 #include <algorithm>
 #include <cassert>
 #include <numeric>
@@ -38,7 +39,13 @@ static constexpr bool SSP_DEBUG = true;
 static constexpr float traverse_cost = 0.2f;
 static constexpr float spatial_traverse_cost = 0.21f;
 static constexpr int max_allowed_depth = 96;
+// when number of triangles to process is greater than the following,
+// `update_bin` will employ thread pool to accelerate binning
+static constexpr int workload_threshold = 256;
+static constexpr int max_worker = 8;
 static int max_depth = 0;
+static float timings[4] = {0, 0, 0, 0};
+static int timing_cnt[4] = {0, 0, 0, 0};
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
                                     float &min_r, float &interval) const {
@@ -86,8 +93,11 @@ template <int N> void SpatialSplitter<N>::bound_all_bins() {
 }
 
 template <int N>
-bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
-                                         int prim_id) {
+bool SpatialSplitter<N>::update_triangle(
+    std::vector<Vec3> &&points, std::array<AABB, N> &_bounds,
+    std::array<std::vector<int>, N> &_enter_tris,
+    std::array<std::vector<int>, N> &_exit_tris,
+    std::vector<AABB> &_clip_poly_aabbs, int prim_id) const {
     // Note that spatial split triangles can have parts outside of the AABB
     // so we must not assume that AABB is tight (object-ly, but spatially)
 
@@ -101,7 +111,6 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
             std::cerr << "[SBVH Warn] Primitive " << prim_id
                       << " discarded due to being degenerated after triangle "
                          "clipping. This should not happen.\n";
-            employ_unsplit = false;
         }
         return false;
     }
@@ -123,15 +132,15 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
         max_axis_v = std::max(max_axis_v, e_idx);
 
         if (std::abs(dim_v) < 1e-5f) {
-            bounds[s_idx].extend(sp);
-            bounds[e_idx].extend(ep);
+            _bounds[s_idx].extend(sp);
+            _bounds[e_idx].extend(ep);
         } else {
             dir *= 1.f / dim_v;
             float d2bin_start =
                 s_pos + interval * static_cast<float>(s_idx) - sp[axis];
             Vec3 pt = sp.advance(dir, d2bin_start);
             for (int id = s_idx; id <= e_idx; id++) {
-                AABB &aabb = bounds[id];
+                AABB &aabb = _bounds[id];
                 aabb.extend(bound.clamp(s_idx == id ? sp : pt));
                 pt = pt.advance(dir, interval);
                 aabb.extend(bound.clamp(e_idx == id ? ep : pt));
@@ -141,12 +150,14 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
     }
 
     if (employ_unsplit) {
-        clip_aabb.__bytes1 = min_axis_v;
-        clip_aabb.__bytes2 = max_axis_v;
-        clip_poly_aabbs.emplace_back(std::move(clip_aabb));
+        auto packed_indices = reinterpret_cast<int16_t *>(&clip_aabb.__bytes1);
+        packed_indices[0] = min_axis_v;
+        packed_indices[1] = max_axis_v;
+        clip_aabb.__bytes2 = prim_id;
+        _clip_poly_aabbs.emplace_back(std::move(clip_aabb));
     }
-    enter_tris[min_axis_v].push_back(prim_id);
-    exit_tris[max_axis_v].push_back(prim_id);
+    _enter_tris[min_axis_v].push_back(prim_id);
+    _exit_tris[max_axis_v].push_back(prim_id);
     return true;
 }
 
@@ -157,9 +168,16 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
                                      /* possibly, add sphere flag later */
                                      const SBVHNode *const cur_node) {
     // the following can be made faster by partitioning and multi-threading
-    for (int prim_id : cur_node->prims) {
-        update_triangle({points1[prim_id], points2[prim_id], points3[prim_id]},
-                        prim_id);
+    if (cur_node->size() > workload_threshold) {
+        // thread pool implementation
+
+    } else {
+        // single-threaded implement
+        for (int prim_id : cur_node->prims) {
+            update_triangle(
+                {points1[prim_id], points2[prim_id], points3[prim_id]}, bounds,
+                enter_tris, exit_tris, clip_poly_aabbs, prim_id);
+        }
     }
 }
 
@@ -204,12 +222,12 @@ float SpatialSplitter<N>::eval_spatial_split(int &seg_bin_idx,
 }
 
 template <int N>
-std::pair<AABB, AABB> SpatialSplitter<N>::apply_unsplit_reference(
-    const SBVHNode *const cur_node, std::vector<int> &left_prims,
-    std::vector<int> &right_prims, float &min_cost, int seg_bin_idx) {
+std::pair<AABB, AABB>
+SpatialSplitter<N>::apply_unsplit_reference(std::vector<int> &left_prims,
+                                            std::vector<int> &right_prims,
+                                            float &min_cost, int seg_bin_idx) {
     // the min_cost is not a standard SAH cost. min_cost(here) = (min_cost -
     // traverse_cost) / node_inv_area;
-    assert(cur_node->size() == clip_poly_aabbs.size());
     int lchild_cnt = lprim_cnts[seg_bin_idx],
         rchild_cnt = rprim_cnts[seg_bin_idx];
     // for child node with only one primitive, no need for unsplitting
@@ -225,7 +243,8 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_unsplit_reference(
             break;
         const AABB &aabb = clip_poly_aabbs[i];
         // if not a straddled reference, skip
-        if (aabb.__bytes1 > seg_bin_idx || aabb.__bytes2 <= seg_bin_idx)
+        auto packed_indices = reinterpret_cast<const int16_t *>(&aabb.__bytes1);
+        if (packed_indices[0] > seg_bin_idx || packed_indices[1] <= seg_bin_idx)
             continue;
         float to_left_cost = (fwd_bound + aabb).area() * lchild_cnt +
                              bwd_bound.area() * (rchild_cnt - 1),
@@ -233,7 +252,7 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_unsplit_reference(
                               (aabb + bwd_bound).area() * rchild_cnt;
         if (to_left_cost >= min_cost && to_right_cost >= min_cost)
             continue;
-        int index = cur_node->prims[i];
+        int index = aabb.__bytes2;
         if (to_left_cost < to_right_cost) { // the less one must < min_cost
             fwd_bound += aabb;
             min_cost = to_left_cost;
@@ -410,12 +429,18 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                 root_area, fwd_bound.intersection_area(bwd_bound), prim_num)) {
             SpatialSplitter<num_sbins> ssp(cur_node->bound, max_axis,
                                            ref_unsplit);
-
+            TicTocLocal timer;
+            timer.tic();
             ssp.update_bins(points1, points2, points3, cur_node);
+            timings[0] += timer.toc();
+            timing_cnt[0]++;
 
             int sbvh_seg_idx = 0;
+            timer.tic();
             float sbvh_cost = ssp.eval_spatial_split(
                 sbvh_seg_idx, cur_node->size(), spatial_traverse_cost);
+            timings[1] += timer.toc();
+            timing_cnt[1]++;
             // printf("SBVH: spatial split cost: %f, object split cost: %f\n",
             // sbvh_cost, min_cost);
             if (sbvh_cost < min_cost &&
@@ -426,17 +451,22 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                     sbvh_cost = (sbvh_cost - spatial_traverse_cost) *
                                 cur_node->bound.area();
                     float old_sbvh_cost = sbvh_cost;
+                    timer.tic();
                     std::tie(fwd_bound, bwd_bound) =
-                        ssp.apply_unsplit_reference(cur_node, lchild_idxs,
-                                                    rchild_idxs, sbvh_cost,
-                                                    sbvh_seg_idx);
+                        ssp.apply_unsplit_reference(lchild_idxs, rchild_idxs,
+                                                    sbvh_cost, sbvh_seg_idx);
+                    timings[2] += timer.toc();
+                    timing_cnt[2]++;
                     if (old_sbvh_cost > sbvh_cost + THP_EPS) {
                         reinterpret_cast<int &>(max_axis) |=
                             SplitAxis::REF_UNSPLIT;
                     }
                 } else {
+                    timer.tic();
                     std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                         lchild_idxs, rchild_idxs, sbvh_seg_idx);
+                    timings[2] += timer.toc();
+                    timing_cnt[2]++;
                 }
                 fwd_bound.grow(1e-5f);
                 bwd_bound.grow(1e-5f);
@@ -671,10 +701,23 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
     nodes.reserve(node_num << 1);
     cache_nodes.reserve(1 << cache_max_level);
 
+    TicTocLocal timer;
+    timer.tic();
     recursive_linearize(root_node, nodes, cache_nodes, 0, cache_max_level);
+    timings[3] += timer.toc();
     printf("[SBVH] Number of nodes to cache: %lu (%d)\n", cache_nodes.size(),
            cache_max_level);
-
+    printf("[SBVH Profile] Profiling result: \n");
+    printf("[SBVH Profile] update total time: %f ms, avg time: %f ms, counter: "
+           "%d\n",
+           timings[0], timings[0] / timing_cnt[0], timing_cnt[0]);
+    printf(
+        "[SBVH Profile] eval total time: %f ms, avg time: %f ms, counter: %d\n",
+        timings[1], timings[1] / timing_cnt[1], timing_cnt[1]);
+    printf("[SBVH Profile] apply and ref split total time: %f ms, avg time: %f "
+           "ms, counter: %d\n",
+           timings[2], timings[2] / timing_cnt[2], timing_cnt[2]);
+    printf("[SBVH Profile] recursive_linearize time: %f ms\n", timings[3]);
     // only for debug: level_order_traverse(root_node, 8);
 
     obj_idxs.reserve(bvh_infos.size());
