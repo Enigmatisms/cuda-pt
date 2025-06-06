@@ -261,7 +261,7 @@ std::pair<AABB, AABB> SpatialSplitter<N>::apply_unsplit_reference(
     FILTER_EMPLACE(enter_tris, left_prims, unsplit_left, lchild_cnt, 0,
                    seg_bin_idx)
     FILTER_EMPLACE(exit_tris, right_prims, unsplit_right, rchild_cnt,
-                   seg_bin_idx + 1, N)
+                   seg_bin_idx + 1, N - 1)
 #undef FILTER_EMPLACE
     return std::make_pair(fwd_bound, bwd_bound);
 }
@@ -434,9 +434,12 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                         ssp.apply_unsplit_reference(cur_node, lchild_idxs,
                                                     rchild_idxs, sbvh_cost,
                                                     sbvh_seg_idx);
-                    printf("[SBVH] Reference unsplitting employed. Previous "
-                           "cost: %f, current cost: %f\n",
-                           old_sbvh_cost, sbvh_cost);
+                    if (old_sbvh_cost > sbvh_cost) {
+                        printf(
+                            "[SBVH] Reference unsplitting employed. Previous "
+                            "cost: %f, current cost: %f\n",
+                            old_sbvh_cost, sbvh_cost);
+                    }
                 } else {
                     std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                         lchild_idxs, rchild_idxs, sbvh_seg_idx);
