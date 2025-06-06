@@ -23,6 +23,7 @@
 
 #include "core/bvh_opt.cuh"
 #include "core/proc_geometry.cuh"
+#include <algorithm>
 #include <cassert>
 #include <numeric>
 
@@ -97,17 +98,21 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
 
     if (clipped_poly.empty()) {
         if constexpr (SSP_DEBUG) {
-            printf(
-                "[SBVH Warn] Primitive %d discarded due to being degenerated "
-                "after triangle clipping. This should not happen.\n",
-                prim_id);
+            std::cerr << "[SBVH Warn] Primitive " << prim_id
+                      << " discarded due to being degenerated after triangle "
+                         "clipping. This should not happen.\n";
+            throw std::runtime_error(
+                "Primitive discarded for being degenerated.");
         }
         return false;
     }
 
+    AABB clip_aabb(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0);
     Vec3 sp = clipped_poly.back();
     for (size_t i = 0; i < clipped_poly.size(); i++) {
         Vec3 ep = clipped_poly[i], old_ep = ep;
+        if (employ_unsplit)
+            clip_aabb.extend(ep);
 
         if (sp[axis] > ep[axis])
             std::swap(sp, ep);
@@ -136,6 +141,10 @@ bool SpatialSplitter<N>::update_triangle(std::vector<Vec3> &&points,
         sp = std::move(old_ep);
     }
 
+    if (employ_unsplit) {
+        clip_aabb.__bytes1 = min_axis_v;
+        clip_aabb.__bytes2 = max_axis_v;
+    }
     enter_tris[min_axis_v].push_back(prim_id);
     exit_tris[max_axis_v].push_back(prim_id);
     return true;
@@ -192,6 +201,69 @@ float SpatialSplitter<N>::eval_spatial_split(int &seg_bin_idx,
         }
     }
     return min_cost;
+}
+
+template <int N>
+std::pair<AABB, AABB> SpatialSplitter<N>::apply_unsplit_reference(
+    const SBVHNode *const cur_node, std::vector<int> &left_prims,
+    std::vector<int> &right_prims, float &min_cost, int seg_bin_idx) {
+    // the min_cost is not a standard SAH cost. min_cost(here) = (min_cost -
+    // traverse_cost) / node_inv_area;
+    assert(!employ_unsplit || cur_node->size() == clip_poly_aabbs.size());
+    int lchild_cnt = lprim_cnts[seg_bin_idx],
+        rchild_cnt = rprim_cnts[seg_bin_idx];
+    // for child node with only one primitive, no need for unsplitting
+
+    AABB fwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0),
+        bwd_bound(AABB_INVALID_DIST, -AABB_INVALID_DIST, 0, 0);
+    for (int i = 0; i <= seg_bin_idx; i++) // calculate child node bound
+        fwd_bound += bounds[i];
+    for (int i = seg_bin_idx + 1; i < N; i++)
+        bwd_bound += bounds[i];
+
+    for (size_t i = 0; i < clip_poly_aabbs.size(); i++) {
+        if (lchild_cnt <= 1 || rchild_cnt <= 1)
+            break;
+        const AABB &aabb = clip_poly_aabbs[i];
+        // if not a straddled reference, skip
+        if (aabb.__bytes1 > seg_bin_idx && aabb.__bytes2 <= seg_bin_idx)
+            continue;
+        float to_left_cost = (fwd_bound + aabb).area() * lchild_cnt +
+                             bwd_bound.area() * (rchild_cnt - 1),
+              to_right_cost = fwd_bound.area() * (lchild_cnt - 1) +
+                              (aabb + bwd_bound).area() * rchild_cnt;
+        if (to_left_cost >= min_cost && to_right_cost >= min_cost)
+            continue;
+        int index = cur_node->prims[i];
+        if (to_left_cost < to_right_cost) { // the less one must < min_cost
+            fwd_bound += aabb;
+            min_cost = to_left_cost;
+            unsplit_right.emplace(index);
+            rchild_cnt--;
+        } else {
+            bwd_bound += aabb;
+            min_cost = to_right_cost;
+            unsplit_left.emplace(index);
+            lchild_cnt--;
+        }
+    }
+#define FILTER_EMPLACE(src, dst, filter, cnt, begin_i, end_i)                  \
+    dst.reserve(cnt);                                                          \
+    for (int i = begin_i; i <= end_i; i++) {                                   \
+        const auto &idxs = src[i];                                             \
+        for (int prim_idx : idxs) {                                            \
+            if (filter.count(prim_idx))                                        \
+                continue;                                                      \
+            dst.push_back(prim_idx);                                           \
+        }                                                                      \
+    }
+
+    FILTER_EMPLACE(enter_tris, left_prims, unsplit_left, lchild_cnt, 0,
+                   seg_bin_idx)
+    FILTER_EMPLACE(exit_tris, right_prims, unsplit_right, rchild_cnt,
+                   seg_bin_idx + 1, N)
+#undef FILTER_EMPLACE
+    return std::make_pair(fwd_bound, bwd_bound);
 }
 
 template <int N>
@@ -257,7 +329,7 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
                        const std::vector<BVHInfo> &bvh_infos,
                        std::vector<int> &flattened_idxs,
                        SBVHNode *const cur_node, int depth, float root_area,
-                       int max_prim_node = 16) {
+                       int max_prim_node = 16, bool ref_unsplit = true) {
     auto process_leaf = [&]() {
         // leaf node processing function
         cur_node->axis = AXIS_NONE;
@@ -366,8 +438,21 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
             if (sbvh_cost < min_cost &&
                 sbvh_cost < node_prim_cnt) { // Spatial split, actually node num
                                              // is not capped here
-                std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
-                    lchild_idxs, rchild_idxs, sbvh_seg_idx);
+                if (ssp.employ_ref_unsplit()) {
+                    sbvh_cost =
+                        (sbvh_cost - traverse_cost) * cur_node->bound.area();
+                    float old_sbvh_cost = sbvh_cost;
+                    std::tie(fwd_bound, bwd_bound) =
+                        ssp.apply_unsplit_reference(cur_node, lchild_idxs,
+                                                    rchild_idxs, sbvh_cost,
+                                                    sbvh_seg_idx);
+                    printf("[SBVH] Reference unsplitting employed. Previous "
+                           "cost: %f, current cost: %f\n",
+                           old_sbvh_cost, sbvh_cost);
+                } else {
+                    std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
+                        lchild_idxs, rchild_idxs, sbvh_seg_idx);
+                }
                 fwd_bound.grow(1e-6f);
                 bwd_bound.grow(1e-6f);
                 spatial_split_applied = true;
@@ -442,13 +527,13 @@ int recursive_sbvh_SAH(const std::vector<Vec3> &points1,
         cur_node->axis = max_axis;
 
         int node_num = 1;
-        node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
-                                       flattened_idxs, cur_node->lchild,
-                                       depth + 1, root_area, max_prim_node);
+        node_num += recursive_sbvh_SAH(
+            points1, points2, points3, bvh_infos, flattened_idxs,
+            cur_node->lchild, depth + 1, root_area, max_prim_node, ref_unsplit);
 
-        node_num += recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
-                                       flattened_idxs, cur_node->rchild,
-                                       depth + 1, root_area, max_prim_node);
+        node_num += recursive_sbvh_SAH(
+            points1, points2, points3, bvh_infos, flattened_idxs,
+            cur_node->rchild, depth + 1, root_area, max_prim_node, ref_unsplit);
         return node_num;
     } else {
         return process_leaf();
@@ -461,7 +546,8 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
                                  const Vec3 &world_min, const Vec3 &world_max,
                                  std::vector<int> &flattened_idxs,
                                  std::vector<BVHInfo> &bvh_infos, int &node_num,
-                                 int max_prim_node = 16) {
+                                 int max_prim_node = 16,
+                                 bool ref_unsplit = true) {
     // Build BVH tree root node and start recursive tree construction
     printf("[SBVH] World min: ");
     print_vec3(world_min);
@@ -471,9 +557,9 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
     std::iota(all_prims.begin(), all_prims.end(), 0);
     SBVHNode *root_node = new SBVHNode(
         AABB(world_min, world_max, 0, points1.size()), std::move(all_prims));
-    node_num = recursive_sbvh_SAH(points1, points2, points3, bvh_infos,
-                                  flattened_idxs, root_node, 0,
-                                  root_node->bound.area(), max_prim_node);
+    node_num = recursive_sbvh_SAH(
+        points1, points2, points3, bvh_infos, flattened_idxs, root_node, 0,
+        root_node->bound.area(), max_prim_node, ref_unsplit);
 
     return root_node;
 }
@@ -572,7 +658,7 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
                         const Vec3 &world_min, const Vec3 &world_max,
                         std::vector<int> &obj_idxs, std::vector<float4> &nodes,
                         std::vector<CompactNode> &cache_nodes,
-                        int &cache_max_level) {
+                        int &cache_max_level, bool ref_unsplit) {
     const auto &points1 = vertices[0], &points2 = vertices[1],
                &points3 = vertices[2];
 
@@ -585,9 +671,9 @@ void SBVHBuilder::build(const std::vector<int> &obj_med_idxs,
 
     // spatial split almost always ends up with more primitives
     flattened_idxs.reserve(num_prims_all * 2);
-    SBVHNode *root_node =
-        sbvh_root_start(points1, points2, points3, world_min, world_max,
-                        flattened_idxs, bvh_infos, node_num, max_prim_node);
+    SBVHNode *root_node = sbvh_root_start(points1, points2, points3, world_min,
+                                          world_max, flattened_idxs, bvh_infos,
+                                          node_num, max_prim_node, ref_unsplit);
 
     printf("[SBVH] SBVH tree max depth: %d, duplicated primitives: %lu (%lu)\n",
            max_depth, flattened_idxs.size(), points1.size());

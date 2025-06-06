@@ -1138,13 +1138,13 @@ Scene::Scene(std::string path)
         printf(fmt_str, __VA_ARGS__);                                          \
     }
 
-    if (config.use_sbvh) {
+    if (config.bvh.use_sbvh) {
         printf("[SBVH] Using spatial split during BVH building.\n");
         SBVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
-                            objects, num_emitters, config.max_node_num);
+                            objects, num_emitters, config.bvh.max_node_num);
         tp = std::chrono::system_clock::now();
         builder.build(obj_medium_idxs, world_min, world_max, obj_idxs, nodes,
-                      cache_nodes, config.cache_level);
+                      cache_nodes, config.bvh.cache_level);
         CHRONO_OUTPUT("[SBVH] BVH completed within %.3lf ms\n", elapsed);
 
         tp = std::chrono::system_clock::now();
@@ -1162,11 +1162,11 @@ Scene::Scene(std::string path)
     } else {
         std::vector<int> prim_idxs; // won't need this if BVH is built
         BVHBuilder builder(verts_list, norms_list, uvs_list, sphere_flags,
-                           objects, num_emitters, config.max_node_num,
-                           config.bvh_overlap_w);
+                           objects, num_emitters, config.bvh.max_node_num,
+                           config.bvh.bvh_overlap_w);
         tp = std::chrono::system_clock::now();
         builder.build(obj_medium_idxs, world_min, world_max, obj_idxs,
-                      prim_idxs, nodes, cache_nodes, config.cache_level);
+                      prim_idxs, nodes, cache_nodes, config.bvh.cache_level);
         CHRONO_OUTPUT("[BVH] BVH completed within %.3lf ms\n", elapsed);
         tp = std::chrono::system_clock::now();
         builder.post_process(prim_idxs, obj_idxs, emitter_prims);
@@ -1306,12 +1306,19 @@ void Scene::print() const noexcept {
     std::cout << std::endl;
 
     std::cout << "\tAccelerator type: (S)BVH" << std::endl;
-    std::cout << "\t\tSMem Cache Level: \t" << config.cache_level << std::endl;
-    std::cout << "\t\tBVH Max Leaf Node: \t" << config.max_node_num
+    std::cout << "\t\tSMem Cache Level: \t" << config.bvh.cache_level
               << std::endl;
-    std::cout << "\t\tBVH Overlap Weight: \t" << config.bvh_overlap_w
+    std::cout << "\t\tBVH Max Leaf Node: \t" << config.bvh.max_node_num
               << std::endl;
-    std::cout << "\t\tBVH Spatial Split: \t" << config.use_sbvh << std::endl;
+    std::cout << "\t\tBVH Overlap Weight: \t" << config.bvh.bvh_overlap_w
+              << std::endl;
+    std::cout << "\t\tBVH Spatial Split: \t" << config.bvh.use_sbvh
+              << std::endl;
+    std::cout << "\t\tSBVH Spatial Split: \t";
+    if (config.bvh.use_sbvh)
+        std::cout << config.bvh.use_ref_unsplit << std::endl;
+    else
+        std::cout << "Not Applicable for non-SBVH" << std::endl;
     std::cout << std::endl;
 
     std::cout << "\tScene statistics: " << std::endl;

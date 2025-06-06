@@ -87,7 +87,7 @@ RenderingConfig::from_xml(const tinyxml2::XMLElement *acc_node,
                     std::cout << "Cache level clipped to [0, 8], originally: "
                               << cache_level << std::endl;
                 }
-                config.cache_level = std::max(std::min(cache_level, 8), 0);
+                config.bvh.cache_level = std::max(std::min(cache_level, 8), 0);
             } else if (name == "max_node_num") {
                 int max_node_num = 0;
                 node->QueryIntAttribute("value", &max_node_num);
@@ -95,7 +95,7 @@ RenderingConfig::from_xml(const tinyxml2::XMLElement *acc_node,
                     std::cout << "Max node clipped to [1, 255], originally: "
                               << max_node_num << std::endl;
                 }
-                config.max_node_num = std::clamp(max_node_num, 1, 255);
+                config.bvh.max_node_num = std::clamp(max_node_num, 1, 255);
             }
             node = node->NextSiblingElement("integer");
         }
@@ -112,7 +112,7 @@ RenderingConfig::from_xml(const tinyxml2::XMLElement *acc_node,
                               << std::endl;
                     overlap_w = std::clamp(overlap_w, 0.5f, 1.5f);
                 }
-                config.bvh_overlap_w = overlap_w;
+                config.bvh.bvh_overlap_w = overlap_w;
             }
             node = node->NextSiblingElement("float");
         }
@@ -121,7 +121,9 @@ RenderingConfig::from_xml(const tinyxml2::XMLElement *acc_node,
         while (node) {
             std::string name = node->Attribute("name");
             if (name == "use_sbvh") {
-                node->QueryBoolAttribute("value", &config.use_sbvh);
+                node->QueryBoolAttribute("value", &config.bvh.use_sbvh);
+            } else if (name == "use_ref_unsplit") {
+                node->QueryBoolAttribute("value", &config.bvh.use_ref_unsplit);
             }
             node = node->NextSiblingElement("bool");
         }

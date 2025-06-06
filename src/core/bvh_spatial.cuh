@@ -25,8 +25,8 @@
 #include "core/bvh.cuh"
 #include "core/constants.cuh"
 #include "core/object.cuh"
-#include <algorithm>
 #include <array>
+#include <unordered_set>
 
 class SBVHNode {
   public:
@@ -91,6 +91,7 @@ class SBVHNode {
 
 template <int N> class SpatialSplitter {
   private:
+    const bool employ_unsplit;
     const AABB bound;
     // split axis and range is not determined by SAH-BVH (not by centroids, but
     // by the extent of the AABB)
@@ -101,7 +102,11 @@ template <int N> class SpatialSplitter {
     std::array<AABB, N> bounds; // clipped binning results
     std::array<int, N> lprim_cnts;
     std::array<int, N> rprim_cnts;
-
+    // this container holds the AABB of the bound-clipped triangles, introduced
+    // to make reference unsplitting easier to compute
+    std::vector<AABB> clip_poly_aabbs;
+    std::unordered_set<int> unsplit_left;  // no adding to lchild set
+    std::unordered_set<int> unsplit_right; // no adding to rchild set
   public:
     // ID of the triangles that enters the specified bin
     std::array<std::vector<int>, N> enter_tris;
@@ -129,8 +134,8 @@ template <int N> class SpatialSplitter {
     void bound_all_bins();
 
   public:
-    SpatialSplitter(const AABB &_bound, SplitAxis _axis)
-        : bound(_bound), s_pos(_bound.mini[_axis]),
+    SpatialSplitter(const AABB &_bound, SplitAxis _axis, bool _unsplit = true)
+        : employ_unsplit(_unsplit), bound(_bound), s_pos(_bound.mini[_axis]),
           interval((_bound.maxi[_axis] - _bound.mini[_axis]) /
                    static_cast<float>(N)),
           axis(_axis) {
@@ -141,6 +146,8 @@ template <int N> class SpatialSplitter {
         rprim_cnts.fill(0);
     }
 
+    bool employ_ref_unsplit() const noexcept { return this->employ_unsplit; }
+
     // given a node and the current BVHInfo vector, try to split the triangles
     // in the given range, the update is exact
     void update_bins(const std::vector<Vec3> &points1,
@@ -150,6 +157,11 @@ template <int N> class SpatialSplitter {
 
     float eval_spatial_split(int &seg_bin_idx, int node_prim_cnt,
                              float traverse_cost);
+
+    // optimize SAH cost by removing some of the duplicated references
+    std::pair<AABB, AABB> apply_unsplit_reference(
+        const SBVHNode *const cur_node, std::vector<int> &left_prims,
+        std::vector<int> &right_prims, float &min_cost, int seg_bin_idx);
 
     std::pair<AABB, AABB> apply_spatial_split(std::vector<int> &left_prims,
                                               std::vector<int> &right_prims,
@@ -175,7 +187,8 @@ class SBVHBuilder {
     void build(const std::vector<int> &obj_med_idxs, const Vec3 &world_min,
                const Vec3 &world_max, std::vector<int> &obj_idxs,
                std::vector<float4> &nodes,
-               std::vector<CompactNode> &cache_nodes, int &cache_max_level);
+               std::vector<CompactNode> &cache_nodes, int &cache_max_level,
+               bool ref_unsplit = true);
 
     void post_process(std::vector<int> &obj_indices,
                       std::vector<int> &emitter_prims);

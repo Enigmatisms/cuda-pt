@@ -90,6 +90,11 @@ class AABB {
         return *this;
     }
 
+    CONDITION_TEMPLATE(AABBType, AABB)
+    CPT_CPU_INLINE AABB operator+(AABBType &&_aabb) const noexcept {
+        return AABB(mini.minimize(_aabb.mini), maxi.maximize(_aabb.maxi), 0, 0);
+    }
+
     CPT_CPU_INLINE void grow(float v = THP_EPS) noexcept {
         mini -= v;
         maxi += v;
