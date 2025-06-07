@@ -49,9 +49,8 @@ CPT_CPU Vec3 parseVec3(const std::string &str) {
 }
 
 CPT_CPU DeviceCamera::DeviceCamera(const Vec3 &from, const Vec3 &lookat,
-                                   float fov, float w, float h, float hsign = 1,
-                                   Vec3 up = Vec3(0, 1, 0), float aperture,
-                                   float focus_dist)
+                                   float fov, float w, float h, float hsign,
+                                   Vec3 up, float aperture, float focus_dist)
     : t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f),
       sign_x(hsign), aperture_radius(aperture), focal_distance(focus_dist) {
     Vec3 forward = (lookat - from).normalized_h();
@@ -61,7 +60,7 @@ CPT_CPU DeviceCamera::DeviceCamera(const Vec3 &from, const Vec3 &lookat,
 
     // compute actual focal dist if not given
     if (focus_dist <= 0) {
-        focal_distance = (lookat - from).length();
+        focal_distance = sqrtf((lookat - from).length2());
     }
 }
 
@@ -79,7 +78,7 @@ CPT_CPU void DeviceCamera::rotate(float yaw, float pitch) {
 
 CPT_CPU DeviceCamera
 DeviceCamera::from_xml(const tinyxml2::XMLElement *sensorElement) {
-    float fov = 0, hsign = 1;
+    float fov = 0, focal_dist = 1, aperture = 0, hsign = 1;
     int width = 512, height = 512;
     Vec3 lookat_target;
     Vec3 lookat_origin;
@@ -92,6 +91,10 @@ DeviceCamera::from_xml(const tinyxml2::XMLElement *sensorElement) {
         std::string name = element->Attribute("name");
         if (name == "fov") {
             element->QueryFloatAttribute("value", &fov);
+        } else if (name == "aperture") {
+            element->QueryFloatAttribute("value", &aperture);
+        } else if (name == "focal_distance" || name == "focal_dist") {
+            element->QueryFloatAttribute("value", &focal_dist);
         }
         element = element->NextSiblingElement("float");
     }
@@ -146,5 +149,5 @@ DeviceCamera::from_xml(const tinyxml2::XMLElement *sensorElement) {
         }
     }
     return DeviceCamera(lookat_origin, lookat_target, fov, width, height, hsign,
-                        lookat_up);
+                        lookat_up, aperture, focal_dist);
 }

@@ -191,7 +191,7 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
         std::array<ChoppedBinningData, number_of_workers> all_data;
 
 #pragma omp parallel for num_threads(number_of_workers)
-        for (size_t i = 0; i < cur_node->size(); i++) {
+        for (int i = 0; i < cur_node->size(); i++) {
             int prim_id = cur_node->prims[i];
             int thread_id = OMP_GET_THREAD_ID;
             ChoppedBinningData &local_data = all_data[thread_id];

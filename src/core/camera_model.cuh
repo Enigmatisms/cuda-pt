@@ -55,25 +55,6 @@ class DeviceCamera {
                          Vec3 up = Vec3(0, 1, 0), float aperture = 0,
                          float focus_dist = 1);
 
-    /**
-     * Sampling ray with stratified sampling
-     */
-    // CPT_GPU Ray generate_ray(int x, int y, Sampler &sampler) const {
-    //     float x_pos = sampler.next1D() + static_cast<float>(x),
-    //           y_pos = sampler.next1D() + static_cast<float>(y);
-    //     float ndc_dir_x = (x_pos - _hw) * inv_focal * sign_x;
-    //     float ndc_dir_y = (_hh - y_pos) * inv_focal;
-    //     bool use_orthogonal = focal_distance == 0;
-    //     Vec3 origin =
-    //         t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) *
-    //         ndc_dir_x);
-    //     return Ray(std::move(origin), R.rotate(Vec3(use_orthogonal ? 0 :
-    //     ndc_dir_x,
-    //                                      use_orthogonal ? 0 :
-    //                                      ndc_dir_y, 1.f))
-    //                            .normalized());
-    // }
-
     CPT_GPU Ray generate_ray(int x, int y, Sampler &sampler) const {
         float x_pos = sampler.next1D() + static_cast<float>(x),
               y_pos = sampler.next1D() + static_cast<float>(y);
