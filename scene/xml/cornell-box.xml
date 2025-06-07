@@ -20,6 +20,7 @@
 		<integer name="cache_level" value="6"/>
         <integer name="max_node_num" value="8"/>
 		<bool name="use_sbvh" value="true"/>
+		<bool name="use_ref_unsplit" value="false"/>
 
 		<float name="overlap_w" value="0.6"/>
 	</accelerator>

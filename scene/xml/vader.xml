@@ -21,6 +21,8 @@
 	
 	<sensor type="perspective">
         <float name="fov" value="47.073"/>
+        <float name="focal_dist" value="5.4"/>
+        <float name="aperture" value="0.19"/>
         <bool name="hflip" value="true"/>
 		
 		<transform name="toWorld">

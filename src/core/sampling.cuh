@@ -62,6 +62,6 @@ CPT_CPU_GPU_INLINE Vec2 sample_uniform_disk(VecType &&uv) {
     // non concentric simple 2D disk sampling
     float r = sqrtf(uv.x());
     float sin_theta = 0, cos_theta = 0;
-    sincosf(2.f * uv.y(), &sin_theta, &cos_theta);
+    sincospif(2.f * uv.y(), &sin_theta, &cos_theta);
     return Vec2(r * cos_theta, r * sin_theta);
 }

@@ -21,6 +21,7 @@
 	<accelerator type="bvh">
 		<integer name="cache_level" value="4"/>
         <integer name="max_node_num" value="16"/>
+		<bool name="use_sbvh" value="true"/>
 
 		<float name="overlap_w" value="0.6"/>
 	</accelerator>
