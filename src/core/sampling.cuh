@@ -56,3 +56,12 @@ CPT_CPU_GPU_INLINE Vec3 sample_uniform_cone(VecType &&uv, float cos_val,
 
     return Vec3(cos_phi * sin_theta, sin_phi * sin_theta, cos_theta);
 }
+
+CONDITION_TEMPLATE(VecType, Vec2)
+CPT_CPU_GPU_INLINE Vec2 sample_uniform_disk(VecType &&uv) {
+    // non concentric simple 2D disk sampling
+    float r = sqrtf(uv.x());
+    float sin_theta = 0, cos_theta = 0;
+    sincosf(2.f * uv.y(), &sin_theta, &cos_theta);
+    return Vec2(r * cos_theta, r * sin_theta);
+}

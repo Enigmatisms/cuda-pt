@@ -624,14 +624,32 @@ void render_settings_interface(
             // Collapsible group for Camera Settings
             if (ImGui::CollapsingHeader("Camera Settings",
                                         ImGuiWindowFlags_AlwaysAutoResize)) {
+                bool use_orthogonal = cam.focal_distance == 0;
                 params.camera_update |= ImGui::Checkbox(
                     "orthogonal camera",
-                    &cam.use_orthogonal); // Toggles camera_bool_value on or off
+                    &use_orthogonal); // Toggles camera_bool_value on or off
+
+                if (use_orthogonal)
+                    cam.focal_distance = 0;
 
                 float value = focal2fov(cam.inv_focal, cam._hw);
                 params.camera_update |= draw_coupled_slider_input(
                     "Fov", "Camera FoV", value, 1.0f, 150.f);
                 cam.inv_focal = 1.f / fov2focal(value, cam._hw * 2.f);
+
+                value = cam.focal_distance;
+                params.camera_update |= draw_coupled_slider_input(
+                    "Focal", "Focal Dist", value, 0.0f, 50.f);
+                if (value <= 0.01)
+                    value = 0;
+                cam.focal_distance = value;
+
+                value = cam.aperture_radius;
+                params.camera_update |= draw_coupled_slider_input(
+                    "Aperture", "Aperture", value, 0.0f, 0.5f);
+                if (value <= 0.005)
+                    value = 0;
+                cam.aperture_radius = value;
 
                 ImGui::Checkbox("Gamma Correction", &params.gamma_corr);
                 draw_coupled_slider_input("cam-speed", "Camera Speed",

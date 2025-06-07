@@ -49,14 +49,20 @@ CPT_CPU Vec3 parseVec3(const std::string &str) {
 }
 
 CPT_CPU DeviceCamera::DeviceCamera(const Vec3 &from, const Vec3 &lookat,
-                                   float fov, float w, float h, float hsign,
-                                   Vec3 up)
+                                   float fov, float w, float h, float hsign = 1,
+                                   Vec3 up = Vec3(0, 1, 0), float aperture,
+                                   float focus_dist)
     : t(from), inv_focal(1.f / fov2focal(fov, w)), _hw(w * 0.5f), _hh(h * 0.5f),
-      sign_x(hsign), use_orthogonal(false) {
+      sign_x(hsign), aperture_radius(aperture), focal_distance(focus_dist) {
     Vec3 forward = (lookat - from).normalized_h();
     up.normalize_h();
     Vec3 right = up.cross(forward).normalized_h();
     R = SO3(right, up, forward, false);
+
+    // compute actual focal dist if not given
+    if (focus_dist <= 0) {
+        focal_distance = (lookat - from).length();
+    }
 }
 
 CPT_CPU void DeviceCamera::rotate(float yaw, float pitch) {

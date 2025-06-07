@@ -80,7 +80,7 @@ CPT_KERNEL void raygen_primary_hit_shader(
     const int gidx = px + py * width;
 
     Sampler sg(gidx, seed_offset + accum_cnt * SEED_SCALER);
-    Ray ray = dev_cam.generate_ray(px, py, sg.next2D());
+    Ray ray = dev_cam.generate_ray(px, py, sg);
     ray.set_active(false);
 
     Interaction it; // To local register

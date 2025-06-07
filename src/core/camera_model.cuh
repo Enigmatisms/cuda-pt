@@ -23,7 +23,7 @@
 
 #pragma once
 #include "core/ray.cuh"
-#include "core/sampler.cuh"
+#include "core/sampling.cuh"
 #include "core/so3.cuh"
 
 #include <curand.h>
@@ -39,53 +39,78 @@ CPT_CPU Vec3 parseVec3(const std::string &str);
 
 class DeviceCamera {
   public:
-    SO3 R;               // camera rotation (3 * 3)
-    Vec3 t;              // camera translation (world frame) and orientation (3)
-    float inv_focal;     // focal length (1)
-    float _hw, _hh;      // pixel plane (2)
-    float sign_x;        // flipping sign for x (1)
-    bool use_orthogonal; // (less than 1)
+    SO3 R;           // camera rotation (3 * 3)
+    Vec3 t;          // camera translation (world frame) and orientation (3)
+    float inv_focal; // focal length (1)
+    float _hw, _hh;  // pixel plane (2)
+    float sign_x;    // flipping sign for x (1)
+    float aperture_radius = 0.0f; // aperture, 0 means no DoF
+    float focal_distance = 1.0f;
 
   public:
     CPT_CPU_GPU DeviceCamera() {}
 
     CPT_CPU DeviceCamera(const Vec3 &from, const Vec3 &lookat, float fov,
                          float w, float h, float hsign = 1,
-                         Vec3 up = Vec3(0, 1, 0));
+                         Vec3 up = Vec3(0, 1, 0), float aperture = 0,
+                         float focus_dist = 1);
 
     /**
      * Sampling ray with stratified sampling
      */
+    // CPT_GPU Ray generate_ray(int x, int y, Sampler &sampler) const {
+    //     float x_pos = sampler.next1D() + static_cast<float>(x),
+    //           y_pos = sampler.next1D() + static_cast<float>(y);
+    //     float ndc_dir_x = (x_pos - _hw) * inv_focal * sign_x;
+    //     float ndc_dir_y = (_hh - y_pos) * inv_focal;
+    //     bool use_orthogonal = focal_distance == 0;
+    //     Vec3 origin =
+    //         t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) *
+    //         ndc_dir_x);
+    //     return Ray(std::move(origin), R.rotate(Vec3(use_orthogonal ? 0 :
+    //     ndc_dir_x,
+    //                                      use_orthogonal ? 0 :
+    //                                      ndc_dir_y, 1.f))
+    //                            .normalized());
+    // }
+
     CPT_GPU Ray generate_ray(int x, int y, Sampler &sampler) const {
         float x_pos = sampler.next1D() + static_cast<float>(x),
               y_pos = sampler.next1D() + static_cast<float>(y);
-        float ndc_dir_x = (x_pos - _hw) * inv_focal * sign_x;
-        float ndc_dir_y = (_hh - y_pos) * inv_focal;
-        Vec3 origin =
-            t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
-        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x,
-                                         use_orthogonal ? 0 : ndc_dir_y, 1.f))
-                               .normalized());
-    }
 
-    CPT_GPU Ray generate_ray(int x, int y, Vec2 &&sample) const {
-        float x_pos = sample.x() + static_cast<float>(x),
-              y_pos = sample.y() + static_cast<float>(y);
         float ndc_dir_x = (x_pos - _hw) * inv_focal * sign_x;
         float ndc_dir_y = (_hh - y_pos) * inv_focal;
-        Vec3 origin =
-            t + use_orthogonal * (R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x);
-        return Ray(origin, R.rotate(Vec3(use_orthogonal ? 0 : ndc_dir_x,
-                                         use_orthogonal ? 0 : ndc_dir_y, 1.f))
-                               .normalized());
+
+        if (focal_distance == 0) {
+            // orthogonal camera
+            Vec3 origin = t + R.col(1) * ndc_dir_y + R.col(0) * ndc_dir_x;
+            return Ray(std::move(origin), R.rotate(Vec3(0, 0, 1)).normalized());
+        } else {
+            // perspective camera
+            Vec3 dir = R.rotate(Vec3(ndc_dir_x, ndc_dir_y, 1.0f)).normalized();
+            if (aperture_radius > 0.0f) { // apply DoF
+                Vec3 focus_point = t + dir * focal_distance;
+
+                Vec2 lens_sample =
+                    sample_uniform_disk(sampler.next2D()) * aperture_radius;
+                Vec3 aperture_offset =
+                    R.col(0) * lens_sample.x() + R.col(1) * lens_sample.y();
+
+                Vec3 new_origin = t + aperture_offset;
+                return Ray(std::move(new_origin),
+                           (focus_point - new_origin).normalized());
+            } else { // no DoF
+                return Ray(t, dir);
+            }
+        }
     }
 
     CPT_CPU static DeviceCamera
     from_xml(const tinyxml2::XMLElement *sensorElement);
 
     CPT_GPU bool get_splat_pixel(const Vec3 &ray_d, int &px, int &py) const {
-        // TODO(heqianyue): Currently, orthogonal camera does not support
-        // splatting
+        // TODO(heqianyue): Currently, orthogonal camera and camera with
+        // aperture do not support splatting
         Vec3 local_dir = -R.transposed_rotate(ray_d);
         bool success = false;
         if (local_dir.z() > 1e-5) {
