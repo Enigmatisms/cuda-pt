@@ -1,9 +1,9 @@
 [submodule "src/ext/tinyxml2"]
 	path = src/ext/tinyxml2
-	url = git@gitee.com:Enigmatisms/tinyxml2.git
+	url = git@github.com:leethomason/tinyxml2.git
 [submodule "src/ext/tinyobjloader"]
 	path = src/ext/tinyobjloader
-	url = git@gitee.com:Enigmatisms/tinyobjloader.git
+	url = git@github.com:tinyobjloader/tinyobjloader.git
 [submodule "src/ext/imgui"]
 	path = src/ext/imgui
 	url = git@github.com:Enigmatisms/imgui.git

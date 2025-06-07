@@ -42,7 +42,13 @@ static constexpr int max_allowed_depth = 96;
 // when number of triangles to process is greater than the following,
 // `update_bin` will employ thread pool to accelerate binning
 static constexpr int workload_threshold = 128;
+#ifdef OPENMP_ENABLED
+#define OMP_GET_THREAD_ID omp_get_thread_num()
 static constexpr int number_of_workers = 8;
+#else
+#define OMP_GET_THREAD_ID 0
+static constexpr int number_of_workers = 1;
+#endif // OPENMP_ENABLED
 static int max_depth = 0;
 
 SplitAxis SBVHNode::max_extent_axis(const std::vector<BVHInfo> &bvhs,
@@ -187,7 +193,7 @@ void SpatialSplitter<N>::update_bins(const std::vector<Vec3> &points1,
 #pragma omp parallel for num_threads(number_of_workers)
         for (size_t i = 0; i < cur_node->size(); i++) {
             int prim_id = cur_node->prims[i];
-            int thread_id = omp_get_thread_num();
+            int thread_id = OMP_GET_THREAD_ID;
             ChoppedBinningData &local_data = all_data[thread_id];
             update_triangle(
                 {points1[prim_id], points2[prim_id], points3[prim_id]},

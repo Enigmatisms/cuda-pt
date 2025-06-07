@@ -679,7 +679,8 @@ void parseTexture(const tinyxml2::XMLElement *tex_elem,
             } else if (parse_attribute(element, path_value,
                                        {"rough1", "roughness_1", "ior"})) {
                 info.rough_path1 = folder_prefix + path_value;
-                info.is_rough_ior = element->Attribute("name") == "ior";
+                info.is_rough_ior =
+                    std::strcmp(element->Attribute("name"), "ior") == 0;
             } else if (parse_attribute(element, path_value,
                                        {"rough2", "roughness_2"})) {
                 info.is_rough_ior = false;
@@ -1111,6 +1112,7 @@ Scene::Scene(std::string path)
     config = RenderingConfig::from_xml(acc_elem, render_elem, sensor_elem);
 
     // ------------------------- (6) initialize shapes -------------------------
+    bool has_sphere = false;
     sphere_flags.resize(num_prims);
     prim_offset = 0;
     for (int obj_id = 0; obj_id < num_objects; obj_id++) {
@@ -1118,6 +1120,7 @@ Scene::Scene(std::string path)
         bool is_sphere = sphere_objs[obj_id];
         for (int i = objects[obj_id].prim_offset; i < prim_offset; i++) {
             sphere_flags[i] = is_sphere;
+            has_sphere |= is_sphere;
         }
     }
 
@@ -1136,6 +1139,12 @@ Scene::Scene(std::string path)
                 .count();                                                      \
         auto elapsed = static_cast<double>(count) / 1e3;                       \
         printf(fmt_str, __VA_ARGS__);                                          \
+    }
+
+    if (has_sphere && config.bvh.use_sbvh) {
+        config.bvh.use_sbvh = false;
+        printf("[BVH] Primitives contain spheres. SBVH will not be enabled. "
+               "Fall back to BVH.\n");
     }
 
     if (config.bvh.use_sbvh) {

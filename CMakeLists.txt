@@ -4,8 +4,6 @@ cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 set(PROJ_NAME "cuda-pt")
 project(${PROJ_NAME} LANGUAGES CUDA CXX)
 
-message(STATUS "Using SoA3 (struct of arrays) for GPU containers.")
-
 set(CUDA_COMMON_FLAGS --expt-relaxed-constexpr)
 
 find_package(Threads REQUIRED)
@@ -18,7 +16,7 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug"
     message(STATUS "MSVC: Building project in DEBUG mode.")
     set(CMAKE_CUDA_FLAGS
         "${CMAKE_CUDA_FLAGS} -maxrregcount=40 -arch=native -g -G")
-    set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -G -g -lineinfo")
+    set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -G -g")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 /g /Od /Zi /MDd")
   else()
     message(STATUS "GCC & G++: Building project in DEBUG mode.")
@@ -64,13 +62,13 @@ else()
       )
     endif()
   endif()
+  add_compile_definitions(OPENMP_ENABLED)
   set(CUDA_CONFIG_FLAGS --extended-lambda --use_fast_math -Xptxas -O3)
 endif()
 set(CUDA_FINAL_FLAGS ${CUDA_COMMON_FLAGS} ${CUDA_CONFIG_FLAGS})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 include_directories(
