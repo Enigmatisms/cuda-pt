@@ -102,7 +102,7 @@ static void setup_imgui_style(bool dark_style, float alpha_) {
     style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
 
     if (dark_style) {
-        for (int i = 0; i <= ImGuiCol_COUNT; i++) {
+        for (int i = 0; i < ImGuiCol_COUNT; i++) {
             ImVec4 &col = style.Colors[i];
             float H, S, V;
             ImGui::ColorConvertRGBtoHSV(col.x, col.y, col.z, H, S, V);
