@@ -67,7 +67,7 @@ else()
 endif()
 set(CUDA_FINAL_FLAGS ${CUDA_COMMON_FLAGS} ${CUDA_CONFIG_FLAGS})
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
@@ -85,6 +85,7 @@ add_subdirectory(src/ext/imgui)
 add_subdirectory(src/ext/glfw)
 add_subdirectory(src/ext/nanobind)
 add_subdirectory(src/ext/nanovdb)
+add_subdirectory(src/ext/concurrentqueue)
 
 find_package(OpenGL REQUIRED)
 if(MSVC)
@@ -111,7 +112,7 @@ target_compile_options(RenderCore
                        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>)
 
 target_link_libraries(RenderCore PRIVATE tinyxml2 tinyobjloader GLEW::glew glfw
-                                         imgui ${OPENGL_gl_LIBRARY})
+                                         imgui ${OPENGL_gl_LIBRARY} concurrentqueue)
 
 set(EXEC1_NAME "pt")
 add_executable(${EXEC1_NAME} app/pt_renderer.cu)

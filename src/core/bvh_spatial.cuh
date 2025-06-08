@@ -85,6 +85,8 @@ class SBVHNode {
     std::vector<int> prims; // SBVH will have duplicated indices
 };
 
+class SBVHBuilderThreadSpan;
+
 /**
  * @brief SBVH implementation
  */
@@ -158,6 +160,7 @@ template <int N> class SpatialSplitter {
     void update_bins(const std::vector<Vec3> &points1,
                      const std::vector<Vec3> &points2,
                      const std::vector<Vec3> &points3,
+                     const SBVHBuilderThreadSpan &threads,
                      const SBVHNode *const cur_node);
 
     float eval_spatial_split(int &seg_bin_idx, int node_prim_cnt,
