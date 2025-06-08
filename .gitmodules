@@ -19,6 +19,6 @@
 [submodule "src/ext/nanovdb"]
 	path = src/ext/nanovdb
 	url = git@github.com:Enigmatisms/nanovdb.git
-[submodule "src/ext/concurrentqueue"]
-	path = src/ext/concurrentqueue
-	url = git@github.com:cameron314/concurrentqueue.git
+[submodule "src/ext/atomic_queue"]
+	path = src/ext/atomic_queue
+	url = git@github.com:max0x7ba/atomic_queue.git
