@@ -35,7 +35,7 @@
             "intelliSenseMode": "windows-msvc-x64",
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "windowsSdkVersion": "10.0.19041.0"
+            "windowsSdkVersion": "10.0.26100.0"
         }
     ],
     "version": 4
