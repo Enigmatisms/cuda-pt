@@ -130,7 +130,9 @@
         "__functional_base_03": "cpp",
         "__node_handle": "cpp",
         "__memory": "cpp",
-        "any": "cpp"
+        "any": "cpp",
+        "csignal": "cpp",
+        "regex": "cpp"
     },
     "cmake.cpptools.compilerPath": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5\\bin\\nvcc.exe"
 }

@@ -930,9 +930,9 @@ void parseObjectMediumRef(const tinyxml2::XMLElement *node,
 }
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
-    "MegaKernel-PT",  "Wavefront-PT",    "Megakernel-LT",
-    "Voxel-SDF-PT",   "Depth Tracer",    "BVH Cost Visualizer",
-    "MegaKernel-VPT", "Accelerator-Only"};
+    "MegaKernel-PT",  "Wavefront-PT",     "Megakernel-LT",
+    "Voxel-SDF-PT",   "Depth Tracer",     "BVH Cost Visualizer",
+    "MegaKernel-VPT", "Accelerator-Only", "MegaKernel-PT (Dynamic)"};
 
 Scene::Scene(std::string path)
     : num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0),
@@ -976,6 +976,8 @@ Scene::Scene(std::string path)
         render_elem != nullptr ? render_elem->Attribute("type") : "pt";
     if (render_type == "pt")
         rdr_type = RendererType::MegaKernelPT;
+    else if (render_type == "ptd")
+        rdr_type = RendererType::MegaKernelPTDynamic;
     else if (render_type == "wfpt")
         rdr_type = RendererType::WavefrontPT;
     else if (render_type == "lt")

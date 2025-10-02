@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
     case RendererType::MegaKernelPT: {
-        renderer = std::make_unique<PathTracer>(scene);
+        renderer = std::make_unique<PathTracer<SingleTileScheduler>>(scene);
         std::cout << "\tMegakernel Path Tracing.\n";
         break;
     }
@@ -119,6 +119,13 @@ int main(int argc, char **argv) {
     case RendererType::BVHCostViz: {
         renderer = std::make_unique<BVHCostVisualizer>(scene);
         std::cout << "\tBVH Cost Visualizer\n";
+        break;
+    }
+    case RendererType::MegaKernelPTDynamic: {
+        renderer =
+            std::make_unique<PathTracer<PreemptivePersistentTileScheduler>>(
+                scene);
+        std::cout << "\tMegakernel Path Tracing (Dynamic Scheduler).\n";
         break;
     }
     default: {

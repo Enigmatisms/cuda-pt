@@ -41,7 +41,7 @@ CPT_CPU std::vector<uint8_t> LightTracer::render(const MaxDepthParams &md,
         // for more sophisticated renderer (like path tracer), shared_memory
         // should be used
         if (bidirectional) {
-            render_pt_kernel<true>
+            render_pt_kernel<SingleTileScheduler, true>
                 <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
                    dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
                     *camera, verts, norms, uvs, obj_info, emitter_prims,
@@ -72,7 +72,7 @@ CPT_CPU void LightTracer::render_online(const MaxDepthParams &md,
 
     accum_cnt++;
     if (bidirectional) {
-        render_pt_kernel<false>
+        render_pt_kernel<SingleTileScheduler, false>
             <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
                dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
                 *camera, verts, norms, uvs, obj_info, emitter_prims, bvh_leaves,
@@ -96,7 +96,7 @@ CPT_CPU const float *LightTracer::render_raw(const MaxDepthParams &md,
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
     accum_cnt++;
     if (bidirectional) {
-        render_pt_kernel<false>
+        render_pt_kernel<SingleTileScheduler, false>
             <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
                dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
                 *camera, verts, norms, uvs, obj_info, emitter_prims, bvh_leaves,

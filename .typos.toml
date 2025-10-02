@@ -11,6 +11,7 @@ tht = "tht"
 SER = "SER"
 pn  = "pn"
 Optin = "Optin"
+ptd = "ptd"
 
 [default]
 check-strings = true

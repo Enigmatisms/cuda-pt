@@ -35,9 +35,15 @@
 namespace gui {
 
 static constexpr const char *RENDERER_NAMES[] = {
-    "Megakernel Path Tracing",  "Wavefront Path Tracing",
-    "Megakernel Light Tracing", "Voxel-SDF Path Tracing",
-    "Scene Depth Tracing",      "BVH Cost Visualizer"};
+    "Megakernel Path Tracing",
+    "Wavefront Path Tracing",
+    "Megakernel Light Tracing",
+    "Voxel-SDF Path Tracing",
+    "Scene Depth Tracing",
+    "BVH Cost Visualizer",
+    "Megakernel Volumetric Path Tracing",
+    "",
+    "Megakernel Path Tracing (Dynamic)"};
 
 static constexpr std::array<const char *, 4> COLOR_MAP_NAMES = {
     "Jet", "Plasma", "Viridis", "GrayScale"};

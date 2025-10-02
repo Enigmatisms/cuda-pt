@@ -36,7 +36,7 @@
 #include "core/stats.h"
 #include "renderer/path_tracer.cuh"
 
-class WavefrontPathTracer : public PathTracer {
+class WavefrontPathTracer : public PathTracer<SingleTileScheduler> {
   private:
     PayLoadBufferSoA payload_buffer;
     thrust::device_vector<uint32_t> index_buffer;
