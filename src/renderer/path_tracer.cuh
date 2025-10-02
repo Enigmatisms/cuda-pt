@@ -29,19 +29,19 @@
 #include <cuda/pipeline>
 #include <cuda_gl_interop.h>
 
-class PathTracer : public TracerBase {
+template <typename Scheduler> class PathTracer : public TracerBase {
   private:
-    bool verbose;
+    const bool verbose;
 
   protected:
     int *_obj_idxs;
     float4 *_nodes;
 
     CompactedObjInfo *obj_info;
-    int num_objs;
-    int num_nodes;
-    int num_cache; // number of cached BVH nodes
-    int num_emitter;
+    const int num_objs;
+    const int num_nodes;
+    const int num_cache; // number of cached BVH nodes
+    const int num_emitter;
     const int envmap_id;
 
     cudaTextureObject_t bvh_leaves;

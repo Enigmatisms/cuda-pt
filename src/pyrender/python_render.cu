@@ -89,9 +89,9 @@ PythonRenderer::PythonRenderer(const nb::str &xml_path, int _device_id,
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene->rdr_type) {
     case RendererType::MegaKernelPT: {
-        rdr = std::make_unique<PathTracer>(*scene);
+        rdr = std::make_unique<PathTracer<SingleTileScheduler>>(*scene);
         rdr->initialize_var_buffer();
-        std::cout << "\tMegakernel Path Tracing.\n";
+        std::cout << "\tMegakernel Path Tracing (Static Scheduler).\n";
         break;
     }
     case RendererType::WavefrontPT: {
@@ -112,7 +112,7 @@ PythonRenderer::PythonRenderer(const nb::str &xml_path, int _device_id,
     }
     case RendererType::MegaKernelVPT: {
         rdr = std::make_unique<VolumePathTracer>(*scene);
-        std::cerr << "\tVolumetric Path Tracer\n";
+        std::cout << "\tVolumetric Path Tracer\n";
         break;
     }
     case RendererType::VoxelSDFPT: {
@@ -123,12 +123,18 @@ PythonRenderer::PythonRenderer(const nb::str &xml_path, int _device_id,
     }
     case RendererType::DepthTracing: {
         rdr = std::make_unique<DepthTracer>(*scene);
-        std::cerr << "\tDepth Tracing\n";
+        std::cout << "\tDepth Tracing\n";
         break;
     }
     case RendererType::BVHCostViz: {
         rdr = std::make_unique<BVHCostVisualizer>(*scene);
-        std::cerr << "\tBVH Cost Visualizer\n";
+        std::cout << "\tBVH Cost Visualizer\n";
+        break;
+    }
+    case RendererType::MegaKernelPTDynamic: {
+        rdr = std::make_unique<PathTracer<PreemptivePersistentTileScheduler>>(
+            *scene);
+        std::cout << "\tMegakernel Path Tracing (Dynamic Scheduler).\n";
         break;
     }
     default: {

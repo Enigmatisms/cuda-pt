@@ -111,8 +111,16 @@ set_target_properties(RenderCore PROPERTIES CUDA_SEPARABLE_COMPILATION ON
 target_compile_options(RenderCore
                        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FINAL_FLAGS}>)
 
-target_link_libraries(RenderCore PRIVATE tinyxml2 tinyobjloader GLEW::glew glfw Threads::Threads
-                                         imgui ${OPENGL_gl_LIBRARY} max0x7ba::atomic_queue)
+target_link_libraries(
+  RenderCore
+  PRIVATE tinyxml2
+          tinyobjloader
+          GLEW::glew
+          glfw
+          Threads::Threads
+          imgui
+          ${OPENGL_gl_LIBRARY}
+          max0x7ba::atomic_queue)
 
 set(EXEC1_NAME "pt")
 add_executable(${EXEC1_NAME} app/pt_renderer.cu)
