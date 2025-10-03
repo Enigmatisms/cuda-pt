@@ -47,8 +47,8 @@ int main(int argc, char **argv) {
     std::cout << "[RENDERER] Path tracer loaded: ";
     switch (scene.rdr_type) {
     case RendererType::MegaKernelPT: {
-        renderer = std::make_unique<PathTracer>(scene);
-        std::cout << "\tMegakernel Path Tracing.\n";
+        renderer = std::make_unique<PathTracer<SingleTileScheduler>>(scene);
+        std::cout << "\tMegakernel Path Tracing (Static Scheduler).\n";
         break;
     }
     case RendererType::WavefrontPT: {
@@ -79,6 +79,13 @@ int main(int argc, char **argv) {
     }
     case RendererType::AcceleratorOnly: {
         std::cout << "\tOnly building (S)BVH accelerator.\n";
+        break;
+    }
+    case RendererType::MegaKernelPTDynamic: {
+        renderer =
+            std::make_unique<PathTracer<PreemptivePersistentTileScheduler>>(
+                scene);
+        std::cout << "\tMegakernel Path Tracing (Dynamic Scheduler).\n";
         break;
     }
     default: {

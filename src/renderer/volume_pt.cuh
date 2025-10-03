@@ -25,7 +25,7 @@
 #include "core/medium.cuh"
 #include "renderer/path_tracer.cuh"
 
-class VolumePathTracer : public PathTracer {
+class VolumePathTracer : public PathTracer<SingleTileScheduler> {
   protected:
     int cam_vol_id;
     Medium **media;

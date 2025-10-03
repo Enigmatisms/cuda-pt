@@ -28,7 +28,7 @@
 #include <cuda/pipeline>
 #include <cuda_gl_interop.h>
 
-class LightTracer : public PathTracer {
+class LightTracer : public PathTracer<SingleTileScheduler> {
   private:
     bool bidirectional; // whether to use both PT and LT in a single renderer
     int spec_constraint;

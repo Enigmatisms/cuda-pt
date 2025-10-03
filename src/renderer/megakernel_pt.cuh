@@ -23,7 +23,26 @@
 #pragma once
 #include "core/camera_model.cuh"
 #include "core/max_depth.h"
+#include "renderer/scheduler.cuh"
 #include "renderer/tracing_func.cuh"
+
+CPT_CPU_INLINE int get_max_block() {
+    cudaDeviceProp prop;
+    int device_count;
+    cudaGetDeviceCount(&device_count);
+
+    if (device_count == 0) {
+        std::cerr << "[Error] No viable device found, please check.\n";
+        throw std::runtime_error("[No Device Error]");
+    }
+    cudaGetDeviceProperties(&prop, 0);
+    return prop.multiProcessorCount;
+}
+
+#define LAUNCH_PT_KERNEL(scheduler_type, render_once, grid_size, block_size,   \
+                         cached_size, ...)                                     \
+    render_pt_kernel<scheduler_type, render_once>                              \
+        <<<grid_size, block_size, cached_size>>>(__VA_ARGS__)
 
 /**
  * @brief this version does not employ object-level culling
@@ -55,7 +74,7 @@
  * @param gamma_corr     For online rendering, whether to enable gamma
  * correction on visualization
  */
-template <bool render_once>
+template <typename Scheduler, bool render_once>
 CPT_KERNEL void render_pt_kernel(
     const DeviceCamera &dev_cam, const PrecomputedArray verts,
     const NormalArray norms, const ConstBuffer<PackedHalf2> uvs,

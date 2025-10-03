@@ -37,3 +37,4 @@ constexpr float M_1_Pi = 1.f / M_Pi;
 constexpr float DEG2RAD = M_Pi / 180.f;
 
 constexpr int INVALID_OBJ = 0xffffffff;
+static constexpr int OCC_BLOCK_PER_SM = 12; // calculated by profiling

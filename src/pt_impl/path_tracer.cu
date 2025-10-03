@@ -35,16 +35,29 @@ static constexpr int SHFL_THREAD_Y =
 CPT_GPU_CONST Emitter *c_emitter[9];
 CPT_GPU_CONST BSDF *c_material[48];
 
-PathTracer::PathTracer(const Scene &scene, bool _verbose)
+#define SCHEDULER_DISPATCH(scheduler_type, render_once, cached_size, ...)      \
+    if constexpr (scheduler_type::is_dynamic) {                                \
+        int num_sm = get_max_block();                                          \
+        LAUNCH_PT_KERNEL(scheduler_type, render_once,                          \
+                         dim3(num_sm, OCC_BLOCK_PER_SM),                       \
+                         dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y),         \
+                         cached_size, __VA_ARGS__);                            \
+    } else {                                                                   \
+        LAUNCH_PT_KERNEL(scheduler_type, render_once,                          \
+                         dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),         \
+                         dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y),         \
+                         cached_size, __VA_ARGS__);                            \
+    }
+
+template <typename Scheduler>
+PathTracer<Scheduler>::PathTracer(const Scene &scene, bool _verbose)
     : TracerBase(scene), verbose(_verbose), num_objs(scene.objects.size()),
-      num_nodes(-1), num_emitter(scene.num_emitters),
-      envmap_id(scene.envmap_id) {
+      num_nodes(scene.nodes.size() >> 1), num_cache(scene.cache_nodes.size()),
+      num_emitter(scene.num_emitters), envmap_id(scene.envmap_id) {
     if (scene.bvh_available()) {
         size_t num_bvh = scene.obj_idxs.size();
         // Comment in case I forget: scene.nodes combines nodes_front and
         // nodes_back So the size of nodes is exactly twice the number of nodes
-        num_nodes = scene.nodes.size() >> 1;
-        num_cache = scene.cache_nodes.size();
         CUDA_CHECK_RETURN(cudaMalloc(&_obj_idxs, num_bvh * sizeof(int)));
         CUDA_CHECK_RETURN(cudaMalloc(&_nodes, 2 * num_nodes * sizeof(float4)));
         CUDA_CHECK_RETURN(
@@ -84,7 +97,7 @@ PathTracer::PathTracer(const Scene &scene, bool _verbose)
         obj_info[i] = scene.objects[i].export_gpu();
 }
 
-PathTracer::~PathTracer() {
+template <typename Scheduler> PathTracer<Scheduler>::~PathTracer() {
     CUDA_CHECK_RETURN(cudaFree(obj_info));
     CUDA_CHECK_RETURN(cudaFree(camera));
     CUDA_CHECK_RETURN(cudaFree(emitter_prims));
@@ -97,22 +110,21 @@ PathTracer::~PathTracer() {
         printf("[Renderer] Path Tracer Object destroyed.\n");
 }
 
-CPT_CPU std::vector<uint8_t> PathTracer::render(const MaxDepthParams &md,
-                                                int num_iter,
-                                                bool gamma_correction) {
+template <typename Scheduler>
+CPT_CPU std::vector<uint8_t>
+PathTracer<Scheduler>::render(const MaxDepthParams &md, int num_iter,
+                              bool gamma_correction) {
     printf("Rendering starts.\n");
     TicToc _timer("render_pt_kernel()", num_iter);
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
     for (int i = 0; i < num_iter; i++) {
         // for more sophisticated renderer (like path tracer), shared_memory
         // should be used
-        render_pt_kernel<false>
-            <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
-               dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-                *camera, verts, norms, uvs, obj_info, emitter_prims, bvh_leaves,
-                nodes, _cached_nodes, image, md, output_buffer, nullptr,
-                num_emitter, i * SEED_SCALER + seed_offset, num_nodes,
-                accum_cnt, num_cache, envmap_id);
+        SCHEDULER_DISPATCH(Scheduler, false, cached_size, *camera, verts, norms,
+                           uvs, obj_info, emitter_prims, bvh_leaves, nodes,
+                           _cached_nodes, image, md, output_buffer, nullptr,
+                           num_emitter, i * SEED_SCALER + seed_offset,
+                           num_nodes, accum_cnt, num_cache, envmap_id);
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
     }
@@ -120,8 +132,9 @@ CPT_CPU std::vector<uint8_t> PathTracer::render(const MaxDepthParams &md,
     return image.export_cpu(1.f / num_iter, gamma_correction);
 }
 
-CPT_CPU void PathTracer::render_online(const MaxDepthParams &md,
-                                       bool gamma_corr) {
+template <typename Scheduler>
+CPT_CPU void PathTracer<Scheduler>::render_online(const MaxDepthParams &md,
+                                                  bool gamma_corr) {
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
     size_t _num_bytes = 0,
            cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
@@ -131,27 +144,29 @@ CPT_CPU void PathTracer::render_online(const MaxDepthParams &md,
     CUDA_CHECK_RETURN(cudaGraphicsResourceGetMappedPointer(
         (void **)&output_buffer, &_num_bytes, pbo_resc));
     accum_cnt++;
-    render_pt_kernel<true>
-        <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
-           dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-            *camera, verts, norms, uvs, obj_info, emitter_prims, bvh_leaves,
-            nodes, _cached_nodes, image, md, output_buffer, nullptr,
-            num_emitter, accum_cnt * SEED_SCALER + seed_offset, num_nodes,
-            accum_cnt, num_cache, envmap_id, gamma_corr);
+    SCHEDULER_DISPATCH(Scheduler, true, cached_size, *camera, verts, norms, uvs,
+                       obj_info, emitter_prims, bvh_leaves, nodes,
+                       _cached_nodes, image, md, output_buffer, nullptr,
+                       num_emitter, accum_cnt * SEED_SCALER + seed_offset,
+                       num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr);
     CUDA_CHECK_RETURN(cudaGraphicsUnmapResources(1, &pbo_resc, 0));
 }
 
-CPT_CPU const float *PathTracer::render_raw(const MaxDepthParams &md,
-                                            bool gamma_corr) {
+template <typename Scheduler>
+CPT_CPU const float *PathTracer<Scheduler>::render_raw(const MaxDepthParams &md,
+                                                       bool gamma_corr) {
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
     accum_cnt++;
-    render_pt_kernel<true>
-        <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
-           dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-            *camera, verts, norms, uvs, obj_info, emitter_prims, bvh_leaves,
-            nodes, _cached_nodes, image, md, output_buffer, var_buffer,
-            num_emitter, accum_cnt * SEED_SCALER + seed_offset, num_nodes,
-            accum_cnt, num_cache, envmap_id, gamma_corr);
+    SCHEDULER_DISPATCH(Scheduler, true, cached_size, *camera, verts, norms, uvs,
+                       obj_info, emitter_prims, bvh_leaves, nodes,
+                       _cached_nodes, image, md, output_buffer, var_buffer,
+                       num_emitter, accum_cnt * SEED_SCALER + seed_offset,
+                       num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr);
     CUDA_CHECK_RETURN(cudaDeviceSynchronize());
     return output_buffer;
 }
+
+#undef SCHEDULER_DISPATCH
+
+template class PathTracer<SingleTileScheduler>;
+template class PathTracer<PreemptivePersistentTileScheduler>;
