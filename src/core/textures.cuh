@@ -79,7 +79,6 @@ class Textures {
     CPT_GPU_INLINE Vec3 eval_normal(const Interaction &it, int index) {
         const cudaTextureObject_t norm_tex = normals[index];
         auto R_w2l = rotation_fixed_anchor(it.shading_norm, false);
-        Vec3 local_n = R_w2l.rotate(it.shading_norm);
         auto tex_uv = it.uv_coord.xy_float();
         float4 pnorm = norm_tex == 0
                            ? make_float4(0, 0, 1, 0)
@@ -93,7 +92,6 @@ class Textures {
                                            SO3 &R_w2l) {
         R_w2l = rotation_fixed_anchor(it.shading_norm, false);
         const cudaTextureObject_t norm_tex = normals[index];
-        Vec3 local_n = R_w2l.rotate(it.shading_norm);
         auto tex_uv = it.uv_coord.xy_float();
         float4 pnorm = norm_tex == 0
                            ? make_float4(0, 0, 1, 0)
@@ -177,9 +175,9 @@ bool save_image(const std::string &filename,
 
 template <typename TexType>
 cudaTextureObject_t
-createTexture1D(const TexType *tex_src, size_t size, TexType *tex_dst,
-                cudaTextureFilterMode mode = cudaFilterModePoint,
-                bool use_normalized_coords = false) {
+create_texture1d(const TexType *tex_src, size_t size, TexType *tex_dst,
+                 cudaTextureFilterMode mode = cudaFilterModePoint,
+                 bool use_normalized_coords = false) {
     cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
     CUDA_CHECK_RETURN(cudaMemcpy(tex_dst, tex_src, size * sizeof(TexType),
                                  cudaMemcpyHostToDevice));

@@ -134,8 +134,8 @@ static bool load_composed_float2(std::string file1, std::string file2,
 }
 
 template <typename TexType>
-static cudaTextureObject_t createTexture2D(const TexType *host_data, int width,
-                                           int height, TexType **d_ptr_out) {
+static cudaTextureObject_t create_texture2d(const TexType *host_data, int width,
+                                            int height, TexType **d_ptr_out) {
     cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<TexType>();
 
     TexType *d_ptr;
@@ -200,7 +200,7 @@ Texture<TexTy>::Texture(std::string path, TextureType _ttype, std::string path2,
         std::cerr << "Texture '" << path << "' failed to load." << std::endl;
         throw std::runtime_error("Failed to load texture resources.");
     }
-    _obj = createTexture2D<TexTy>(host_data.data(), width, height, &_data);
+    _obj = create_texture2d<TexTy>(host_data.data(), width, height, &_data);
 }
 
 template <typename TexTy> void Texture<TexTy>::destroy() {

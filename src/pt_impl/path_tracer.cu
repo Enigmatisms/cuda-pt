@@ -51,9 +51,9 @@ PathTracer::PathTracer(const Scene &scene, bool _verbose)
             cudaMalloc(&_cached_nodes, num_cache * sizeof(uint4)));
         // note that BVH leaf node only stores the primitive to object mapping
         bvh_leaves =
-            createTexture1D<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs);
+            create_texture1d<int>(scene.obj_idxs.data(), num_bvh, _obj_idxs);
         nodes =
-            createTexture1D<float4>(scene.nodes.data(), 2 * num_nodes, _nodes);
+            create_texture1d<float4>(scene.nodes.data(), 2 * num_nodes, _nodes);
         CUDA_CHECK_RETURN(cudaMemcpy(_cached_nodes, scene.cache_nodes.data(),
                                      sizeof(uint4) * num_cache,
                                      cudaMemcpyHostToDevice));
