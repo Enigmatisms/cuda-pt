@@ -930,9 +930,10 @@ void parseObjectMediumRef(const tinyxml2::XMLElement *node,
 }
 
 const std::array<std::string, NumRendererType> RENDER_TYPE_STR = {
-    "MegaKernel-PT",  "Wavefront-PT",     "Megakernel-LT",
-    "Voxel-SDF-PT",   "Depth Tracer",     "BVH Cost Visualizer",
-    "MegaKernel-VPT", "Accelerator-Only", "MegaKernel-PT (Dynamic)"};
+    "MegaKernel-PT",    "Wavefront-PT",     "Megakernel-LT",
+    "Voxel-SDF-PT",     "Depth Tracer",     "BVH Cost Visualizer",
+    "MegaKernel-VPT",   "Accelerator-Only", "MegaKernel-PT (Dynamic)",
+    "MegaKernel-ReSTIR"};
 
 Scene::Scene(std::string path)
     : num_bsdfs(0), num_emitters(0), num_objects(0), num_prims(0), envmap_id(0),
@@ -992,6 +993,8 @@ Scene::Scene(std::string path)
         rdr_type = RendererType::BVHCostViz;
     else if (render_type == "accel-only" || render_type == "accel_only")
         rdr_type = RendererType::AcceleratorOnly;
+    else if (render_type == "restir")
+        rdr_type = RendererType::MegaKernelReSTIR;
     else {
         printf(
             "[Scene] Unknown renderer type: '%s', fall back to megakernel PT\n",

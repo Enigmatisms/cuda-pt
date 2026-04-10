@@ -33,6 +33,7 @@ enum RendererType : uint8_t {
     MegaKernelVPT = 6,       // megakernel volumetric path tracer
     AcceleratorOnly = 7,     // Only run accelerator building
     MegaKernelPTDynamic = 8, // megakernel path tracing with dynamic scheduling
+    MegaKernelReSTIR = 9,    // megakernel path tracing with ReSTIR DI
     NumRendererType
 };
 

@@ -29,6 +29,7 @@
 
 #include "renderer/bvh_cost.cuh"
 #include "renderer/light_tracer.cuh"
+#include "renderer/restir_pt.cuh"
 #include "renderer/volume_pt.cuh"
 #include "renderer/wf_path_tracer.cuh"
 
@@ -126,6 +127,11 @@ int main(int argc, char **argv) {
             std::make_unique<PathTracer<PreemptivePersistentTileScheduler>>(
                 scene);
         std::cout << "\tMegakernel Path Tracing (Dynamic Scheduler).\n";
+        break;
+    }
+    case RendererType::MegaKernelReSTIR: {
+        renderer = std::make_unique<ReSTIRPathTracer>(scene);
+        std::cout << "\tMegakernel Path Tracing (ReSTIR DI).\n";
         break;
     }
     default: {
