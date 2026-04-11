@@ -279,11 +279,16 @@ CPT_KERNEL void render_pt_restir_kernel(
             // ═══════════════════════════════════════════════════════
             ReSTIRReservoir reservoir = {};
 
+            int skip_id = md.flag > 0 ? 0 : emitter_id;
+            int eff_num = num_emitter - (skip_id > 0 && num_emitter > 1);
+            float emit_pdf = 1.f / float(eff_num);
+
             for (int m = 0; m < md_params.restir_m; m++) {
-                float direct_pdf = 1;
-                Emitter *emitter =
-                    sample_emitter(sampler, direct_pdf, num_emitter,
-                                   md.flag > 0 ? 0 : emitter_id);
+                float direct_pdf = emit_pdf;
+                uint32_t emit_id =
+                    (sampler.discrete1D() % uint32_t(eff_num)) + 1;
+                emit_id += emit_id >= skip_id && skip_id > 0;
+                Emitter *emitter = c_emitter[emit_id];
                 if (emitter == c_emitter[0])
                     continue;
 
@@ -305,26 +310,25 @@ CPT_KERNEL void render_pt_restir_kernel(
                 dir *= __frcp_rn(max(dist, EPSILON));
 
                 // h = direct_comp * bsdf_eval / direct_pdf
-                Vec4 bsdf_or_phase;
-                if (md.flag > 0) {
-                    float pv = medium->eval(dir, ray.d);
-                    bsdf_or_phase = Vec4(pv, 1.f);
-                } else {
-                    bsdf_or_phase = c_material[material_id]->eval(
-                        it, dir, ray.d, material_id);
-                }
-                Vec4 h =
-                    direct_comp * bsdf_or_phase.guard_div(direct_pdf, EPSILON);
-                float w = restir_luminance(h);
-
-                // Identify emitter index
-                int emitter_idx = 0;
-                for (int ei = 1; ei <= num_emitter; ei++) {
-                    if (c_emitter[ei] == emitter) {
-                        emitter_idx = ei;
-                        break;
+                // Reject candidates with near-zero PDF to avoid bias
+                // from guard_div inflating w_sum
+                Vec4 h(0);
+                float w = 0.f;
+                if (direct_pdf > EPSILON) {
+                    Vec4 bsdf_or_phase;
+                    if (md.flag > 0) {
+                        float pv = medium->eval(dir, ray.d);
+                        bsdf_or_phase = Vec4(pv, 1.f);
+                    } else {
+                        bsdf_or_phase = c_material[material_id]->eval(
+                            it, dir, ray.d, material_id);
                     }
+                    h = direct_comp * bsdf_or_phase * __frcp_rn(direct_pdf);
+                    w = restir_luminance(h);
                 }
+
+                // emit_id is the 1-based emitter index (computed above)
+                int emitter_idx = emit_id;
 
                 // Light normal for reuse reevaluation
                 // Point source detection: PointSource::sample() doesn't modify
@@ -386,8 +390,10 @@ CPT_KERNEL void render_pt_restir_kernel(
                     Vec4 h_prev =
                         restir_compute_h(prev.sample, cur_gb, media, envmap_id);
                     float w_prev = restir_luminance(h_prev);
-                    restir_merge_reservoirs(reservoir, prev, w_prev,
-                                            sampler.next1D());
+                    // Adjusted w_sum: M_prev * p_hat_at_current_point
+                    restir_merge_reservoirs(
+                        reservoir, prev, float(prev.M) * w_prev,
+                        sampler.next1D());
                 }
             }
 
@@ -434,9 +440,28 @@ CPT_KERNEL void render_pt_restir_kernel(
                     }
 
                     if (vis > 0.f) {
-                        // MIS weight: balance heuristic with BSDF sampling
-                        float p_ris =
-                            float(reservoir.M) * p_hat / reservoir.w_sum;
+                        // Effective RIS PDF in solid-angle measure:
+                        // p_ris_eff = M * p_hat * direct_pdf / w_sum
+                        // where direct_pdf is recomputed from stored q_area
+                        // and current hit point geometry.
+                        float direct_pdf = 0.f;
+                        if (reservoir.sample.emitter_type == 0) {
+                            // Area light: direct_pdf = q_area * r^2 / cos_light
+                            float dist2 = shadow_dist * shadow_dist;
+                            float cos_light =
+                                max(reservoir.sample.light_normal.dot(
+                                        -shadow_dir),
+                                    0.f);
+                            direct_pdf =
+                                reservoir.sample.q_area * dist2 /
+                                max(cos_light, EPSILON);
+                        } else if (reservoir.sample.emitter_type == 2) {
+                            // Point source: direct_pdf = q_area (unmodified)
+                            direct_pdf = reservoir.sample.q_area;
+                        }
+                        float p_ris_eff =
+                            float(reservoir.M) * p_hat * direct_pdf /
+                            reservoir.w_sum;
                         float bsdf_pdf_val = 0.f;
                         Emitter *sel_emitter =
                             c_emitter[reservoir.sample.emitter_idx];
@@ -445,15 +470,16 @@ CPT_KERNEL void render_pt_restir_kernel(
                             bsdf_pdf_val = c_material[material_id]->pdf(
                                 it, shadow_dir, ray.d, material_id);
                         }
-                        float mis_denom = p_ris + bsdf_pdf_val;
+                        float mis_denom = p_ris_eff + bsdf_pdf_val;
                         float mis_weight =
-                            (mis_denom > EPSILON) ? p_ris / mis_denom : 1.f;
+                            (mis_denom > EPSILON) ? p_ris_eff / mis_denom
+                                                  : 1.f;
 
                         // L = throughput * (w_sum/M) * vis * (h/p_hat) * mis
+                        float rcp_p_hat = __frcp_rn(p_hat);
                         radiance += throughput *
                                     (reservoir.w_sum / float(reservoir.M)) *
-                                    vis * (h.guard_div(p_hat, EPSILON)) *
-                                    mis_weight;
+                                    vis * h * (mis_weight * rcp_p_hat);
                     }
                 }
             }
@@ -514,8 +540,7 @@ CPT_KERNEL void render_pt_restir_kernel(
                                 verts, norms, uvs, emitter_prim_id) -
                 shadow_ray.o;
 
-            float emit_len_mis = shadow_ray.d.length(),
-                  shadow_length = emit_len_mis;
+            float emit_len_mis = shadow_ray.d.length();
             shadow_ray.d *= __frcp_rn(emit_len_mis);
 
             // Visibility test

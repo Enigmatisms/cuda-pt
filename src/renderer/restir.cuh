@@ -58,9 +58,9 @@ struct ReSTIRGBuffer {
     uchar4 vol_stack;  //  4B: BankStack copy
     int8_t is_volume;  //  1B
     int8_t is_valid;   //  1B
-    int8_t pad[10];    // 10B: pad to 64B for coalesced access
+    int8_t pad[10];    // 10B: pad to 64B
 };
-// Total: 64 bytes (power-of-2 for optimal memory coalescing)
+// Total: 64 bytes
 
 // ─── Device Functions ────────────────────────────────────────────────
 
@@ -117,17 +117,21 @@ CPT_GPU_INLINE Vec4 restir_compute_h(const ReSTIRSample &s,
     }
 
     // BSDF or phase function evaluation
+    // Return 0 when direct_pdf is near-zero to avoid bias from guard_div
+    if (direct_pdf < EPSILON)
+        return Vec4(0);
+
+    float rcp_pdf = __frcp_rn(direct_pdf);
     if (gb.is_volume) {
         int med_idx =
             gb.vol_stack.x > 0 ? (&gb.vol_stack.x)[gb.vol_stack.x] : 0;
         float phase_val = media[med_idx]->eval(dir, gb.ray_d);
-        return direct_comp *
-               Vec4(phase_val, 1.f).guard_div(direct_pdf, EPSILON);
+        return direct_comp * Vec4(phase_val, 1.f) * rcp_pdf;
     } else {
         Interaction it(gb.shading_norm, gb.uv_coord);
         Vec4 bsdf_val =
             c_material[gb.material_id]->eval(it, dir, gb.ray_d, gb.material_id);
-        return direct_comp * bsdf_val.guard_div(direct_pdf, EPSILON);
+        return direct_comp * bsdf_val * rcp_pdf;
     }
 }
 

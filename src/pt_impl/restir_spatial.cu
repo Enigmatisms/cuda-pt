@@ -48,28 +48,42 @@ CPT_KERNEL void restir_spatial_reuse_kernel(
     }
 
     for (int pass = 0; pass < num_spatial_passes; pass++) {
-        // Pick a random neighbor (4-connected)
-        int off = sampler.discrete1D() & 3;
-        int nx = px + (1 - (off & 1) * 2) * (1 - (off >> 1));
-        int ny = py + (1 - (off & 1) * 2) * (off >> 1);
+        // Sample 2 neighbors per pass from 8-connected neighborhood
+        for (int n = 0; n < 2; n++) {
+            int off = sampler.discrete1D() & 7;
+            constexpr int8_t dx[] = {-1, 1, 0, 0, -1, -1, 1, 1};
+            constexpr int8_t dy[] = {0, 0, -1, 1, -1, 1, -1, 1};
+            int nx = px + dx[off], ny = py + dy[off];
 
-        if (nx < 0 || nx >= img_w || ny < 0 || ny >= img_h)
-            continue;
+            if (nx < 0 || nx >= img_w || ny < 0 || ny >= img_h)
+                continue;
 
-        int n_idx = nx + ny * img_w;
-        const ReSTIRReservoir &neighbor = reservoirs[n_idx];
-        const ReSTIRGBuffer &neighbor_gb = g_buffer[n_idx];
+            int n_idx = nx + ny * img_w;
+            const ReSTIRReservoir &neighbor = reservoirs[n_idx];
+            const ReSTIRGBuffer &neighbor_gb = g_buffer[n_idx];
 
-        if (!neighbor_gb.is_valid || neighbor.M <= 0 ||
-            neighbor.sample.emitter_idx <= 0)
-            continue;
+            if (!neighbor_gb.is_valid || neighbor.M <= 0 ||
+                neighbor.sample.emitter_idx <= 0)
+                continue;
 
-        // Reevaluate neighbor's sample at current pixel's GBuffer
-        Vec4 h_at_cur = restir_compute_h(neighbor.sample, gb, media, envmap_id);
-        float w_at_cur = restir_luminance(h_at_cur);
+            // Similarity test: avoid reusing across geometric discontinuities
+            if (gb.material_id != neighbor_gb.material_id)
+                continue;
+            if (gb.shading_norm.dot(neighbor_gb.shading_norm) < 0.9f)
+                continue;
+            if (fabsf(gb.hit_dist - neighbor_gb.hit_dist) >
+                0.05f * max(gb.hit_dist, neighbor_gb.hit_dist))
+                continue;
 
-        restir_merge_reservoirs(reservoir, neighbor, w_at_cur,
-                                sampler.next1D());
+            // Reevaluate neighbor's sample at current pixel's GBuffer
+            Vec4 h_at_cur =
+                restir_compute_h(neighbor.sample, gb, media, envmap_id);
+            float w_at_cur = restir_luminance(h_at_cur);
+
+            restir_merge_reservoirs(reservoir, neighbor,
+                                    float(neighbor.M) * w_at_cur,
+                                    sampler.next1D());
+        }
     }
 
     reservoirs[pix_idx] = reservoir;
