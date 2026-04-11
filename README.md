@@ -35,7 +35,7 @@ Dependent on GLEW for the interactive viewer (`./build/xx/cpt`). If GLEW is not 
 
 ```shell
 mkdir build && cd build
-cmake --DCMAKE_BUILD_TYPE=release ..
+cmake -DCMAKE_BUILD_TYPE=release ..
 cmake --build . --config Release --parallel 8 -j 8
 ```
 

@@ -156,6 +156,13 @@ class Vec4 {
     }
 
     CPT_CPU_GPU_INLINE
+    Vec4 guard_div(float divisor, float eps) const noexcept {
+        const float guard_inv = 1.f / fmaxf(divisor, eps);
+        return Vec4(_data.x * guard_inv, _data.y * guard_inv,
+                    _data.z * guard_inv, _data.w * guard_inv);
+    }
+
+    CPT_CPU_GPU_INLINE
     Vec4 &operator*=(float b) noexcept {
         _data.x *= b;
         _data.y *= b;

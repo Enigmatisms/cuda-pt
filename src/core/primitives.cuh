@@ -106,9 +106,10 @@ class Primitive {
 #endif
     }
 
+    CONDITION_TEMPLATE(VecType, Vec3)
     CPT_GPU_INLINE static Interaction
     get_interaction(const PrecomputedArray &verts, const NormalArray &norms,
-                    const ConstBuffer<PackedHalf2> &uvs, Vec3 &&hit_pos,
+                    const ConstBuffer<PackedHalf2> &uvs, VecType &&hit_pos,
                     float u, float v, int index, bool is_mesh = true) {
 #ifdef TRIANGLE_ONLY
         return Interaction(norms.eval(index, u, v), uvs[index].lerp(u, v));
@@ -116,8 +117,10 @@ class Primitive {
         if (is_mesh) {
             return Interaction(norms.eval(index, u, v), uvs[index].lerp(u, v));
         } else {
-            return Interaction((hit_pos - verts.x_clipped(index)).normalized(),
-                               Vec2Half(0, 0));
+            return Interaction(
+                (std::forward<VecType>(hit_pos) - verts.x_clipped(index))
+                    .normalized(),
+                Vec2Half(0, 0));
         }
 #endif
     }

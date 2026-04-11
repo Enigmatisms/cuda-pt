@@ -4,8 +4,8 @@
 <!-- Only Steady state rendering are supported -->
 <!-- Only RGB or rgb spectrums are supported -->
 <scene version="1.2">
-	<renderer type="pt">
-		<integer name="sample_count" value="1024"/>
+	<renderer type="restir">
+		<integer name="sample_count" value="8"/>
         <integer name="max_bounce"   value="8"/>
         <integer name="max_diffuse"  value="8"/>
         <integer name="max_specular" value="8"/>

@@ -121,12 +121,13 @@ CPT_GPU_INLINE Vec4 restir_compute_h(const ReSTIRSample &s,
         int med_idx =
             gb.vol_stack.x > 0 ? (&gb.vol_stack.x)[gb.vol_stack.x] : 0;
         float phase_val = media[med_idx]->eval(dir, gb.ray_d);
-        return direct_comp * Vec4(phase_val, 1.f) / max(direct_pdf, EPSILON);
+        return direct_comp *
+               Vec4(phase_val, 1.f).guard_div(direct_pdf, EPSILON);
     } else {
         Interaction it(gb.shading_norm, gb.uv_coord);
         Vec4 bsdf_val =
             c_material[gb.material_id]->eval(it, dir, gb.ray_d, gb.material_id);
-        return direct_comp * bsdf_val / max(direct_pdf, EPSILON);
+        return direct_comp * bsdf_val.guard_div(direct_pdf, EPSILON);
     }
 }
 

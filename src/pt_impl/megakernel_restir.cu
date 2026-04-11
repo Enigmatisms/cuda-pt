@@ -308,7 +308,8 @@ CPT_KERNEL void render_pt_restir_kernel(
                     bsdf_or_phase = c_material[material_id]->eval(
                         it, dir, ray.d, material_id);
                 }
-                Vec4 h = direct_comp * bsdf_or_phase / max(direct_pdf, EPSILON);
+                Vec4 h =
+                    direct_comp * bsdf_or_phase.guard_div(direct_pdf, EPSILON);
                 float w = restir_luminance(h);
 
                 // Identify emitter index
@@ -456,7 +457,7 @@ CPT_KERNEL void render_pt_restir_kernel(
                         // L = throughput * (w_sum/M) * vis * (h/p_hat) * mis
                         radiance += throughput *
                                     (reservoir.w_sum / float(reservoir.M)) *
-                                    vis * (h / max(p_hat, EPSILON)) *
+                                    vis * (h.guard_div(p_hat, EPSILON)) *
                                     mis_weight;
                     }
                 }
