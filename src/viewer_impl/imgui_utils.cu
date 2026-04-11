@@ -693,6 +693,11 @@ void render_settings_interface(
                     params.renderer_update |= draw_coupled_slider_input(
                         "max_time", "Max Time", md_params.max_time, 0, 20);
                 }
+                if (rdr_type == RendererType::MegaKernelReSTIR) {
+                    params.renderer_update |=
+                        draw_integer_input("restir_m", "RIS Candidates",
+                                           md_params.restir_m, 1, 32);
+                }
                 ImGui::Checkbox("Output PNG", &params.output_png);
                 if (!params.output_png) {
                     ImGui::PushItemWidth(120.0f);

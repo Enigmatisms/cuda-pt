@@ -170,7 +170,7 @@ CPT_KERNEL void render_pt_restir_kernel(
     ConstF4Ptr cached_nodes, DeviceImage image, const MaxDepthParams md_params,
     float *__restrict__ output_buffer, float *__restrict__ var_buffer,
     int num_emitter, int seed_offset, int cam_vol_idx, int node_num,
-    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr, int restir_m,
+    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
     ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse) {
@@ -193,7 +193,12 @@ CPT_KERNEL void render_pt_restir_kernel(
 
     Sampler sampler(px + py * image.w(), seed_offset);
     int min_index = -1, diff_b = 0, spec_b = 0, trans_b = 0, volm_b = 0;
+    int pix_idx = px + py * image.w();
     Ray ray = dev_cam.generate_ray(px, py, sampler);
+
+    // Invalidate GBuffer entry — will be set valid if ReSTIR applies
+    if (g_buffer)
+        g_buffer[pix_idx].is_valid = 0;
 
     Vec4 throughput(1, 1, 1), radiance(0, 0, 0);
     float emission_weight = 1.f;
@@ -274,7 +279,7 @@ CPT_KERNEL void render_pt_restir_kernel(
             // ═══════════════════════════════════════════════════════
             ReSTIRReservoir reservoir = {};
 
-            for (int m = 0; m < restir_m; m++) {
+            for (int m = 0; m < md_params.restir_m; m++) {
                 float direct_pdf = 1;
                 Emitter *emitter =
                     sample_emitter(sampler, direct_pdf, num_emitter,
@@ -359,24 +364,25 @@ CPT_KERNEL void render_pt_restir_kernel(
             }
 
             // ═══════════════════════════════════════════════════════
+            // Build GBuffer (shared by temporal reuse, resolve, storage)
+            // ═══════════════════════════════════════════════════════
+            ReSTIRGBuffer cur_gb;
+            cur_gb.hit_pos = hit_pos;
+            cur_gb.shading_norm = md.flag > 0 ? Vec3(0, 0, 1) : it.shading_norm;
+            cur_gb.ray_d = ray.d;
+            cur_gb.uv_coord = md.flag > 0 ? Vec2Half(0.f) : it.uv_coord;
+            cur_gb.material_id = material_id;
+            cur_gb.hit_dist = md.flag > 0 ? md.dist : ray.hit_t;
+            cur_gb.vol_stack = nested_vol_arr[tid].data;
+            cur_gb.is_volume = (int8_t)(md.flag > 0);
+            cur_gb.is_valid = 1;
+
+            // ═══════════════════════════════════════════════════════
             // ReSTIR DI: Temporal Reuse
             // ═══════════════════════════════════════════════════════
             if (temporal_reuse && prev_reservoirs) {
-                int pix_idx = px + py * image.w();
                 ReSTIRReservoir prev = prev_reservoirs[pix_idx];
                 if (prev.M > 0 && prev.sample.emitter_idx > 0) {
-                    ReSTIRGBuffer cur_gb;
-                    cur_gb.hit_pos = hit_pos;
-                    cur_gb.shading_norm =
-                        md.flag > 0 ? Vec3(0, 0, 1) : it.shading_norm;
-                    cur_gb.ray_d = ray.d;
-                    cur_gb.uv_coord = md.flag > 0 ? Vec2Half(0.f) : it.uv_coord;
-                    cur_gb.material_id = material_id;
-                    cur_gb.hit_dist = md.flag > 0 ? md.dist : ray.hit_t;
-                    cur_gb.vol_stack = nested_vol_arr[tid].data;
-                    cur_gb.is_volume = (int8_t)(md.flag > 0);
-                    cur_gb.is_valid = 1;
-
                     Vec4 h_prev =
                         restir_compute_h(prev.sample, cur_gb, media, envmap_id);
                     float w_prev = restir_luminance(h_prev);
@@ -388,17 +394,6 @@ CPT_KERNEL void render_pt_restir_kernel(
             // ═══════════════════════════════════════════════════════
             // ReSTIR DI: Resolve — trace single shadow ray
             // ═══════════════════════════════════════════════════════
-            // Build GBuffer (always, for future temporal reuse)
-            ReSTIRGBuffer cur_gb;
-            cur_gb.hit_pos = hit_pos;
-            cur_gb.shading_norm = md.flag > 0 ? Vec3(0, 0, 1) : it.shading_norm;
-            cur_gb.ray_d = ray.d;
-            cur_gb.uv_coord = md.flag > 0 ? Vec2Half(0.f) : it.uv_coord;
-            cur_gb.material_id = material_id;
-            cur_gb.hit_dist = md.flag > 0 ? md.dist : ray.hit_t;
-            cur_gb.vol_stack = nested_vol_arr[tid].data;
-            cur_gb.is_volume = (int8_t)(md.flag > 0);
-            cur_gb.is_valid = 1;
 
             if (reservoir.w_sum > 0.f && reservoir.sample.emitter_idx > 0) {
 
@@ -464,7 +459,6 @@ CPT_KERNEL void render_pt_restir_kernel(
             }
 
             // Store GBuffer and reservoir for future reuse (always)
-            int pix_idx = px + py * image.w();
             if (g_buffer)
                 g_buffer[pix_idx] = cur_gb;
             if (curr_reservoirs)
@@ -631,7 +625,7 @@ template CPT_KERNEL void render_pt_restir_kernel<true>(
     ConstF4Ptr cached_nodes, DeviceImage image, const MaxDepthParams md_params,
     float *__restrict__ output_buffer, float *__restrict__ var_buffer,
     int num_emitter, int seed_offset, int cam_vol_idx, int node_num,
-    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr, int restir_m,
+    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
     ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse);
@@ -644,7 +638,7 @@ template CPT_KERNEL void render_pt_restir_kernel<false>(
     ConstF4Ptr cached_nodes, DeviceImage image, const MaxDepthParams md_params,
     float *__restrict__ output_buffer, float *__restrict__ var_buffer,
     int num_emitter, int seed_offset, int cam_vol_idx, int node_num,
-    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr, int restir_m,
+    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
     ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse);

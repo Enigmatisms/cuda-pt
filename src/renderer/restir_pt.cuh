@@ -29,7 +29,6 @@ class ReSTIRPathTracer : public PathTracer<SingleTileScheduler> {
   protected:
     int cam_vol_id;
     Medium **media;
-    int restir_m;         // RIS candidates (default 4)
     bool enable_temporal; // temporal reuse flag
 
     ReSTIRReservoir *curr_reservoirs;
@@ -37,7 +36,7 @@ class ReSTIRPathTracer : public PathTracer<SingleTileScheduler> {
     ReSTIRGBuffer *g_buffer;
 
   public:
-    ReSTIRPathTracer(const Scene &scene, int M = 4, bool temporal = true);
+    ReSTIRPathTracer(const Scene &scene, bool temporal = true);
 
     ~ReSTIRPathTracer();
 

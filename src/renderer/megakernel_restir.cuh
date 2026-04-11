@@ -40,12 +40,11 @@
  *
  * @param media          Array of Medium pointers (volumetric support)
  * @param cam_vol_idx    Camera volume index (0 if camera not in a volume)
- * @param restir_m       Number of RIS candidates per pixel
  * @param prev_reservoirs Previous frame reservoirs for temporal reuse
  * @param curr_reservoirs Current frame reservoirs (output)
  * @param g_buffer       G-buffer for ReSTIR reuse (output)
  * @param temporal_reuse Whether to enable temporal reuse
- * (other params same as render_pt_kernel)
+ * (other params same as render_pt_kernel, restir_m via md_params)
  */
 template <bool render_once>
 CPT_KERNEL void render_pt_restir_kernel(
@@ -56,7 +55,7 @@ CPT_KERNEL void render_pt_restir_kernel(
     ConstF4Ptr cached_nodes, DeviceImage image, const MaxDepthParams md_params,
     float *__restrict__ output_buffer, float *__restrict__ var_buffer,
     int num_emitter, int seed_offset, int cam_vol_idx, int node_num,
-    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr, int restir_m,
+    int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
     ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse);

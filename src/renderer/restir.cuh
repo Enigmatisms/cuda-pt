@@ -58,9 +58,9 @@ struct ReSTIRGBuffer {
     uchar4 vol_stack;  //  4B: BankStack copy
     int8_t is_volume;  //  1B
     int8_t is_valid;   //  1B
-    int8_t pad[2];     //  2B
+    int8_t pad[10];    // 10B: pad to 64B for coalesced access
 };
-// Total: 56 bytes
+// Total: 64 bytes (power-of-2 for optimal memory coalescing)
 
 // ─── Device Functions ────────────────────────────────────────────────
 

@@ -23,9 +23,16 @@
 #include "renderer/megakernel_restir.cuh"
 #include "renderer/restir_pt.cuh"
 
+// Forward declaration of spatial reuse kernel (defined in restir_spatial.cu)
+CPT_KERNEL void restir_spatial_reuse_kernel(
+    MediumPtrArray media, ReSTIRReservoir *__restrict__ reservoirs,
+    const ReSTIRGBuffer *__restrict__ g_buffer, int img_w, int img_h,
+    int envmap_id, int num_spatial_passes, int seed_offset);
+
 static constexpr int SEED_SCALER = 11467;
 static constexpr int SHFL_THREAD_X = 5;
 static constexpr int SHFL_THREAD_Y = 2;
+static constexpr int SPATIAL_PASSES = 1;
 
 void ReSTIRPathTracer::allocate_restir_buffers() {
     size_t buf_size = w * h;
@@ -51,8 +58,8 @@ void ReSTIRPathTracer::swap_reservoirs() {
         cudaMemset(curr_reservoirs, 0, w * h * sizeof(ReSTIRReservoir)));
 }
 
-ReSTIRPathTracer::ReSTIRPathTracer(const Scene &scene, int M, bool temporal)
-    : PathTracer(scene, false), cam_vol_id(scene.cam_vol_id), restir_m(M),
+ReSTIRPathTracer::ReSTIRPathTracer(const Scene &scene, bool temporal)
+    : PathTracer(scene, false), cam_vol_id(scene.cam_vol_id),
       enable_temporal(temporal), curr_reservoirs(nullptr),
       prev_reservoirs(nullptr), g_buffer(nullptr) {
     media = scene.media;
@@ -69,19 +76,27 @@ ReSTIRPathTracer::~ReSTIRPathTracer() {
 CPT_CPU std::vector<uint8_t> ReSTIRPathTracer::render(const MaxDepthParams &md,
                                                       int num_iter,
                                                       bool gamma_correction) {
-    printf("ReSTIR Rendering starts (M=%d, temporal=%s).\n", restir_m,
+    printf("ReSTIR Rendering starts (M=%d, temporal=%s).\n", md.restir_m,
            enable_temporal ? "on" : "off");
     TicToc _timer("render_pt_restir_kernel()", num_iter);
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
+    dim3 grid(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y);
+    dim3 block(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y);
+    dim3 sp_grid((w + 15) >> 4, (h + 15) >> 4);
+    dim3 sp_block(16, 16);
+
     for (int i = 0; i < num_iter; i++) {
-        render_pt_restir_kernel<false>
-            <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
-               dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-                *camera, verts, norms, uvs, media, obj_info, emitter_prims,
-                bvh_leaves, nodes, _cached_nodes, image, md, output_buffer,
-                nullptr, num_emitter, i * SEED_SCALER + seed_offset, cam_vol_id,
-                num_nodes, accum_cnt, num_cache, envmap_id, false, restir_m,
-                nullptr, nullptr, nullptr, false);
+        render_pt_restir_kernel<false><<<grid, block, cached_size>>>(
+            *camera, verts, norms, uvs, media, obj_info, emitter_prims,
+            bvh_leaves, nodes, _cached_nodes, image, md, output_buffer, nullptr,
+            num_emitter, i * SEED_SCALER + seed_offset, cam_vol_id, num_nodes,
+            accum_cnt, num_cache, envmap_id, false, nullptr, curr_reservoirs,
+            g_buffer, false);
+
+        restir_spatial_reuse_kernel<<<sp_grid, sp_block>>>(
+            media, curr_reservoirs, g_buffer, w, h, envmap_id, SPATIAL_PASSES,
+            i * SEED_SCALER + seed_offset + 1);
+
         CUDA_CHECK_RETURN(cudaDeviceSynchronize());
         printProgress(i, num_iter);
     }
@@ -98,14 +113,21 @@ CPT_CPU void ReSTIRPathTracer::render_online(const MaxDepthParams &md,
         (void **)&output_buffer, &_num_bytes, pbo_resc));
     accum_cnt++;
 
-    render_pt_restir_kernel<true>
-        <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
-           dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-            *camera, verts, norms, uvs, media, obj_info, emitter_prims,
-            bvh_leaves, nodes, _cached_nodes, image, md, output_buffer, nullptr,
-            num_emitter, accum_cnt * SEED_SCALER + seed_offset, cam_vol_id,
-            num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr, restir_m,
-            prev_reservoirs, curr_reservoirs, g_buffer, enable_temporal);
+    dim3 grid(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y);
+    dim3 block(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y);
+    dim3 sp_grid((w + 15) >> 4, (h + 15) >> 4);
+    dim3 sp_block(16, 16);
+
+    render_pt_restir_kernel<true><<<grid, block, cached_size>>>(
+        *camera, verts, norms, uvs, media, obj_info, emitter_prims, bvh_leaves,
+        nodes, _cached_nodes, image, md, output_buffer, nullptr, num_emitter,
+        accum_cnt * SEED_SCALER + seed_offset, cam_vol_id, num_nodes, accum_cnt,
+        num_cache, envmap_id, gamma_corr, prev_reservoirs, curr_reservoirs,
+        g_buffer, enable_temporal);
+
+    restir_spatial_reuse_kernel<<<sp_grid, sp_block>>>(
+        media, curr_reservoirs, g_buffer, w, h, envmap_id, SPATIAL_PASSES,
+        accum_cnt * SEED_SCALER + seed_offset + 1);
 
     if (enable_temporal) {
         swap_reservoirs();
@@ -118,15 +140,21 @@ CPT_CPU const float *ReSTIRPathTracer::render_raw(const MaxDepthParams &md,
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
     accum_cnt++;
 
-    render_pt_restir_kernel<true>
-        <<<dim3(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y),
-           dim3(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y), cached_size>>>(
-            *camera, verts, norms, uvs, media, obj_info, emitter_prims,
-            bvh_leaves, nodes, _cached_nodes, image, md, output_buffer,
-            var_buffer, num_emitter, accum_cnt * SEED_SCALER + seed_offset,
-            cam_vol_id, num_nodes, accum_cnt, num_cache, envmap_id, gamma_corr,
-            restir_m, prev_reservoirs, curr_reservoirs, g_buffer,
-            enable_temporal);
+    dim3 grid(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y);
+    dim3 block(1 << SHFL_THREAD_X, 1 << SHFL_THREAD_Y);
+    dim3 sp_grid((w + 15) >> 4, (h + 15) >> 4);
+    dim3 sp_block(16, 16);
+
+    render_pt_restir_kernel<true><<<grid, block, cached_size>>>(
+        *camera, verts, norms, uvs, media, obj_info, emitter_prims, bvh_leaves,
+        nodes, _cached_nodes, image, md, output_buffer, var_buffer, num_emitter,
+        accum_cnt * SEED_SCALER + seed_offset, cam_vol_id, num_nodes, accum_cnt,
+        num_cache, envmap_id, gamma_corr, prev_reservoirs, curr_reservoirs,
+        g_buffer, enable_temporal);
+
+    restir_spatial_reuse_kernel<<<sp_grid, sp_block>>>(
+        media, curr_reservoirs, g_buffer, w, h, envmap_id, SPATIAL_PASSES,
+        accum_cnt * SEED_SCALER + seed_offset + 1);
 
     if (enable_temporal) {
         swap_reservoirs();
