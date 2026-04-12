@@ -318,25 +318,14 @@ bool SpatialSplitter<N>::update_triangle(
             _bounds[e_idx].extend(ep);
         } else {
             dir *= 1.f / dim_v;
-            Vec3 pt = sp;
+            float d2bin_start =
+                s_pos + interval * static_cast<float>(s_idx) - sp[axis];
+            Vec3 pt = sp.advance(dir, d2bin_start);
             for (int id = s_idx; id <= e_idx; id++) {
                 AABB &aabb = _bounds[id];
-                if (id == s_idx) {
-                    aabb.extend(sp);
-                } else {
-                    float d = s_pos + interval * static_cast<float>(id) -
-                              pt[axis];
-                    pt = pt.advance(dir, d);
-                    aabb.extend(bound.clamp(pt));
-                }
-                if (id == e_idx) {
-                    aabb.extend(ep);
-                } else {
-                    float d = s_pos + interval * static_cast<float>(id + 1) -
-                              pt[axis];
-                    pt = pt.advance(dir, d);
-                    aabb.extend(bound.clamp(pt));
-                }
+                aabb.extend(bound.clamp(s_idx == id ? sp : pt));
+                pt = pt.advance(dir, interval);
+                aabb.extend(bound.clamp(e_idx == id ? ep : pt));
             }
         }
         sp = std::move(old_ep);
@@ -619,17 +608,13 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
         // Step 2: binning the space
         std::array<AxisBins, num_bins> idx_bins;
         for (int bvh_id : cur_node->prims) {
-            // After spatial splits, bvh_infos[bvh_id].centroid may lie
-            // outside the current node (it is the original full-triangle
-            // centroid).  Use the centroid of the primitive AABB clipped
-            // to the node bound instead — correct for fragments, identical
-            // to the original centroid for non-fragment primitives.
-            const AABB &pb = bvh_infos[bvh_id].bound;
-            float ctr = 0.5f * (
-                fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
-                fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
+            // some of the primitives might just have their centroids outside of
+            // all the bins (as a result from spatial split followed by an
+            // object split)
             int index = std::clamp(
-                static_cast<int>((ctr - min_range) / interval),
+                static_cast<int>(
+                    (bvh_infos[bvh_id].centroid[max_axis] - min_range) /
+                    interval),
                 0, num_bins - 1);
             idx_bins[index].push(bvh_infos[bvh_id]);
         }
@@ -710,26 +695,8 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
                     std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                         lchild_idxs, rchild_idxs, sbvh_seg_idx);
                 }
-                // Ensure child AABBs cover each primitive's full AABB
-                // within the parent region.  Binning fragment AABBs can be
-                // slightly too tight due to fp error in edge-bin intersection
-                // and bound.clamp(), causing the ray tracer to miss triangles.
-                // Using bvh_infos ^= cur_node->bound guarantees robustness;
-                // the spatial split benefit is preserved at the SAH evaluation
-                // level (split decisions are already made before this point).
-                for (int prim_id : lchild_idxs) {
-                    AABB temp = bvh_infos[prim_id].bound;
-                    temp ^= cur_node->bound;
-                    if (temp.is_valid())
-                        fwd_bound += temp;
-                }
-                for (int prim_id : rchild_idxs) {
-                    AABB temp = bvh_infos[prim_id].bound;
-                    temp ^= cur_node->bound;
-                    if (temp.is_valid())
-                        bwd_bound += temp;
-                }
-
+                fwd_bound.grow(1e-5f);
+                bwd_bound.grow(1e-5f);
                 spatial_split_applied = true;
             }
         }
@@ -745,11 +712,7 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
             float pivot = min_range + interval * float(seg_bin_idx + 1);
             for (int bvh_id : cur_node->prims) {
                 const BVHInfo &bvh = bvh_infos[bvh_id];
-                const AABB &pb = bvh.bound;
-                float ctr = 0.5f * (
-                    fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
-                    fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
-                if (ctr < pivot) {
+                if (bvh.centroid[max_axis] < pivot) {
                     lchild_idxs.push_back(bvh_id);
                 } else {
                     rchild_idxs.push_back(bvh_id);
@@ -761,11 +724,8 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
         std::vector<std::pair<float, int>> valued_indices;
         valued_indices.reserve(cur_node->size());
         for (int bvh_id : cur_node->prims) {
-            const AABB &pb = bvh_infos[bvh_id].bound;
-            float ctr = 0.5f * (
-                fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
-                fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
-            valued_indices.emplace_back(ctr, bvh_id);
+            valued_indices.emplace_back(bvh_infos[bvh_id].centroid[max_axis],
+                                        bvh_id);
         }
 
         // Step 5: reordering the BVH info in the vector to make the segment
@@ -800,15 +760,6 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
     if (!lchild_idxs.empty() && !rchild_idxs.empty() && fwd_bound.is_valid() &&
         bwd_bound.is_valid()) {
         // in no case should the child node bound exceeds the father bound
-        // Ensure all node AABBs are non-degenerate: flat primitives (e.g.
-        // floor at y=0) produce degenerate AABBs that fail the GPU slab
-        // test (tmax == t_near when mini == maxi).  The ^=
-        // clip at each level strips padding from the parent, so we must
-        // restore it here at every split level.  1e-4 is a normal float16
-        // value (above 6.1e-5 subnormal threshold), guaranteeing survival
-        // through CompactNode quantization.
-        fwd_bound.grow(1e-4f);
-        bwd_bound.grow(1e-4f);
         cur_node->release(); // release mem for non-leaf nodes
         cur_node->lchild =
             new SBVHNode(std::move(fwd_bound), std::move(lchild_idxs));
