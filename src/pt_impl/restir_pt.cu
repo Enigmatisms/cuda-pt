@@ -35,6 +35,16 @@ static constexpr int SHFL_THREAD_X = 5;
 static constexpr int SHFL_THREAD_Y = 2;
 static constexpr int SPATIAL_PASSES = 1;
 
+// Ensure sufficient per-thread stack for the ReSTIR-GI RIS loop,
+// which has a deep call chain (sample_dir → ray_intersect → NEE →
+// emitter->sample()) that exceeds the default 1024-byte limit.
+static void ensure_restir_stack() {
+    size_t cur = 0;
+    cudaDeviceGetLimit(&cur, cudaLimitStackSize);
+    if (cur < 2048)
+        cudaDeviceSetLimit(cudaLimitStackSize, 2048);
+}
+
 void ReSTIRPathTracer::allocate_restir_buffers() {
     size_t buf_size = w * h;
     CUDA_CHECK_RETURN(
@@ -96,6 +106,7 @@ CPT_CPU std::vector<uint8_t> ReSTIRPathTracer::render(const MaxDepthParams &md,
                                                       bool gamma_correction) {
     printf("ReSTIR Rendering starts (M=%d, depth=%d, temporal=%s).\n",
            md.restir_m, md.restir_depth, enable_temporal ? "on" : "off");
+    ensure_restir_stack();
     TicToc _timer("render_pt_restir_kernel()", num_iter);
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
     dim3 grid(w >> SHFL_THREAD_X, h >> SHFL_THREAD_Y);
@@ -127,6 +138,7 @@ CPT_CPU std::vector<uint8_t> ReSTIRPathTracer::render(const MaxDepthParams &md,
 
 CPT_CPU void ReSTIRPathTracer::render_online(const MaxDepthParams &md,
                                              bool gamma_corr) {
+    ensure_restir_stack();
     CUDA_CHECK_RETURN(cudaGraphicsMapResources(1, &pbo_resc, 0));
     size_t _num_bytes = 0,
            cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
@@ -161,6 +173,7 @@ CPT_CPU void ReSTIRPathTracer::render_online(const MaxDepthParams &md,
 
 CPT_CPU const float *ReSTIRPathTracer::render_raw(const MaxDepthParams &md,
                                                   bool gamma_corr) {
+    ensure_restir_stack();
     size_t cached_size = std::max(num_cache * sizeof(uint4), sizeof(uint4));
     accum_cnt++;
 

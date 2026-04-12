@@ -31,8 +31,6 @@
 static constexpr int RR_BOUNCE = 2;
 static constexpr float RR_THRESHOLD = 0.1;
 
-// ─── Volumetric helpers (from megakernel_vpt.cu) ────────────────────
-
 CPT_GPU_INLINE int extract_medium_info(int obj_idx, bool &alpha_mask) {
     alpha_mask = (obj_idx & 0x40000000) == 0x40000000;
     return (obj_idx >> 20) & 0x000000ff;
