@@ -324,8 +324,8 @@ bool SpatialSplitter<N>::update_triangle(
                 if (id == s_idx) {
                     aabb.extend(sp);
                 } else {
-                    float d = s_pos + interval * static_cast<float>(id) -
-                              pt[axis];
+                    float d =
+                        s_pos + interval * static_cast<float>(id) - pt[axis];
                     pt = pt.advance(dir, d);
                     aabb.extend(bound.clamp(pt));
                 }
@@ -625,12 +625,13 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
             // to the node bound instead — correct for fragments, identical
             // to the original centroid for non-fragment primitives.
             const AABB &pb = bvh_infos[bvh_id].bound;
-            float ctr = 0.5f * (
-                fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
-                fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
-            int index = std::clamp(
-                static_cast<int>((ctr - min_range) / interval),
-                0, num_bins - 1);
+            float ctr =
+                0.5f *
+                (fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
+                 fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
+            int index =
+                std::clamp(static_cast<int>((ctr - min_range) / interval), 0,
+                           num_bins - 1);
             idx_bins[index].push(bvh_infos[bvh_id]);
         }
         for (int i = 0; i < num_bins; i++) {
@@ -710,26 +711,6 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
                     std::tie(fwd_bound, bwd_bound) = ssp.apply_spatial_split(
                         lchild_idxs, rchild_idxs, sbvh_seg_idx);
                 }
-                // Ensure child AABBs cover each primitive's full AABB
-                // within the parent region.  Binning fragment AABBs can be
-                // slightly too tight due to fp error in edge-bin intersection
-                // and bound.clamp(), causing the ray tracer to miss triangles.
-                // Using bvh_infos ^= cur_node->bound guarantees robustness;
-                // the spatial split benefit is preserved at the SAH evaluation
-                // level (split decisions are already made before this point).
-                for (int prim_id : lchild_idxs) {
-                    AABB temp = bvh_infos[prim_id].bound;
-                    temp ^= cur_node->bound;
-                    if (temp.is_valid())
-                        fwd_bound += temp;
-                }
-                for (int prim_id : rchild_idxs) {
-                    AABB temp = bvh_infos[prim_id].bound;
-                    temp ^= cur_node->bound;
-                    if (temp.is_valid())
-                        bwd_bound += temp;
-                }
-
                 spatial_split_applied = true;
             }
         }
@@ -746,9 +727,10 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
             for (int bvh_id : cur_node->prims) {
                 const BVHInfo &bvh = bvh_infos[bvh_id];
                 const AABB &pb = bvh.bound;
-                float ctr = 0.5f * (
-                    fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
-                    fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
+                float ctr =
+                    0.5f *
+                    (fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
+                     fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
                 if (ctr < pivot) {
                     lchild_idxs.push_back(bvh_id);
                 } else {
@@ -762,9 +744,10 @@ void node_sbvh_SAH(const std::vector<Vec3> &points1,
         valued_indices.reserve(cur_node->size());
         for (int bvh_id : cur_node->prims) {
             const AABB &pb = bvh_infos[bvh_id].bound;
-            float ctr = 0.5f * (
-                fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
-                fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
+            float ctr =
+                0.5f *
+                (fmaxf(pb.mini[max_axis], cur_node->bound.mini[max_axis]) +
+                 fminf(pb.maxi[max_axis], cur_node->bound.maxi[max_axis]));
             valued_indices.emplace_back(ctr, bvh_id);
         }
 
@@ -964,6 +947,54 @@ static int recursive_sbvh_SAH(
     return node_num;
 }
 
+/**
+ * @brief Post-construction AABB expansion for ray-tracing robustness.
+ *
+ * During SBVH construction, child AABBs come from per-bin fragment bounds
+ * which are clipped by ^ = cur_node->bound at each level.  This progressive
+ * clipping can strip the grow(1e-4f) padding, making bounds too tight for
+ * the ray tracer (missing triangles).  The in-construction expansion
+ * (bvh_infos ^= cur_node->bound) fixes this but creates a SAH feedback
+ * loop → hang on high-poly scenes.
+ *
+ * By expanding AFTER construction, we break the feedback loop: the SAH
+ * sees tight bounds (correct split decisions, no hang), while the final
+ * BVH has expanded bounds (robust ray tracing, no missing triangles).
+ *
+ * Leaf nodes use the full primitive AABBs (bvh_infos[prim_id].bound)
+ * without clipping — this is always conservative and correct.  Internal
+ * nodes are the union of their expanded children.
+ */
+static void expand_sbvh_bounds(SBVHNode *node,
+                               const std::vector<BVHInfo> &bvh_infos) {
+    if (!node->non_leaf()) {
+        // Leaf: expand to union of full primitive AABBs
+        AABB expanded;
+        expanded.clear();
+        for (int prim_id : node->prims) {
+            expanded += bvh_infos[prim_id].bound;
+        }
+        if (!expanded.is_valid())
+            return;
+        int base_val = node->bound.base();
+        int cnt_val = node->bound.prim_cnt();
+        node->bound = expanded;
+        node->bound.base() = base_val;
+        node->bound.prim_cnt() = cnt_val;
+        node->bound.grow(1e-4f);
+    } else {
+        expand_sbvh_bounds(node->lchild, bvh_infos);
+        expand_sbvh_bounds(node->rchild, bvh_infos);
+        // Internal: union of expanded children
+        int base_val = node->bound.base();
+        int cnt_val = node->bound.prim_cnt();
+        node->bound = node->lchild->bound + node->rchild->bound;
+        node->bound.base() = base_val;
+        node->bound.prim_cnt() = cnt_val;
+        node->bound.grow(1e-4f);
+    }
+}
+
 static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
                                  const std::vector<Vec3> &points2,
                                  const std::vector<Vec3> &points3,
@@ -984,6 +1015,12 @@ static SBVHNode *sbvh_root_start(const std::vector<Vec3> &points1,
     node_num = recursive_sbvh_SAH(
         points1, points2, points3, bvh_infos, flattened_idxs, root_node, 0,
         root_node->bound.area(), max_prim_node, ref_unsplit);
+
+    // Post-construction: expand AABBs for ray-tracing robustness.
+    // SAH used tight bounds during construction (no feedback loop → no hang).
+    // Now expand to full primitive AABBs so the ray tracer can't miss
+    // triangles.
+    expand_sbvh_bounds(root_node, bvh_infos);
 
     return root_node;
 }
