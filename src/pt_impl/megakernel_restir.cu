@@ -289,7 +289,7 @@ CPT_KERNEL void render_pt_restir_kernel(
                     (sampler.discrete1D() % uint32_t(eff_num)) + 1;
                 emit_id += emit_id >= skip_id && skip_id > 0;
                 Emitter *emitter = c_emitter[emit_id];
-                if (emitter == c_emitter[0])
+                if (!emitter || emitter == c_emitter[0])
                     continue;
 
                 int emit_obj_ref = emitter->get_obj_ref();
