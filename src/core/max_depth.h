@@ -30,7 +30,8 @@ struct MaxDepthParams {
     int max_tranmit;
     int max_volume;
     int max_depth;
-    int restir_m; // RIS candidate count for ReSTIR DI
+    short restir_m;     // RIS candidate count for ReSTIR DI/GI
+    short restir_depth; // 0=DI only, 1=DI+GI(D=1)
     float min_time;
     float max_time;
 
@@ -39,5 +40,5 @@ struct MaxDepthParams {
         : max_diffuse(max_d), max_specular(max_s), max_tranmit(max_t),
           max_volume(max_v), max_depth(std::max(std::max(max_total, max_t),
                                                 std::max(max_d, max_s))),
-          restir_m(r_m), min_time(0), max_time(0) {}
+          restir_m((short)r_m), restir_depth(0), min_time(0), max_time(0) {}
 };

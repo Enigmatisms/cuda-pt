@@ -46,9 +46,15 @@ RenderingConfig::from_xml(const tinyxml2::XMLElement *acc_node,
                 node->QueryIntAttribute("value", &config.md.max_tranmit);
             else if (name == "max_volume")
                 node->QueryIntAttribute("value", &config.md.max_volume);
-            else if (name == "restir_m")
-                node->QueryIntAttribute("value", &config.md.restir_m);
-            else if (name == "specular_constraint")
+            else if (name == "restir_m") {
+                int val;
+                node->QueryIntAttribute("value", &val);
+                config.md.restir_m = (short)val;
+            } else if (name == "restir_depth") {
+                int val;
+                node->QueryIntAttribute("value", &val);
+                config.md.restir_depth = (short)val;
+            } else if (name == "specular_constraint")
                 node->QueryIntAttribute("value", &config.spec_constraint);
 
             node = node->NextSiblingElement("integer");

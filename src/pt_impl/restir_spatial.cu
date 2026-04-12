@@ -30,7 +30,8 @@
 CPT_KERNEL void restir_spatial_reuse_kernel(
     MediumPtrArray media, ReSTIRReservoir *__restrict__ reservoirs,
     const ReSTIRGBuffer *__restrict__ g_buffer, int img_w, int img_h,
-    int envmap_id, int num_spatial_passes, int seed_offset) {
+    int envmap_id, int num_spatial_passes, int seed_offset,
+    ReSTIRGIReservoir *__restrict__ gi_reservoirs) {
 
     int px = threadIdx.x + blockIdx.x * blockDim.x,
         py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -41,11 +42,15 @@ CPT_KERNEL void restir_spatial_reuse_kernel(
     Sampler sampler(pix_idx, seed_offset);
 
     ReSTIRReservoir reservoir = reservoirs[pix_idx];
+    ReSTIRGIReservoir gi_reservoir =
+        gi_reservoirs ? gi_reservoirs[pix_idx] : ReSTIRGIReservoir{};
     const ReSTIRGBuffer &gb = g_buffer[pix_idx];
 
     if (!gb.is_valid || reservoir.w_sum <= 0.f) {
         return;
     }
+    bool gi_valid = gi_reservoirs && gi_reservoir.w_sum > 0.f &&
+                    gi_reservoir.sample.bsdf_pdf > EPSILON;
 
     for (int pass = 0; pass < num_spatial_passes; pass++) {
         // Sample 2 neighbors per pass from 8-connected neighborhood
@@ -83,8 +88,24 @@ CPT_KERNEL void restir_spatial_reuse_kernel(
             restir_merge_reservoirs(reservoir, neighbor,
                                     float(neighbor.M) * w_at_cur,
                                     sampler.next1D());
+
+            // GI reservoir spatial reuse
+            if (gi_reservoirs && gi_valid && neighbor_gb.is_valid) {
+                const ReSTIRGIReservoir &gi_neighbor = gi_reservoirs[n_idx];
+                if (gi_neighbor.M > 0 &&
+                    gi_neighbor.sample.bsdf_pdf > EPSILON) {
+                    Vec4 h_gi_at_cur =
+                        restir_compute_h_gi(gi_neighbor.sample, gb, media);
+                    float w_gi_at_cur = restir_luminance(h_gi_at_cur);
+                    restir_merge_reservoirs_gi(
+                        gi_reservoir, gi_neighbor,
+                        float(gi_neighbor.M) * w_gi_at_cur, sampler.next1D());
+                }
+            }
         }
     }
 
     reservoirs[pix_idx] = reservoir;
+    if (gi_reservoirs)
+        gi_reservoirs[pix_idx] = gi_reservoir;
 }

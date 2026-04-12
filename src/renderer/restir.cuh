@@ -146,6 +146,82 @@ CPT_GPU_INLINE void restir_update_reservoir(ReSTIRReservoir &r,
     }
 }
 
+// ─── GI Data Structures ─────────────────────────────────────────────
+
+struct ReSTIRGISample {
+    Vec3 dir;         // 12B: BSDF/phase-sampled direction at bounce 0
+    Vec3 Lo;          // 12B: one-bounce unshadowed contribution at next vertex
+    float bsdf_pdf;   //  4B: BSDF/phase PDF at bounce 0
+    int8_t is_volume; //  1B: 1 if volume event at bounce 0
+    int8_t sampled_lobe; //  1B: ScatterStateFlag from sample_dir
+    int8_t pad[2];       //  2B
+};
+// Total: 32 bytes
+
+struct ReSTIRGIReservoir {
+    ReSTIRGISample sample; // 32B
+    float w_sum;           //  4B: Σ luminance(h_i)
+    int M;                 //  4B: total candidates considered
+};
+// Total: 40 bytes
+
+// ─── GI Device Functions ────────────────────────────────────────────
+
+/**
+ * @brief Compute h = bsdf_eval * Lo / bsdf_pdf at a given hit point for a
+ * stored GI sample. Used during temporal/spatial reuse to reevaluate the
+ * contribution weight from a different GBuffer position.
+ */
+CPT_GPU_INLINE Vec4 restir_compute_h_gi(const ReSTIRGISample &s,
+                                        const ReSTIRGBuffer &gb,
+                                        MediumPtrArray media) {
+    if (s.bsdf_pdf < EPSILON)
+        return Vec4(0);
+    float rcp_pdf = __frcp_rn(s.bsdf_pdf);
+    if (gb.is_volume) {
+        int med_idx =
+            gb.vol_stack.x > 0 ? (&gb.vol_stack.x)[gb.vol_stack.x] : 0;
+        float pv = media[med_idx]->eval(s.dir, gb.ray_d);
+        return Vec4(pv, 1.f) * Vec4(s.Lo, 1.f) * rcp_pdf;
+    } else {
+        Interaction it(gb.shading_norm, gb.uv_coord);
+        Vec4 bsdf_val = c_material[gb.material_id]->eval(it, s.dir, gb.ray_d,
+                                                         gb.material_id);
+        return bsdf_val * Vec4(s.Lo, 1.f) * rcp_pdf;
+    }
+}
+
+/** Streaming WRS: add one GI candidate to the reservoir */
+CPT_GPU_INLINE void restir_update_reservoir_gi(ReSTIRGIReservoir &r,
+                                               const ReSTIRGISample &s,
+                                               float weight, float rand) {
+    r.w_sum += weight;
+    r.M++;
+    if (rand * r.w_sum < weight) {
+        r.sample = s;
+    }
+}
+
+/** Merge two GI reservoirs for temporal/spatial reuse */
+CPT_GPU_INLINE void restir_merge_reservoirs_gi(ReSTIRGIReservoir &dst,
+                                               const ReSTIRGIReservoir &src,
+                                               float src_w_sum_adjusted,
+                                               float rand) {
+    float total_w = dst.w_sum + src_w_sum_adjusted;
+    if (total_w <= 0.f)
+        return;
+
+    if (rand * total_w < src_w_sum_adjusted) {
+        dst.sample = src.sample;
+    }
+    dst.w_sum = total_w;
+    dst.M += src.M;
+    if (dst.M > RESTIR_MAX_M) {
+        dst.w_sum *= float(RESTIR_MAX_M) / float(dst.M);
+        dst.M = RESTIR_MAX_M;
+    }
+}
+
 /** Merge two reservoirs for temporal/spatial reuse */
 CPT_GPU_INLINE void restir_merge_reservoirs(ReSTIRReservoir &dst,
                                             const ReSTIRReservoir &src,

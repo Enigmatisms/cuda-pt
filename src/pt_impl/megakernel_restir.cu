@@ -173,7 +173,9 @@ CPT_KERNEL void render_pt_restir_kernel(
     int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
-    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse) {
+    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse,
+    const ReSTIRGIReservoir *__restrict__ prev_gi_reservoirs,
+    ReSTIRGIReservoir *__restrict__ curr_gi_reservoirs) {
 
     int px = threadIdx.x + blockIdx.x * blockDim.x,
         py = threadIdx.y + blockIdx.y * blockDim.y;
@@ -391,9 +393,9 @@ CPT_KERNEL void render_pt_restir_kernel(
                         restir_compute_h(prev.sample, cur_gb, media, envmap_id);
                     float w_prev = restir_luminance(h_prev);
                     // Adjusted w_sum: M_prev * p_hat_at_current_point
-                    restir_merge_reservoirs(
-                        reservoir, prev, float(prev.M) * w_prev,
-                        sampler.next1D());
+                    restir_merge_reservoirs(reservoir, prev,
+                                            float(prev.M) * w_prev,
+                                            sampler.next1D());
                 }
             }
 
@@ -448,20 +450,17 @@ CPT_KERNEL void render_pt_restir_kernel(
                         if (reservoir.sample.emitter_type == 0) {
                             // Area light: direct_pdf = q_area * r^2 / cos_light
                             float dist2 = shadow_dist * shadow_dist;
-                            float cos_light =
-                                max(reservoir.sample.light_normal.dot(
-                                        -shadow_dir),
-                                    0.f);
-                            direct_pdf =
-                                reservoir.sample.q_area * dist2 /
-                                max(cos_light, EPSILON);
+                            float cos_light = max(
+                                reservoir.sample.light_normal.dot(-shadow_dir),
+                                0.f);
+                            direct_pdf = reservoir.sample.q_area * dist2 /
+                                         max(cos_light, EPSILON);
                         } else if (reservoir.sample.emitter_type == 2) {
                             // Point source: direct_pdf = q_area (unmodified)
                             direct_pdf = reservoir.sample.q_area;
                         }
-                        float p_ris_eff =
-                            float(reservoir.M) * p_hat * direct_pdf /
-                            reservoir.w_sum;
+                        float p_ris_eff = float(reservoir.M) * p_hat *
+                                          direct_pdf / reservoir.w_sum;
                         float bsdf_pdf_val = 0.f;
                         Emitter *sel_emitter =
                             c_emitter[reservoir.sample.emitter_idx];
@@ -472,8 +471,7 @@ CPT_KERNEL void render_pt_restir_kernel(
                         }
                         float mis_denom = p_ris_eff + bsdf_pdf_val;
                         float mis_weight =
-                            (mis_denom > EPSILON) ? p_ris_eff / mis_denom
-                                                  : 1.f;
+                            (mis_denom > EPSILON) ? p_ris_eff / mis_denom : 1.f;
 
                         // L = throughput * (w_sum/M) * vis * (h/p_hat) * mis
                         float rcp_p_hat = __frcp_rn(p_hat);
@@ -491,28 +489,214 @@ CPT_KERNEL void render_pt_restir_kernel(
                 curr_reservoirs[pix_idx] = reservoir;
 
             // ═══════════════════════════════════════════════════════
-            // BSDF / Phase function sampling (continues the path)
+            // ReSTIR GI: RIS for indirect illumination (bounce 0)
             // ═══════════════════════════════════════════════════════
-            if (md.flag > 0) {
-                sampled_lobe = ScatterStateFlag::SCAT_VOLUME;
-                ray.d = medium->scatter(ray.d, throughput, sampler,
-                                        emission_weight);
-                ray.set_delta(false);
-            } else {
-                bool same_hemisphere = ray.d.dot(it.shading_norm) > 0;
-                ray.d = c_material[material_id]->sample_dir(
-                    ray.d, it, throughput, emission_weight, sampler,
-                    sampled_lobe, material_id);
-                ray.set_delta((ScatterStateFlag::BSDF_SPECULAR & sampled_lobe) >
-                              0);
+            bool gi_resolved = false;
+            if (md_params.restir_depth > 0 && curr_gi_reservoirs) {
+                ReSTIRGIReservoir gi_reservoir = {};
 
-                // Volume stack update
-                if ((it.shading_norm.dot(ray.d) > 0 ^ same_hemisphere) ==
-                    false) {
-                    if (same_hemisphere) {
-                        nested_vol_arr[tid].pop();
+                for (int m = 0; m < md_params.restir_m; m++) {
+                    // Sample BSDF/phase direction using temp throughput
+                    Vec4 tmp_thp(1.f);
+                    float tmp_pdf = 1.f;
+                    ScatterStateFlag tmp_lobe = ScatterStateFlag::BSDF_NONE;
+                    Vec3 gi_dir;
+
+                    if (md.flag > 0) {
+                        gi_dir =
+                            medium->scatter(ray.d, tmp_thp, sampler, tmp_pdf);
+                        tmp_lobe = ScatterStateFlag::SCAT_VOLUME;
                     } else {
-                        nested_vol_arr[tid].push(hit_med_idx);
+                        gi_dir = c_material[material_id]->sample_dir(
+                            ray.d, it, tmp_thp, tmp_pdf, sampler, tmp_lobe,
+                            material_id);
+                    }
+                    // tmp_thp = bsdf_eval / bsdf_pdf, tmp_pdf = bsdf_pdf
+
+                    // Trace ray from hit_pos along gi_dir
+                    Ray gi_ray(hit_pos, gi_dir);
+                    int gi_min_index = -1, gi_obj_info = INVALID_OBJ;
+                    float gi_u = 0, gi_v = 0;
+                    ray_intersect_bvh(gi_ray, bvh_leaves, nodes, s_cached,
+                                      verts, gi_min_index, gi_obj_info, gi_u,
+                                      gi_v, node_num, cache_num, MAX_DIST);
+
+                    // Compute Lo at next vertex
+                    Vec3 Lo(0);
+                    if (gi_min_index < 0) {
+                        // Miss → envmap
+                        Lo = Vec3(
+                            c_emitter[envmap_id]->eval_le(&gi_ray.d).xyz());
+                    } else {
+                        bool gi_is_tri = true;
+                        int gi_hit_med = 0;
+                        int gi_obj_id = extract_tracing_info(
+                            gi_obj_info, gi_hit_med, gi_is_tri);
+                        int gi_mat_id = 0, gi_emit_id = -1;
+                        objects[gi_obj_id].unpack(gi_mat_id, gi_emit_id);
+
+                        if (gi_emit_id > 0) {
+                            // Hit emitter
+                            Vec3 gi_next_pos = gi_ray.advance(gi_ray.hit_t);
+                            Interaction gi_it = Primitive::get_interaction(
+                                verts, norms, uvs, gi_next_pos, gi_u, gi_v,
+                                gi_min_index, gi_is_tri);
+                            Lo = Vec3(c_emitter[gi_emit_id]
+                                          ->eval_le(&gi_ray.d, &gi_it)
+                                          .xyz());
+                        } else {
+                            // Hit surface → NEE unshadowed (no shadow ray)
+                            Vec3 gi_next_pos = gi_ray.advance(gi_ray.hit_t);
+                            Interaction gi_it = Primitive::get_interaction(
+                                verts, norms, uvs, gi_next_pos, gi_u, gi_v,
+                                gi_min_index, gi_is_tri);
+
+                            float nee_pdf = 1;
+                            Emitter *nee_emitter = sample_emitter(
+                                sampler, nee_pdf, num_emitter, 0);
+                            if (nee_emitter != c_emitter[0]) {
+                                int nee_prim_id =
+                                    objects[nee_emitter->get_obj_ref()]
+                                        .sample_emitter_primitive(
+                                            sampler.discrete1D(), nee_pdf);
+                                nee_prim_id = emitter_prims[nee_prim_id];
+
+                                Vec4 nee_comp;
+                                Vec3 nee_pos = nee_emitter->sample(
+                                    gi_next_pos, gi_it.shading_norm, nee_comp,
+                                    nee_pdf, sampler.next2D(), verts, norms,
+                                    uvs, nee_prim_id);
+
+                                Vec3 nee_dir = nee_pos - gi_next_pos;
+                                float nee_dist = nee_dir.length();
+                                nee_dir *= __frcp_rn(max(nee_dist, EPSILON));
+
+                                if (nee_pdf > EPSILON) {
+                                    Vec4 nee_bsdf = c_material[gi_mat_id]->eval(
+                                        gi_it, nee_dir, -gi_dir, gi_mat_id);
+                                    Lo = Vec3((nee_comp * nee_bsdf *
+                                               __frcp_rn(nee_pdf))
+                                                  .xyz());
+                                }
+                            }
+                        }
+                    }
+
+                    // h = tmp_thp * Lo (since tmp_thp = bsdf_eval/bsdf_pdf)
+                    Vec4 h = tmp_thp * Vec4(Lo, 1.f);
+                    float w = restir_luminance(h);
+
+                    ReSTIRGISample s = {gi_dir,           Lo,
+                                        tmp_pdf,          (int8_t)(md.flag > 0),
+                                        (int8_t)tmp_lobe, {0, 0}};
+                    restir_update_reservoir_gi(gi_reservoir, s, w,
+                                               sampler.next1D());
+                }
+
+                // ─── GI Temporal Reuse ────────────────────────────
+                if (temporal_reuse && prev_gi_reservoirs) {
+                    ReSTIRGIReservoir prev = prev_gi_reservoirs[pix_idx];
+                    if (prev.M > 0 && prev.sample.bsdf_pdf > EPSILON) {
+                        Vec4 h_prev =
+                            restir_compute_h_gi(prev.sample, cur_gb, media);
+                        float w_prev = restir_luminance(h_prev);
+                        restir_merge_reservoirs_gi(gi_reservoir, prev,
+                                                   float(prev.M) * w_prev,
+                                                   sampler.next1D());
+                    }
+                }
+
+                // ─── GI Resolve (throughput modification) ─────────
+                if (gi_reservoir.w_sum > 0.f &&
+                    gi_reservoir.sample.bsdf_pdf > EPSILON) {
+                    Vec4 h =
+                        restir_compute_h_gi(gi_reservoir.sample, cur_gb, media);
+                    float p_hat = restir_luminance(h);
+
+                    if (p_hat > EPSILON) {
+                        // p_ris = bsdf_pdf * M * p_hat / w_sum
+                        float p_ris = gi_reservoir.sample.bsdf_pdf *
+                                      float(gi_reservoir.M) * p_hat /
+                                      max(gi_reservoir.w_sum, EPSILON);
+
+                        // Recompute bsdf_eval at current GBuffer
+                        Vec4 bsdf_eval;
+                        if (cur_gb.is_volume) {
+                            int med_idx =
+                                cur_gb.vol_stack.x > 0
+                                    ? (&cur_gb.vol_stack.x)[cur_gb.vol_stack.x]
+                                    : 0;
+                            float pv = media[med_idx]->eval(
+                                gi_reservoir.sample.dir, ray.d);
+                            bsdf_eval = Vec4(pv, 1.f);
+                        } else {
+                            Interaction it_eval(cur_gb.shading_norm,
+                                                cur_gb.uv_coord);
+                            bsdf_eval = c_material[cur_gb.material_id]->eval(
+                                it_eval, gi_reservoir.sample.dir, ray.d,
+                                cur_gb.material_id);
+                        }
+
+                        // Throughput modification: throughput *= bsdf_eval /
+                        // p_ris
+                        throughput *=
+                            bsdf_eval * __frcp_rn(max(p_ris, EPSILON));
+                        emission_weight = p_ris;
+
+                        Vec3 orig_ray_d = ray.d;
+                        ray.d = gi_reservoir.sample.dir;
+                        ray.set_delta((gi_reservoir.sample.sampled_lobe &
+                                       ScatterStateFlag::BSDF_SPECULAR) > 0);
+
+                        // Volume stack update
+                        if (md.flag == 0) {
+                            bool same_hemisphere =
+                                orig_ray_d.dot(it.shading_norm) > 0;
+                            if ((it.shading_norm.dot(ray.d) > 0 ^
+                                 same_hemisphere) == false) {
+                                if (same_hemisphere) {
+                                    nested_vol_arr[tid].pop();
+                                } else {
+                                    nested_vol_arr[tid].push(hit_med_idx);
+                                }
+                            }
+                        }
+
+                        sampled_lobe =
+                            (ScatterStateFlag)gi_reservoir.sample.sampled_lobe;
+                        gi_resolved = true;
+                    }
+                }
+
+                // Store GI reservoir
+                curr_gi_reservoirs[pix_idx] = gi_reservoir;
+            }
+
+            // ═══════════════════════════════════════════════════════
+            // BSDF / Phase function sampling (fallback if GI not resolved)
+            // ═══════════════════════════════════════════════════════
+            if (!gi_resolved) {
+                if (md.flag > 0) {
+                    sampled_lobe = ScatterStateFlag::SCAT_VOLUME;
+                    ray.d = medium->scatter(ray.d, throughput, sampler,
+                                            emission_weight);
+                    ray.set_delta(false);
+                } else {
+                    bool same_hemisphere = ray.d.dot(it.shading_norm) > 0;
+                    ray.d = c_material[material_id]->sample_dir(
+                        ray.d, it, throughput, emission_weight, sampler,
+                        sampled_lobe, material_id);
+                    ray.set_delta(
+                        (ScatterStateFlag::BSDF_SPECULAR & sampled_lobe) > 0);
+
+                    // Volume stack update
+                    if ((it.shading_norm.dot(ray.d) > 0 ^ same_hemisphere) ==
+                        false) {
+                        if (same_hemisphere) {
+                            nested_vol_arr[tid].pop();
+                        } else {
+                            nested_vol_arr[tid].push(hit_med_idx);
+                        }
                     }
                 }
             }
@@ -653,7 +837,9 @@ template CPT_KERNEL void render_pt_restir_kernel<true>(
     int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
-    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse);
+    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse,
+    const ReSTIRGIReservoir *__restrict__ prev_gi_reservoirs,
+    ReSTIRGIReservoir *__restrict__ curr_gi_reservoirs);
 
 template CPT_KERNEL void render_pt_restir_kernel<false>(
     const DeviceCamera &dev_cam, const PrecomputedArray verts,
@@ -666,4 +852,6 @@ template CPT_KERNEL void render_pt_restir_kernel<false>(
     int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
-    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse);
+    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse,
+    const ReSTIRGIReservoir *__restrict__ prev_gi_reservoirs,
+    ReSTIRGIReservoir *__restrict__ curr_gi_reservoirs);

@@ -34,6 +34,8 @@ class ReSTIRPathTracer : public PathTracer<SingleTileScheduler> {
     ReSTIRReservoir *curr_reservoirs;
     ReSTIRReservoir *prev_reservoirs;
     ReSTIRGBuffer *g_buffer;
+    ReSTIRGIReservoir *curr_gi_reservoirs;
+    ReSTIRGIReservoir *prev_gi_reservoirs;
 
   public:
     ReSTIRPathTracer(const Scene &scene, bool temporal = true);

@@ -694,9 +694,14 @@ void render_settings_interface(
                         "max_time", "Max Time", md_params.max_time, 0, 20);
                 }
                 if (rdr_type == RendererType::MegaKernelReSTIR) {
-                    params.renderer_update |=
-                        draw_integer_input("restir_m", "RIS Candidates",
-                                           md_params.restir_m, 1, 32);
+                    int restir_m_val = md_params.restir_m;
+                    params.renderer_update |= draw_integer_input(
+                        "restir_m", "RIS Candidates", restir_m_val, 1, 32);
+                    md_params.restir_m = (short)restir_m_val;
+                    int restir_depth_val = md_params.restir_depth;
+                    params.renderer_update |= draw_integer_input(
+                        "restir_depth", "GI Depth", restir_depth_val, 0, 1);
+                    md_params.restir_depth = (short)restir_depth_val;
                 }
                 ImGui::Checkbox("Output PNG", &params.output_png);
                 if (!params.output_png) {

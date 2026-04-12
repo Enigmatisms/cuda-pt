@@ -58,4 +58,6 @@ CPT_KERNEL void render_pt_restir_kernel(
     int accum_cnt, int cache_num, int envmap_id, bool gamma_corr,
     const ReSTIRReservoir *__restrict__ prev_reservoirs,
     ReSTIRReservoir *__restrict__ curr_reservoirs,
-    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse);
+    ReSTIRGBuffer *__restrict__ g_buffer, bool temporal_reuse,
+    const ReSTIRGIReservoir *__restrict__ prev_gi_reservoirs,
+    ReSTIRGIReservoir *__restrict__ curr_gi_reservoirs);
